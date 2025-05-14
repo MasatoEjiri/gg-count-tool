@@ -107,4 +107,4 @@ if uploaded_file is not None:
     morph_kernel_shape = morph_kernel_shape_options[selected_shape_name]
     st.sidebar.caption("輝点の形状に合わせて選択します。「楕円」は丸い輝点に適しています。")
     
-    kernel_options_morph = [1, 3
+    kernel_options_morph = [1, 3]
