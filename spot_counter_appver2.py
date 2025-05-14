@@ -3,48 +3,45 @@ from PIL import Image
 import numpy as np
 import cv2
 
-# アプリのタイトルを設定
-st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_html=True)
+# --- サイドバーの上部に結果表示用のプレースホルダーを定義 ---
+# ★★★ 解析結果表示をサイドバー上部に移動 ★★★
+result_placeholder_sidebar = st.sidebar.empty() 
 
-# --- 結果表示用のプレースホルダーをページ上部に定義 ---
-result_placeholder = st.empty()
-
-# --- カスタマイズされた結果表示関数 (スティッキー表示に対応) ---
-def display_count_prominently(placeholder, count_value):
-    label_text = "【解析結果】検出された輝点の数"
+# --- カスタマイズされた結果表示関数 (サイドバー表示用) ---
+def display_count_in_sidebar(placeholder, count_value):
+    label_text = "【解析結果】輝点数" # 少し短縮
     value_text = str(count_value) 
 
+    # サイドバー用のシンプルな表示に変更 (HTML/CSSは最小限に)
+    # st.metric を直接使う方がサイドバーには馴染むかもしれません。
+    # 今回は統一感を出すため、元の関数を少しシンプルにして使います。
     background_color = "#495057"
     label_font_color = "white"
     value_font_color = "white"
-    border_color = "#343a40"
-
+    
+    # サイドバーでは横幅いっぱいに広がるため、max-widthなどは不要
     html_content = f"""
     <div style="
-        display: block; 
-        position: sticky;
-        top: 5px;        
-        z-index: 1000;   
-        border: 1px solid {border_color}; 
-        border-radius: 12px;
-        padding: 20px; 
+        border-radius: 8px;
+        padding: 15px;
         text-align: center;
         background-color: {background_color};
-        margin-top: 10px;
-        margin-bottom: 20px; 
-        box-shadow: 0 6px 15px rgba(0,0,0,0.2); 
+        margin-bottom: 15px; /* 他のサイドバー要素との間隔 */
         color: {label_font_color}; 
-        max-width: 550px; 
-        margin-left: auto;
-        margin-right: auto;
     ">
-        <p style="font-size: 18px; margin-bottom: 8px;">{label_text}</p>
-        <p style="font-size: 52px; font-weight: bold; margin-top: 0px; color: {value_font_color};">{value_text}</p>
+        <p style="font-size: 16px; margin-bottom: 5px; font-weight: bold;">{label_text}</p>
+        <p style="font-size: 38px; font-weight: bold; margin-top: 0px; color: {value_font_color};">{value_text}</p>
     </div>
     """
     placeholder.markdown(html_content, unsafe_allow_html=True)
+    # あるいは、もっとシンプルに st.sidebar.metric を使う場合：
+    # placeholder.metric(label=label_text, value=value_text)
 
-# 「使用方法」
+
+# アプリのタイトルを設定 (メインエリア)
+st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_html=True)
+
+# 「使用方法」(メインエリア)
 st.markdown("""
 ### 使用方法
 1. 画像を左にアップロードしてください。
@@ -72,42 +69,29 @@ def sync_threshold_from_number_input():
     st.session_state.binary_threshold_value = st.session_state.threshold_number_for_binary
     st.session_state.threshold_slider_for_binary = st.session_state.threshold_number_for_binary
 
-# --- サイドバーでパラメータを一元管理 ---
+# --- サイドバーの残り ---
 st.sidebar.header("解析パラメータ設定")
 
-# ★★★ 点線枠のドロップエリア風表示を追加 ★★★
-st.sidebar.markdown(
-    """
-    <div style="
-        border: 2px dashed #007bff; 
-        padding: 20px; 
-        border-radius: 10px; 
-        text-align: center; 
-        margin-bottom: 10px;
-    ">
-        <p style="font-weight: bold; margin-bottom: 5px;">ここに画像をドラッグ＆ドロップ</p>
-        <p style="font-size: small; margin-bottom: 0;">または下のボタンから選択</p>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-
-UPLOAD_ICON = "📄" 
+# ★★★ ファイルアップローダーの表示をシンプルに戻す ★★★
+# (点線枠のMarkdown表示を削除)
+UPLOAD_ICON = "📤" 
 uploaded_file = st.sidebar.file_uploader(
-    "画像ファイルを選択", # ラベルは簡潔に (label_visibility="collapsed"で隠す)
+    f"{UPLOAD_ICON} 画像をアップロード", # ラベルを以前のものに戻すか調整
     type=['tif', 'tiff', 'png', 'jpg', 'jpeg'],
-    help="対応形式: TIF, TIFF, PNG, JPG, JPEG。",
-    label_visibility="collapsed" # Markdownで作った表示があるのでラベルを隠す
+    help="対応形式: TIF, TIFF, PNG, JPG, JPEG。"
+    # label_visibility="visible" (デフォルト) または削除
 )
 
-display_count_prominently(result_placeholder, st.session_state.counted_spots_value)
+# サイドバー上部のプレースホルダーに初期のカウント数を表示
+display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value)
+
 
 if uploaded_file is not None:
     pil_image = Image.open(uploaded_file)
     img_array = np.array(pil_image)
     original_img_display = img_array.copy() 
 
-    # グレースケール変換とデータ型調整 (前回のものを流用)
+    # グレースケール変換とデータ型調整
     if len(img_array.shape) == 3 and img_array.shape[2] == 3:
         img_gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
     elif len(img_array.shape) == 3 and img_array.shape[2] == 4: 
@@ -136,7 +120,7 @@ if uploaded_file is not None:
         img_gray = img_array.copy()
         st.warning(f"画像のモード ({pil_image.mode}) が予期しない形式です。グレースケール変換に失敗する可能性があります。")
     
-    if img_gray.dtype != np.uint8: # 最終確認と変換
+    if img_gray.dtype != np.uint8:
         try:
             if img_gray.ndim == 2 and (img_gray.max() > 255 or img_gray.min() < 0 or img_gray.dtype != np.uint8) :
                 img_gray_normalized = cv2.normalize(img_gray, None, 0, 255, cv2.NORM_MINMAX)
@@ -145,15 +129,13 @@ if uploaded_file is not None:
                  img_gray = cv2.cvtColor(img_gray, cv2.COLOR_BGR2GRAY) 
             else: 
                 img_gray_temp = img_gray.astype(np.uint8)
-                if img_gray_temp.max() > 255 or img_gray_temp.min() < 0 : # astypeで範囲外になった場合
-                    img_gray = np.clip(img_gray, 0, 255).astype(np.uint8) # クリップして再変換
-                    st.warning(f"グレースケール画像のデータ型/範囲をuint8に強制変換(クリップ)しました。")
+                if img_gray_temp.max() > 255 or img_gray_temp.min() < 0 :
+                    img_gray = np.clip(img_gray, 0, 255).astype(np.uint8)
                 else:
                     img_gray = img_gray_temp
         except Exception as e:
             st.error(f"最終的なグレースケール画像のデータ型変換に失敗しました: {e}")
             st.stop()
-
 
     kernel_size_blur = 1 
 
@@ -248,42 +230,39 @@ if uploaded_file is not None:
         st.warning("輪郭検出の元となる画像が準備できませんでした。前のステップを確認してください。")
         st.session_state.counted_spots_value = "エラー"
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.subheader("元の画像")
-        st.image(original_img_display, caption='アップロードされた画像', use_container_width=True)
-
-    with col2:
-        st.subheader("1. 二値化処理後")
-        if binary_img_for_morph is not None: 
-            st.image(binary_img_original, caption=f'閾値: {threshold_value}', use_container_width=True)
-        else:
-            st.info("二値化未実施または失敗")
-
+    # ★★★ メインエリアの画像表示を1カラム（縦並び）に変更 ★★★
+    st.subheader("元の画像")
+    st.image(original_img_display, caption='アップロードされた画像', use_container_width=True)
     st.markdown("---")
 
-    col3, col4 = st.columns(2)
+    st.subheader("1. 二値化処理後")
+    if binary_img_for_morph is not None: 
+        st.image(binary_img_original, caption=f'閾値: {threshold_value}', use_container_width=True)
+    else:
+        st.info("二値化未実施または失敗")
+    st.markdown("---")
 
-    with col3:
-        st.subheader("2. 形態学的処理後")
-        if opened_img is not None: 
-            st.image(opened_img, caption=f'カーネル: {selected_shape_name} {kernel_size_morph}x{kernel_size_morph}', use_container_width=True)
-        else:
-            st.info("形態学的処理未実施または失敗")
+    st.subheader("2. 形態学的処理後")
+    if opened_img is not None: 
+        st.image(opened_img, caption=f'カーネル: {selected_shape_name} {kernel_size_morph}x{kernel_size_morph}', use_container_width=True)
+    else:
+        st.info("形態学的処理未実施または失敗")
+    st.markdown("---")
 
-    with col4:
-        st.subheader("3. 輝点検出とマーキング")
-        if 'contours' in locals() and contours and binary_img_for_contours is not None:
-             st.image(output_image_contours, caption=f'検出された輝点 (緑の輪郭、面積範囲: {min_area}-{max_area})', use_container_width=True)
-        elif binary_img_for_contours is not None: 
-            st.image(output_image_contours, caption='輝点は見つかりませんでした', use_container_width=True)
-        else:
-            st.info("輝点検出未実施")
+    st.subheader("3. 輝点検出とマーキング")
+    if 'contours' in locals() and contours and binary_img_for_contours is not None:
+         st.image(output_image_contours, caption=f'検出された輝点 (緑の輪郭、面積範囲: {min_area}-{max_area})', use_container_width=True)
+    elif binary_img_for_contours is not None: 
+        st.image(output_image_contours, caption='輝点は見つかりませんでした', use_container_width=True)
+    else:
+        st.info("輝点検出未実施")
 
-    display_count_prominently(result_placeholder, st.session_state.counted_spots_value)
+    # サイドバー上部のプレースホルダーを最新のカウント数で更新
+    display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value)
 
-else: 
+
+else: # 画像がアップロードされていない場合
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
     st.session_state.counted_spots_value = "---"
-    display_count_prominently(result_placeholder, st.session_state.counted_spots_value)
+    # サイドバー上部のプレースホルダーを更新 (画像がない場合)
+    display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value)
