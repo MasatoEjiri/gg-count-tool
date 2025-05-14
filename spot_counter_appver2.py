@@ -3,19 +3,8 @@ from PIL import Image
 import numpy as np
 import cv2
 
-# --- ロゴの表示設定 (左上に配置) ---
-try:
-    logo_image = Image.open("GG_logo.jpg") 
-    st.image(logo_image, width=180) # ロゴの幅を180pxに設定
-except FileNotFoundError:
-    st.error("ロゴ画像 (GG_logo.jpg) が見つかりません。アプリのメインファイルと同じフォルダに配置してください。")
-
-
-# --- アプリのタイトル設定 (ロゴとの間隔を調整) ---
-st.markdown(
-    "<h1 style='text-align: center; margin-top: 10px; margin-bottom: 20px;'>Gra&Green<br>輝点カウントツール</h1>", 
-    unsafe_allow_html=True
-)
+# アプリのタイトルを設定
+st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_html=True)
 
 # --- 結果表示用のプレースホルダーをページ上部に定義 ---
 result_placeholder = st.empty()
@@ -54,8 +43,24 @@ def display_count_prominently(placeholder, count_value):
 # --- セッションステートの初期化 ---
 if 'counted_spots_value' not in st.session_state:
     st.session_state.counted_spots_value = "---" 
-if "binary_threshold_value" not in st.session_state:
+if "binary_threshold_value" not in st.session_state: 
     st.session_state.binary_threshold_value = 88
+# (スライダーと数値入力ウィジェット用のキーも初期化は通常不要だが、参照エラーを避けるためにここで定義しておくこともできる)
+if "threshold_slider_for_binary" not in st.session_state:
+    st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
+if "threshold_number_for_binary" not in st.session_state:
+    st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
+
+
+# --- コールバック関数の定義 (ウィジェットより前に定義) ---
+def sync_threshold_from_slider():
+    st.session_state.binary_threshold_value = st.session_state.threshold_slider_for_binary
+    st.session_state.threshold_number_for_binary = st.session_state.threshold_slider_for_binary # もう片方も更新
+
+def sync_threshold_from_number_input():
+    st.session_state.binary_threshold_value = st.session_state.threshold_number_for_binary
+    st.session_state.threshold_slider_for_binary = st.session_state.threshold_number_for_binary # もう片方も更新
+
 
 # --- サイドバーでパラメータを一元管理 ---
 st.sidebar.header("解析パラメータ設定")
@@ -86,15 +91,20 @@ if uploaded_file is not None:
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。")
     
+    # スライダーと数値入力で二値化閾値を設定 (ユニークなキーとコールバックを使用)
     st.sidebar.slider(
         '閾値 (スライダーで調整)', 
         min_value=0, max_value=255, step=1,
-        key="binary_threshold_value" 
+        value=st.session_state.binary_threshold_value, # 共通のセッション変数から初期値を取得
+        key="threshold_slider_for_binary",        # スライダー用のユニークなキー
+        on_change=sync_threshold_from_slider      # 値変更時のコールバック関数
     )
     st.sidebar.number_input(
         '閾値 (直接入力)', 
         min_value=0, max_value=255, step=1,
-        key="binary_threshold_value" 
+        value=st.session_state.binary_threshold_value, # 共通のセッション変数から初期値を取得
+        key="threshold_number_for_binary",       # 数値入力用のユニークなキー
+        on_change=sync_threshold_from_number_input # 値変更時のコールバック関数
     )
     threshold_value = st.session_state.binary_threshold_value 
     
@@ -129,6 +139,7 @@ if uploaded_file is not None:
     """)
 
     # --- メインエリアでの画像表示と処理 ---
+    # (メインエリアのコードは前回から変更ありません)
     st.header("処理ステップごとの画像")
     
     if kernel_size_blur > 0:
