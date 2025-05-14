@@ -3,14 +3,15 @@ from PIL import Image
 import numpy as np
 import cv2
 from streamlit_drawable_canvas import st_canvas
+import io # バイトデータから画像を読み込むために必要
 
-# ページ設定
+# ページ設定 (一番最初に呼び出す)
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
-# サイドバー上部に結果表示用のプレースホルダーを定義
+# --- サイドバーの上部に結果表示用のプレースホルダーを定義 ---
 result_placeholder_sidebar = st.sidebar.empty() 
 
-# カスタマイズされた結果表示関数 (サイドバー表示用)
+# --- カスタマイズされた結果表示関数 (サイドバー表示用) ---
 def display_count_in_sidebar(placeholder, count_value):
     label_text = "【解析結果】輝点数" 
     value_text = str(count_value) 
@@ -35,13 +36,13 @@ st.markdown("""
 """)
 st.markdown("---") 
 
-# セッションステートの初期化
+# --- セッションステートの初期化 ---
 if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots_value = "---" 
 if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 58
 if "threshold_slider_for_binary" not in st.session_state: st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
 if "threshold_number_for_binary" not in st.session_state: st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
 
-# コールバック関数
+# --- コールバック関数の定義 ---
 def sync_threshold_from_slider():
     st.session_state.binary_threshold_value = st.session_state.threshold_slider_for_binary
     st.session_state.threshold_number_for_binary = st.session_state.threshold_slider_for_binary
@@ -49,53 +50,67 @@ def sync_threshold_from_number_input():
     st.session_state.binary_threshold_value = st.session_state.threshold_number_for_binary
     st.session_state.threshold_slider_for_binary = st.session_state.threshold_number_for_binary
 
-# サイドバー
+# --- サイドバー ---
 st.sidebar.header("解析パラメータ設定")
 UPLOAD_ICON = "📤" 
 uploaded_file = st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアップロード", type=['tif', 'tiff', 'png', 'jpg', 'jpeg'], help="対応形式: TIF, TIFF, PNG, JPG, JPEG。")
 display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value)
 
-# メイン処理
+# --- メイン処理 ---
 if uploaded_file is not None:
-    pil_image_original = Image.open(uploaded_file)
-    pil_image_rgb = pil_image_original.convert("RGB") # 表示とOpenCV処理用にRGBのPillowイメージを準備
+    # --- 画像の読み込みと初期表示の堅牢化 ---
+    st.header("1. 元の画像 と ROI選択")
+    pil_image_original = None
+    try:
+        # アップロードされたファイルオブジェクトのバイトデータを取得
+        uploaded_file_bytes = uploaded_file.getvalue()
+        # バイトデータからPillowイメージを開く (ファイルポインタ問題を回避)
+        pil_image_original = Image.open(io.BytesIO(uploaded_file_bytes))
+        
+        # 表示用にRGBのPillowイメージを準備
+        pil_image_rgb_for_display = pil_image_original.convert("RGB")
+        st.image(pil_image_rgb_for_display, caption='アップロードされた画像 (ROI選択用)', use_container_width=True)
+        
+    except Exception as e:
+        st.error(f"画像の読み込みまたは表示に失敗しました: {e}")
+        st.stop() # エラーならここで停止
 
-    img_array_rgb_for_opencv = np.array(pil_image_rgb) # OpenCV処理用のNumPy配列 (RGB)
-    img_gray_full = cv2.cvtColor(img_array_rgb_for_opencv, cv2.COLOR_RGB2GRAY) # 全体のグレースケール画像
-
+    # PillowイメージをOpenCV処理用にNumPy配列に変換
+    img_array_rgb_for_opencv = np.array(pil_image_rgb_for_display)
+    img_gray_full = cv2.cvtColor(img_array_rgb_for_opencv, cv2.COLOR_RGB2GRAY)
+    
     # グレースケール画像のデータ型調整 (8bit uintに)
     if img_gray_full.dtype != np.uint8:
         if img_gray_full.ndim == 2 and (img_gray_full.max() > 255 or img_gray_full.min() < 0 or img_gray_full.dtype != np.uint8):
             img_gray_full = cv2.normalize(img_gray_full, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-        elif img_gray_full.ndim == 3:
-            img_gray_full = cv2.cvtColor(img_gray_full, cv2.COLOR_BGR2GRAY).astype(np.uint8) # 仮にBGRと想定
+        elif img_gray_full.ndim == 3: # 通常はRGB->GRAYで2Dになるはずだが念のため
+            img_gray_full = cv2.cvtColor(img_gray_full, cv2.COLOR_BGR2GRAY).astype(np.uint8) # BGRと仮定
         else:
             try:
                 img_gray_full_temp = img_gray_full.astype(np.uint8)
-                if img_gray_full_temp.max() > 255 or img_gray_full_temp.min() < 0:
+                if img_gray_full_temp.max() > 255 or img_gray_full_temp.min() < 0: # astypeで範囲外になった場合
                     img_gray_full = np.clip(img_gray_full, 0, 255).astype(np.uint8)
+                    st.warning(f"グレースケール画像のデータ型/範囲をuint8に強制変換(クリップ)しました。")
                 else:
                     img_gray_full = img_gray_full_temp
-            except Exception as e:
-                st.error(f"グレースケール画像のデータ型変換に失敗: {e}")
+            except Exception as e_gray_conv:
+                st.error(f"グレースケール画像のデータ型変換に失敗: {e_gray_conv}")
                 st.stop()
 
-    st.header("1. 元の画像 と ROI選択")
-    # ★★★ st.image にはPillowイメージ(RGB)を渡す ★★★
-    st.image(pil_image_rgb, caption='アップロードされた画像 (ROI選択用)', use_container_width=True) 
+
     st.info("↑上の画像上で、解析したいエリアをマウスでドラッグして四角で囲ってください。最後に描画した四角形がROIとなります。")
 
     drawing_mode = "rect"; stroke_color = "red"
     canvas_result = st_canvas(
         fill_color="rgba(255,0,0,0.1)", stroke_width=2, stroke_color=stroke_color,
-        background_image=pil_image_rgb, # 背景もPillowイメージ(RGB)
-        update_streamlit=True, height=pil_image_rgb.height, width=pil_image_rgb.width,
+        background_image=pil_image_rgb_for_display, # 背景もPillowイメージ(RGB)
+        update_streamlit=True, height=pil_image_rgb_for_display.height, width=pil_image_rgb_for_display.width,
         drawing_mode=drawing_mode, key="roi_canvas"
     )
 
-    img_to_process = img_gray_full # デフォルトは画像全体
-    roi_coords = None # (x_roi, y_roi, w_roi, h_roi)
-    base_for_marking_bgr = cv2.cvtColor(img_array_rgb_for_opencv, cv2.COLOR_RGB2BGR) # マーキング用ベース(全体カラーBGR)
+    img_to_process = img_gray_full 
+    roi_coords = None 
+    base_for_marking_bgr = cv2.cvtColor(img_array_rgb_for_opencv, cv2.COLOR_RGB2BGR) 
 
     if canvas_result.json_data is not None and canvas_result.json_data.get("objects", []):
         if canvas_result.json_data["objects"][-1]["type"] == "rect":
@@ -108,18 +123,14 @@ if uploaded_file is not None:
                 if (x2_roi - x1_roi > 0) and (y2_roi - y1_roi > 0):
                     roi_coords = (x1_roi, y1_roi, x2_roi - x1_roi, y2_roi - y1_roi)
                     img_to_process = img_gray_full[y1_roi:y2_roi, x1_roi:x2_roi].copy()
-                    # マーキング用ベースもROI部分に更新 (BGR)
                     base_for_marking_bgr = cv2.cvtColor(img_array_rgb_for_opencv[y1_roi:y2_roi, x1_roi:x2_roi], cv2.COLOR_RGB2BGR)
                     st.subheader("選択されたROI（グレースケールでの処理対象）")
-                    st.image(img_to_process, caption=f"ROI: x={x1_roi},y={y1_roi},w={x2_roi-x1_roi},h={y2_roi-y1_roi}", use_container_width=True)
+                    st.image(img_to_process, caption=f"処理対象ROI: x={x1_roi},y={y1_roi},w={x2_roi-x1_roi},h={y2_roi-y1_roi}", use_container_width=True)
                 else:
                     st.warning("描画されたROIのサイズが無効。画像全体を処理します。")
                     img_to_process = img_gray_full 
-            # else: st.info("四角形が小さすぎます。画像全体を処理します。")
-    # else: st.info("四角形を描画してROIを選択してください。ない場合は画像全体を処理します。")
-
-
-    # --- サイドバーのパラメータ設定 (内容は変更なし) ---
+    
+    # --- サイドバーのパラメータ設定 ---
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
     st.sidebar.slider('閾値 (スライダーで調整)', min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
@@ -142,10 +153,10 @@ if uploaded_file is not None:
     st.sidebar.caption("""- **大きくすると:** より大きな塊も輝点としてカウントされるようになります。\n- **小さくすると:** 大きすぎる塊（例: 複数の輝点の結合、大きなゴミやアーティファクト）が除外され、カウント数が減ることがあります。""")
 
     # --- メインエリアでの画像表示と処理 (img_to_process を使用) ---
-    st.header("処理ステップごとの画像 (選択エリア内)")
+    st.header("処理ステップごとの画像")
     
     kernel_size_blur = 1 # 固定
-    if img_to_process.size == 0: # ROIが空の場合の対策
+    if img_to_process.size == 0: 
         st.error("処理対象の画像領域が空です。ROIを正しく描画してください。")
         st.stop()
         
@@ -163,8 +174,7 @@ if uploaded_file is not None:
     else: binary_img_for_contours_processed = None
 
     current_counted_spots = 0 
-    # output_image_contours は base_for_marking_bgr (ROI部分または全体カラーBGR) を使う
-    output_image_contours_display = base_for_marking_bgr.copy() # 表示用にコピー
+    output_image_contours_display = base_for_marking_bgr.copy()
 
     if binary_img_for_contours_processed is not None:
         contours, hierarchy = cv2.findContours(binary_img_for_contours_processed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -173,13 +183,12 @@ if uploaded_file is not None:
                 area = cv2.contourArea(contour)
                 if min_area <= area <= max_area:
                     current_counted_spots += 1
-                    cv2.drawContours(output_image_contours_display, [contour], -1, (0, 255, 0), 2) # output_image_contours_display に描画
+                    cv2.drawContours(output_image_contours_display, [contour], -1, (0, 255, 0), 2) 
         st.session_state.counted_spots_value = current_counted_spots 
     else:
         st.warning("輪郭検出の元となる画像が準備できませんでした。")
         st.session_state.counted_spots_value = "エラー"
 
-    # --- メインエリアの画像表示を1カラムに変更 ---
     st.subheader("1. 二値化処理後 (選択エリア内)")
     if binary_img_processed is not None: 
         st.image(binary_img_processed, caption=f'閾値: {threshold_value}', use_container_width=True)
@@ -193,9 +202,8 @@ if uploaded_file is not None:
     st.markdown("---")
 
     st.subheader("3. 輝点検出とマーキング (選択エリア内または全体)")
-    # 表示用にBGRからRGBへ変換
     display_final_marked_image = cv2.cvtColor(output_image_contours_display, cv2.COLOR_BGR2RGB)
-    if 'contours' in locals() and contours and binary_img_for_contours_processed is not None:
+    if 'contours' in locals() and contours and binary_img_for_contours_processed is not None and current_counted_spots > 0 :
          st.image(display_final_marked_image, caption=f'検出された輝点 (緑の輪郭、面積範囲: {min_area}-{max_area})', use_container_width=True)
     elif binary_img_for_contours_processed is not None: 
         st.image(display_final_marked_image, caption='輝点は見つかりませんでした', use_container_width=True)
