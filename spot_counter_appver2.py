@@ -1,10 +1,29 @@
 import streamlit as st
-from PIL import Image
+from PIL import Image # Pillow (PIL)ライブラリのインポートを確認
 import numpy as np
 import cv2
 
+# --- ロゴの表示設定 (左上に配置) ---
+try:
+    logo_image = Image.open("GG_logo.tiff") # ★★★ ファイル名を "GG_logo.tiff" に修正 ★★★
+    st.image(logo_image, width=180) # ロゴの幅を180pxに設定 (お好みで調整してください)
+except FileNotFoundError:
+    st.error("ロゴ画像 (GG_logo.tiff) が見つかりません。アプリのメインファイルと同じフォルダに配置してください。")
+except Exception as e: # PillowがTIFFファイルをうまく開けない場合などのエラーをキャッチ
+    st.error(f"ロゴ画像 (GG_logo.tiff) の読み込み中にエラーが発生しました: {e}")
+
+
 # アプリのタイトルを設定
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_html=True)
+
+# 「使用方法」
+st.markdown("""
+### 使用方法
+1. 画像を左にアップロードしてください。
+2. 左サイドバーの「1. 二値化」の閾値を動かして、「1. 二値化処理後」の画像が、輝点と背景が適切に分離された状態（実物に近い見え方）になるように調整してください。
+3. （それでもカウント値がおかしい場合は、サイドバーの「2. 形態学的処理」や「3. 輝点フィルタリング」の各パラメータも調整してみてください。）
+""")
+st.markdown("---") # 区切り線
 
 # --- 結果表示用のプレースホルダーをページ上部に定義 ---
 result_placeholder = st.empty()
@@ -44,7 +63,7 @@ def display_count_prominently(placeholder, count_value):
 if 'counted_spots_value' not in st.session_state:
     st.session_state.counted_spots_value = "---" 
 if "binary_threshold_value" not in st.session_state: 
-    st.session_state.binary_threshold_value = 58 # ★★★ デフォルト値を58に変更 ★★★
+    st.session_state.binary_threshold_value = 58 # デフォルト値を58に変更済み
 if "threshold_slider_for_binary" not in st.session_state: 
     st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
 if "threshold_number_for_binary" not in st.session_state: 
@@ -65,7 +84,7 @@ st.sidebar.header("解析パラメータ設定")
 UPLOAD_ICON = "📤" 
 uploaded_file = st.sidebar.file_uploader(
     f"{UPLOAD_ICON} 画像をアップロード",
-    type=['tif', 'tiff', 'png', 'jpg', 'jpeg'],
+    type=['tif', 'tiff', 'png', 'jpg', 'jpeg'], # .tiff も対応形式に追加済み
     help="対応形式: TIF, TIFF, PNG, JPG, JPEG。ここにドラッグ＆ドロップするか、クリックしてファイルを選択してください。"
 )
 
@@ -78,15 +97,31 @@ if uploaded_file is not None:
 
     if len(img_array.shape) == 3 and img_array.shape[2] == 3:
         img_gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-    elif len(img_array.shape) == 3 and img_array.shape[2] == 4:
+    elif len(img_array.shape) == 3 and img_array.shape[2] == 4: # RGBA対応
         img_gray = cv2.cvtColor(img_array, cv2.COLOR_RGBA2GRAY)
-    else:
+    elif pil_image.mode == 'L': # Pillowのモードがグレースケールの場合
         img_gray = img_array.copy()
+    elif pil_image.mode == 'LA': # グレースケール + アルファの場合
+        temp_rgba = pil_image.convert('RGBA') # RGBAに変換
+        temp_array = np.array(temp_rgba)
+        img_gray = cv2.cvtColor(temp_array, cv2.COLOR_RGBA2GRAY)
+    elif pil_image.mode == 'I;16' or pil_image.mode == 'I;16B' or pil_image.mode == 'I;16L': # 16bit整数グレースケールなど
+        # 8bitに正規化・変換 (表示やOpenCV処理のため)
+        if img_array.dtype == np.uint16:
+            img_array_normalized = cv2.normalize(img_array, None, 0, 255, cv2.NORM_MINMAX)
+            img_gray = img_array_normalized.astype(np.uint8)
+        else: # その他の特殊なケースは一旦そのままコピー (エラーになる可能性あり)
+            img_gray = img_array.copy() 
+            st.warning(f"画像のモード ({pil_image.mode}) が一般的でないため、グレースケール変換が不正確な可能性があります。")
+    else: # 上記以外の場合、とりあえずコピー (エラーになる可能性あり)
+        img_gray = img_array.copy()
+        st.warning(f"画像のモード ({pil_image.mode}) が予期しない形式です。グレースケール変換に失敗する可能性があります。")
+
 
     kernel_size_blur = 1 
 
     st.sidebar.subheader("1. 二値化") 
-    st.sidebar.markdown("_この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。_") # 修正: 前回の削除指示ではなく、ここに適切な説明があった方が良いかもしれないので、ユーザーの以前の指示「この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。」を復活させました。もし不要ならこの行を削除してください。
+    st.sidebar.markdown("_この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
     
     st.sidebar.slider(
         '閾値 (スライダーで調整)', 
@@ -140,6 +175,16 @@ if uploaded_file is not None:
     # --- メインエリアでの画像表示と処理 ---
     st.header("処理ステップごとの画像")
     
+    # グレースケール画像 img_gray が正しく処理可能な8bit画像であることを確認/変換
+    # (特殊なTIFFモードへの対応を少し強化)
+    if img_gray.dtype != np.uint8:
+        if img_gray.max() > 255: # 16bit画像などの可能性がある
+            img_gray_normalized = cv2.normalize(img_gray, None, 0, 255, cv2.NORM_MINMAX)
+            img_gray = img_gray_normalized.astype(np.uint8)
+        else: # 255以下だがuint8でない場合 (floatなど)
+            img_gray = img_array.astype(np.uint8)
+
+
     if kernel_size_blur > 0:
         blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur, kernel_size_blur), 0)
     else:
