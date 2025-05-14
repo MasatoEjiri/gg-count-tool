@@ -45,22 +45,19 @@ if 'counted_spots_value' not in st.session_state:
     st.session_state.counted_spots_value = "---" 
 if "binary_threshold_value" not in st.session_state: 
     st.session_state.binary_threshold_value = 88
-# (スライダーと数値入力ウィジェット用のキーも初期化は通常不要だが、参照エラーを避けるためにここで定義しておくこともできる)
-if "threshold_slider_for_binary" not in st.session_state:
+if "threshold_slider_for_binary" not in st.session_state: # コールバック用キーも初期化
     st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
-if "threshold_number_for_binary" not in st.session_state:
+if "threshold_number_for_binary" not in st.session_state: # コールバック用キーも初期化
     st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
 
-
-# --- コールバック関数の定義 (ウィジェットより前に定義) ---
+# --- コールバック関数の定義 ---
 def sync_threshold_from_slider():
     st.session_state.binary_threshold_value = st.session_state.threshold_slider_for_binary
-    st.session_state.threshold_number_for_binary = st.session_state.threshold_slider_for_binary # もう片方も更新
+    st.session_state.threshold_number_for_binary = st.session_state.threshold_slider_for_binary
 
 def sync_threshold_from_number_input():
     st.session_state.binary_threshold_value = st.session_state.threshold_number_for_binary
-    st.session_state.threshold_slider_for_binary = st.session_state.threshold_number_for_binary # もう片方も更新
-
+    st.session_state.threshold_slider_for_binary = st.session_state.threshold_number_for_binary
 
 # --- サイドバーでパラメータを一元管理 ---
 st.sidebar.header("解析パラメータ設定")
@@ -91,20 +88,19 @@ if uploaded_file is not None:
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。")
     
-    # スライダーと数値入力で二値化閾値を設定 (ユニークなキーとコールバックを使用)
     st.sidebar.slider(
         '閾値 (スライダーで調整)', 
         min_value=0, max_value=255, step=1,
-        value=st.session_state.binary_threshold_value, # 共通のセッション変数から初期値を取得
-        key="threshold_slider_for_binary",        # スライダー用のユニークなキー
-        on_change=sync_threshold_from_slider      # 値変更時のコールバック関数
+        value=st.session_state.binary_threshold_value,
+        key="threshold_slider_for_binary",
+        on_change=sync_threshold_from_slider
     )
     st.sidebar.number_input(
         '閾値 (直接入力)', 
         min_value=0, max_value=255, step=1,
-        value=st.session_state.binary_threshold_value, # 共通のセッション変数から初期値を取得
-        key="threshold_number_for_binary",       # 数値入力用のユニークなキー
-        on_change=sync_threshold_from_number_input # 値変更時のコールバック関数
+        value=st.session_state.binary_threshold_value,
+        key="threshold_number_for_binary",
+        on_change=sync_threshold_from_number_input
     )
     threshold_value = st.session_state.binary_threshold_value 
     
@@ -112,6 +108,10 @@ if uploaded_file is not None:
     - **大きくすると:** より明るいピクセルのみが白（輝点候補）となり、背景ノイズは減りますが、暗めの輝点を見逃す可能性があります。
     - **小さくすると:** より暗いピクセルも白（輝点候補）となり、暗い輝点も拾いやすくなりますが、背景ノイズを拾いやすくなります。
     """)
+
+    # ★★★ ここに新しい空白と説明文を追加 ★★★
+    st.sidebar.markdown("<br>", unsafe_allow_html=True)  # 空白行を挿入
+    st.sidebar.markdown("_二値化操作だけでうまくいかない場合は下記設定も変更してみてください。_") # 斜体で説明文を追加
 
     st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
     morph_kernel_shape_options = { "楕円 (Ellipse)": cv2.MORPH_ELLIPSE, "矩形 (Rectangle)": cv2.MORPH_RECT, "十字 (Cross)": cv2.MORPH_CROSS }
@@ -139,7 +139,6 @@ if uploaded_file is not None:
     """)
 
     # --- メインエリアでの画像表示と処理 ---
-    # (メインエリアのコードは前回から変更ありません)
     st.header("処理ステップごとの画像")
     
     if kernel_size_blur > 0:
