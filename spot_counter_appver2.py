@@ -3,20 +3,17 @@ from PIL import Image
 import numpy as np
 import cv2
 
-# --- ロゴの表示設定 ---
-# st.columnsを使ってロゴを中央に配置し、サイズを調整
-log_col1, log_col2, log_col3 = st.columns([1,2,1]) # 列の幅の比率。[左, 中央, 右]
-with log_col2: # 中央の列を使用
-    try:
-        logo_image = Image.open("GG_logo.jpg") 
-        st.image(logo_image, width=200) # ロゴの幅を200pxに設定
-    except FileNotFoundError:
-        st.error("ロゴ画像 (GG_logo.jpg) が見つかりません。アプリのメインファイルと同じフォルダに配置してください。")
+# --- ロゴの表示設定 (左上に配置) ---
+try:
+    logo_image = Image.open("GG_logo.jpg") 
+    st.image(logo_image, width=180) # ロゴの幅を180pxに設定
+except FileNotFoundError:
+    st.error("ロゴ画像 (GG_logo.jpg) が見つかりません。アプリのメインファイルと同じフォルダに配置してください。")
 
 
 # --- アプリのタイトル設定 (ロゴとの間隔を調整) ---
 st.markdown(
-    "<h1 style='text-align: center; margin-top: -15px; margin-bottom: 20px;'>Gra&Green<br>輝点カウントツール</h1>", 
+    "<h1 style='text-align: center; margin-top: 10px; margin-bottom: 20px;'>Gra&Green<br>輝点カウントツール</h1>", 
     unsafe_allow_html=True
 )
 
@@ -70,21 +67,21 @@ uploaded_file = st.sidebar.file_uploader(
     help="対応形式: TIF, TIFF, PNG, JPG, JPEG。ここにドラッグ＆ドロップするか、クリックしてファイルを選択してください。"
 )
 
-display_count_prominently(result_placeholder, st.session_state.counted_spots_value) # 初期表示
+display_count_prominently(result_placeholder, st.session_state.counted_spots_value)
 
 if uploaded_file is not None:
     pil_image = Image.open(uploaded_file)
     img_array = np.array(pil_image)
     original_img_display = img_array.copy() 
 
-    if len(img_array.shape) == 3 and img_array.shape[2] == 3: # カラー画像(RGB)
+    if len(img_array.shape) == 3 and img_array.shape[2] == 3:
         img_gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-    elif len(img_array.shape) == 3 and img_array.shape[2] == 4: # カラー画像(RGBA)
+    elif len(img_array.shape) == 3 and img_array.shape[2] == 4:
         img_gray = cv2.cvtColor(img_array, cv2.COLOR_RGBA2GRAY)
-    else: # すでにグレースケール、または予期しない形式
+    else:
         img_gray = img_array.copy()
 
-    kernel_size_blur = 1 # ノイズ除去のカーネルサイズは1に固定 (UIなし)
+    kernel_size_blur = 1 
 
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。")
@@ -134,13 +131,11 @@ if uploaded_file is not None:
     # --- メインエリアでの画像表示と処理 ---
     st.header("処理ステップごとの画像")
     
-    # ノイズ除去処理 (内部処理、kernel_size_blur は 1 に固定)
     if kernel_size_blur > 0:
         blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur, kernel_size_blur), 0)
     else:
         blurred_img = img_gray.copy()
 
-    # 二値化処理
     ret_thresh, binary_img_original = cv2.threshold(blurred_img, threshold_value, 255, cv2.THRESH_BINARY)
     if not ret_thresh:
         st.error("二値化処理に失敗しました。")
@@ -148,7 +143,6 @@ if uploaded_file is not None:
     else:
         binary_img_for_morph = binary_img_original.copy()
     
-    # 形態学的処理
     opened_img = None 
     if binary_img_for_morph is not None:
         kernel_morph = cv2.getStructuringElement(morph_kernel_shape, (kernel_size_morph, kernel_size_morph))
@@ -157,9 +151,8 @@ if uploaded_file is not None:
     else: 
         binary_img_for_contours = None
 
-    # 輪郭検出、フィルタリング、カウント
     current_counted_spots = 0 
-    output_image_contours = cv2.cvtColor(img_gray, cv2.COLOR_GRAY2BGR) # ベース画像を事前に準備
+    output_image_contours = cv2.cvtColor(img_gray, cv2.COLOR_GRAY2BGR)
 
     if binary_img_for_contours is not None:
         contours, hierarchy = cv2.findContours(binary_img_for_contours, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -174,7 +167,6 @@ if uploaded_file is not None:
         st.warning("輪郭検出の元となる画像が準備できませんでした。前のステップを確認してください。")
         st.session_state.counted_spots_value = "エラー"
 
-    # --- 2カラム表示 ---
     col1, col2 = st.columns(2)
 
     with col1:
@@ -201,19 +193,16 @@ if uploaded_file is not None:
 
     with col4:
         st.subheader("3. 輝点検出とマーキング")
-        # output_image_contours は輪郭検出前にも生成されているので、そのまま表示可能
-        # ただし、輪郭が描画されるのは contours が存在する場合のみ
         if 'contours' in locals() and contours and binary_img_for_contours is not None:
              st.image(output_image_contours, caption=f'検出された輝点 (緑の輪郭、面積範囲: {min_area}-{max_area})', use_container_width=True)
-        elif binary_img_for_contours is not None: # 輪郭はなかったが、処理は行われた場合
+        elif binary_img_for_contours is not None: 
             st.image(output_image_contours, caption='輝点は見つかりませんでした', use_container_width=True)
-        else: # それ以前の処理で失敗した場合
+        else:
             st.text("輝点検出未実施")
 
-    # ページ上部のプレースホルダーを最新のカウント数で更新
     display_count_prominently(result_placeholder, st.session_state.counted_spots_value)
 
-else: # 画像がアップロードされていない場合
+else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
     st.session_state.counted_spots_value = "---"
     display_count_prominently(result_placeholder, st.session_state.counted_spots_value)
