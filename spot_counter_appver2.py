@@ -59,20 +59,37 @@ display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_sp
 # --- メイン処理 ---
 if uploaded_file is not None:
     st.header("1. 元の画像 と ROI選択")
-    pil_image_rgb_for_display = None # 初期化
+    pil_image_rgb_for_canvas = None      # キャンバスとOpenCVの元になるPillow RGBイメージ
+    np_array_rgb_uint8_for_display = None # st.image表示用のNumPy uint8配列
 
     try:
         uploaded_file_bytes = uploaded_file.getvalue()
         pil_image_original = Image.open(io.BytesIO(uploaded_file_bytes))
-        pil_image_rgb_for_display = pil_image_original.convert("RGB")
+        pil_image_rgb_for_canvas = pil_image_original.convert("RGB")
         
-        st.image(pil_image_rgb_for_display, caption='アップロードされた画像 (ROI選択用)', use_container_width=True)
+        # 表示用にNumPy配列(RGB, uint8)を準備
+        np_array_rgb_for_display_temp = np.array(pil_image_rgb_for_canvas)
+        
+        if np_array_rgb_for_display_temp.dtype != np.uint8:
+            if np.issubdtype(np_array_rgb_for_display_temp.dtype, np.floating):
+                if np_array_rgb_for_display_temp.min() >= 0.0 and np_array_rgb_for_display_temp.max() <= 1.0:
+                    np_array_rgb_uint8_for_display = (np_array_rgb_for_display_temp * 255).astype(np.uint8)
+                else: 
+                    np_array_rgb_uint8_for_display = np.clip(np_array_rgb_for_display_temp, 0, 255).astype(np.uint8)
+            elif np.issubdtype(np_array_rgb_for_display_temp.dtype, np.integer): 
+                np_array_rgb_uint8_for_display = np.clip(np_array_rgb_for_display_temp, 0, 255).astype(np.uint8)
+            else: 
+                np_array_rgb_uint8_for_display = np_array_rgb_for_display_temp.astype(np.uint8)
+        else: 
+            np_array_rgb_uint8_for_display = np_array_rgb_for_display_temp
+        
+        st.image(np_array_rgb_uint8_for_display, caption='アップロードされた画像 (ROI選択用)', use_container_width=True)
         
     except Exception as e:
-        st.error(f"画像の読み込みまたは表示に失敗しました: {e}")
+        st.error(f"画像の読み込み、変換、または初期表示に失敗しました: {e}")
         st.stop() 
 
-    img_array_rgb_for_opencv = np.array(pil_image_rgb_for_display) 
+    img_array_rgb_for_opencv = np.array(pil_image_rgb_for_canvas) 
     img_gray_full = cv2.cvtColor(img_array_rgb_for_opencv, cv2.COLOR_RGB2GRAY)
     
     if img_gray_full.dtype != np.uint8:
@@ -94,8 +111,8 @@ if uploaded_file is not None:
     drawing_mode = "rect"; stroke_color = "red"
     canvas_result = st_canvas(
         fill_color="rgba(255,0,0,0.1)", stroke_width=2, stroke_color=stroke_color,
-        background_image=pil_image_rgb_for_display, 
-        update_streamlit=True, height=pil_image_rgb_for_display.height, width=pil_image_rgb_for_display.width,
+        background_image=pil_image_rgb_for_canvas, 
+        update_streamlit=True, height=pil_image_rgb_for_canvas.height, width=pil_image_rgb_for_canvas.width,
         drawing_mode=drawing_mode, key="roi_canvas"
     )
 
@@ -120,7 +137,6 @@ if uploaded_file is not None:
                 else:
                     st.warning("描画されたROIのサイズが無効。画像全体を処理します。"); img_to_process = img_gray_full 
     
-    # サイドバーのパラメータ設定
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
     st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
@@ -141,7 +157,6 @@ if uploaded_file is not None:
     max_area = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,value=1000,step=1) 
     st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。""")
 
-    # メインエリアの画像処理と表示
     st.header("処理ステップごとの画像 (選択エリア内)")
     kernel_size_blur = 1
     if img_to_process.size==0: st.error("処理対象の画像領域が空です。"); st.stop()
