@@ -3,6 +3,9 @@ from PIL import Image
 import numpy as np
 import cv2
 
+# ★★★ ページ設定: ブラウザタブのタイトルを変更 ★★★
+st.set_page_config(page_title="輝点解析ツール", layout="wide") # layout="wide" も追加してメインエリアを広めに
+
 # --- サイドバーの上部に結果表示用のプレースホルダーを定義 ---
 result_placeholder_sidebar = st.sidebar.empty() 
 
@@ -100,31 +103,36 @@ if uploaded_file is not None:
             img_array_normalized = cv2.normalize(img_array, None, 0, 255, cv2.NORM_MINMAX)
             img_gray = img_array_normalized.astype(np.uint8)
         else: 
-            img_gray = img_array.astype(np.uint8) 
-            if img_gray.max() > 255 or img_gray.min() < 0: 
-                 st.warning(f"画像のモード ({pil_image.mode}, dtype: {img_array.dtype}) の8bit変換が不正確な可能性があります。値を0-255にクリップします。")
-                 img_gray = np.clip(img_array, 0, 255).astype(np.uint8)
+            img_gray_temp = img_array.astype(np.uint8) # まずuint8にキャスト試行
+            if img_gray_temp.max() > 255 or img_gray_temp.min() < 0 : # キャスト結果が範囲外か確認
+                 st.warning(f"画像のモード ({pil_image.mode}, dtype: {img_array.dtype}) の8bit変換で値が範囲外です。0-255にクリップします。")
+                 img_gray = np.clip(img_array, 0, 255).astype(np.uint8) # 元の配列をクリップして変換
             else:
+                 img_gray = img_gray_temp
                  st.warning(f"画像のモード ({pil_image.mode}, dtype: {img_array.dtype}) の8bit変換を行いました。")
     else: 
         img_gray = img_array.copy()
         st.warning(f"画像のモード ({pil_image.mode}) が予期しない形式です。グレースケール変換に失敗する可能性があります。")
     
+    # OpenCV処理のために最終的にimg_grayがuint8であることを確認
     if img_gray.dtype != np.uint8:
         try:
-            if img_gray.ndim == 2 and (img_gray.max() > 255 or img_gray.min() < 0 or img_gray.dtype != np.uint8) :
+            # 255を超える値を持つ可能性があるグレースケール画像（例：16bit TIFF）を正規化
+            if img_gray.ndim == 2 and (img_gray.max() > 255 or img_gray.min() < 0):
                 img_gray_normalized = cv2.normalize(img_gray, None, 0, 255, cv2.NORM_MINMAX)
                 img_gray = img_gray_normalized.astype(np.uint8)
-            elif img_gray.ndim == 3: 
-                 img_gray = cv2.cvtColor(img_gray, cv2.COLOR_BGR2GRAY) 
-            else: 
-                img_gray_temp = img_gray.astype(np.uint8)
-                if img_gray_temp.max() > 255 or img_gray_temp.min() < 0 :
-                    img_gray = np.clip(img_gray, 0, 255).astype(np.uint8)
-                else:
-                    img_gray = img_gray_temp
+            # 何らかの理由で3チャンネルのままの場合 (通常は上で処理されているはず)
+            elif img_gray.ndim == 3:
+                 st.warning(f"グレースケール変換後のはずの画像が3チャンネル ({img_gray.shape}) です。再度グレースケール変換を試みます。")
+                 img_gray = cv2.cvtColor(img_gray, cv2.COLOR_BGR2GRAY) # BGRと仮定
+            # その他のデータ型で、範囲が0-255に収まっている場合
+            elif img_gray.max() <= 255 and img_gray.min() >= 0:
+                img_gray = img_array.astype(np.uint8)
+            else: # その他の予期しないケース
+                st.error(f"グレースケール画像のデータ型 ({img_gray.dtype}) または値の範囲がOpenCVの処理に適していません。")
+                st.stop() # 処理を中断
         except Exception as e:
-            st.error(f"最終的なグレースケール画像のデータ型変換に失敗しました: {e}")
+            st.error(f"最終的なグレースケール画像のデータ型調整に失敗しました: {e}")
             st.stop()
 
     kernel_size_blur = 1 
@@ -170,7 +178,6 @@ if uploaded_file is not None:
     """)
 
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
-    # ★★★ 最小面積のデフォルト値を15に変更 ★★★
     min_area = st.sidebar.number_input('輝点の最小面積 (ピクセル)', min_value=1, max_value=10000, value=15, step=1) 
     st.sidebar.caption("""
     - **大きくすると:** 小さすぎるノイズや非常に小さな輝点が除外され、カウント数が減ることがあります。
