@@ -21,27 +21,37 @@ def display_count_prominently(placeholder, count_value):
 
     html_content = f"""
     <div style="
+        display: block; 
+        position: sticky;
+        top: 5px;        
+        z-index: 1000;   
         border: 1px solid {border_color}; 
         border-radius: 12px;
-        padding: 25px;
+        padding: 20px; 
         text-align: center;
         background-color: {background_color};
         margin-top: 10px;
-        margin-bottom: 25px;
+        margin-bottom: 20px; 
         box-shadow: 0 6px 15px rgba(0,0,0,0.2); 
         color: {label_font_color}; 
-        max-width: 600px;
+        max-width: 550px; 
         margin-left: auto;
         margin-right: auto;
-        position: sticky; /* ★★★ スティッキー表示 ★★★ */
-        top: 10px;        /* ★★★ 上からの位置 ★★★ */
-        z-index: 1000;    /* ★★★ 重ね順 ★★★ */
     ">
         <p style="font-size: 18px; margin-bottom: 8px;">{label_text}</p>
-        <p style="font-size: 56px; font-weight: bold; margin-top: 0px; color: {value_font_color};">{value_text}</p>
+        <p style="font-size: 52px; font-weight: bold; margin-top: 0px; color: {value_font_color};">{value_text}</p>
     </div>
     """
     placeholder.markdown(html_content, unsafe_allow_html=True)
+
+# 「使用方法」
+st.markdown("""
+### 使用方法
+1. 画像を左にアップロードしてください。
+2. 左サイドバーの「1. 二値化」の閾値を動かして、「1. 二値化処理後」の画像が、輝点と背景が適切に分離された状態（実物に近い見え方）になるように調整してください。
+3. （それでもカウント値がおかしい場合は、サイドバーの「2. 形態学的処理」や「3. 輝点フィルタリング」の各パラメータも調整してみてください。）
+""")
+st.markdown("---") 
 
 # --- セッションステートの初期化 ---
 if 'counted_spots_value' not in st.session_state:
@@ -65,11 +75,29 @@ def sync_threshold_from_number_input():
 # --- サイドバーでパラメータを一元管理 ---
 st.sidebar.header("解析パラメータ設定")
 
-UPLOAD_ICON = "📤" 
+# ★★★ 点線枠のドロップエリア風表示を追加 ★★★
+st.sidebar.markdown(
+    """
+    <div style="
+        border: 2px dashed #007bff; 
+        padding: 20px; 
+        border-radius: 10px; 
+        text-align: center; 
+        margin-bottom: 10px;
+    ">
+        <p style="font-weight: bold; margin-bottom: 5px;">ここに画像をドラッグ＆ドロップ</p>
+        <p style="font-size: small; margin-bottom: 0;">または下のボタンから選択</p>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+UPLOAD_ICON = "📄" 
 uploaded_file = st.sidebar.file_uploader(
-    f"{UPLOAD_ICON} 画像をアップロード",
+    "画像ファイルを選択", # ラベルは簡潔に (label_visibility="collapsed"で隠す)
     type=['tif', 'tiff', 'png', 'jpg', 'jpeg'],
-    help="対応形式: TIF, TIFF, PNG, JPG, JPEG。ここにドラッグ＆ドロップするか、クリックしてファイルを選択してください。"
+    help="対応形式: TIF, TIFF, PNG, JPG, JPEG。",
+    label_visibility="collapsed" # Markdownで作った表示があるのでラベルを隠す
 )
 
 display_count_prominently(result_placeholder, st.session_state.counted_spots_value)
@@ -79,6 +107,7 @@ if uploaded_file is not None:
     img_array = np.array(pil_image)
     original_img_display = img_array.copy() 
 
+    # グレースケール変換とデータ型調整 (前回のものを流用)
     if len(img_array.shape) == 3 and img_array.shape[2] == 3:
         img_gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
     elif len(img_array.shape) == 3 and img_array.shape[2] == 4: 
@@ -106,6 +135,25 @@ if uploaded_file is not None:
     else: 
         img_gray = img_array.copy()
         st.warning(f"画像のモード ({pil_image.mode}) が予期しない形式です。グレースケール変換に失敗する可能性があります。")
+    
+    if img_gray.dtype != np.uint8: # 最終確認と変換
+        try:
+            if img_gray.ndim == 2 and (img_gray.max() > 255 or img_gray.min() < 0 or img_gray.dtype != np.uint8) :
+                img_gray_normalized = cv2.normalize(img_gray, None, 0, 255, cv2.NORM_MINMAX)
+                img_gray = img_gray_normalized.astype(np.uint8)
+            elif img_gray.ndim == 3: 
+                 img_gray = cv2.cvtColor(img_gray, cv2.COLOR_BGR2GRAY) 
+            else: 
+                img_gray_temp = img_gray.astype(np.uint8)
+                if img_gray_temp.max() > 255 or img_gray_temp.min() < 0 : # astypeで範囲外になった場合
+                    img_gray = np.clip(img_gray, 0, 255).astype(np.uint8) # クリップして再変換
+                    st.warning(f"グレースケール画像のデータ型/範囲をuint8に強制変換(クリップ)しました。")
+                else:
+                    img_gray = img_gray_temp
+        except Exception as e:
+            st.error(f"最終的なグレースケール画像のデータ型変換に失敗しました: {e}")
+            st.stop()
+
 
     kernel_size_blur = 1 
 
@@ -164,21 +212,6 @@ if uploaded_file is not None:
     # --- メインエリアでの画像表示と処理 ---
     st.header("処理ステップごとの画像")
     
-    if img_gray.dtype != np.uint8:
-        if img_gray.ndim == 2 and (img_gray.max() > 255 or img_gray.min() < 0 or img_gray.dtype != np.uint8) :
-            img_gray_normalized = cv2.normalize(img_gray, None, 0, 255, cv2.NORM_MINMAX)
-            img_gray = img_gray_normalized.astype(np.uint8)
-        elif img_gray.ndim == 3: 
-             img_gray = cv2.cvtColor(img_gray, cv2.COLOR_BGR2GRAY) 
-        else: 
-            try:
-                img_gray = img_gray.astype(np.uint8)
-                if img_gray.max() > 255 or img_gray.min() < 0 :
-                    img_gray = np.clip(img_gray, 0, 255).astype(np.uint8)
-            except Exception as e:
-                st.error(f"グレースケール画像のデータ型変換に失敗しました: {e}")
-                st.stop() 
-
     if kernel_size_blur > 0:
         blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur, kernel_size_blur), 0)
     else:
@@ -215,31 +248,38 @@ if uploaded_file is not None:
         st.warning("輪郭検出の元となる画像が準備できませんでした。前のステップを確認してください。")
         st.session_state.counted_spots_value = "エラー"
 
-    st.subheader("元の画像")
-    st.image(original_img_display, caption='アップロードされた画像', use_container_width=True)
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("元の画像")
+        st.image(original_img_display, caption='アップロードされた画像', use_container_width=True)
+
+    with col2:
+        st.subheader("1. 二値化処理後")
+        if binary_img_for_morph is not None: 
+            st.image(binary_img_original, caption=f'閾値: {threshold_value}', use_container_width=True)
+        else:
+            st.info("二値化未実施または失敗")
+
     st.markdown("---")
 
-    st.subheader("1. 二値化処理後")
-    if binary_img_for_morph is not None: 
-        st.image(binary_img_original, caption=f'閾値: {threshold_value}', use_container_width=True)
-    else:
-        st.info("二値化未実施または失敗")
-    st.markdown("---")
+    col3, col4 = st.columns(2)
 
-    st.subheader("2. 形態学的処理後")
-    if opened_img is not None: 
-        st.image(opened_img, caption=f'カーネル: {selected_shape_name} {kernel_size_morph}x{kernel_size_morph}', use_container_width=True)
-    else:
-        st.info("形態学的処理未実施または失敗")
-    st.markdown("---")
+    with col3:
+        st.subheader("2. 形態学的処理後")
+        if opened_img is not None: 
+            st.image(opened_img, caption=f'カーネル: {selected_shape_name} {kernel_size_morph}x{kernel_size_morph}', use_container_width=True)
+        else:
+            st.info("形態学的処理未実施または失敗")
 
-    st.subheader("3. 輝点検出とマーキング")
-    if 'contours' in locals() and contours and binary_img_for_contours is not None:
-         st.image(output_image_contours, caption=f'検出された輝点 (緑の輪郭、面積範囲: {min_area}-{max_area})', use_container_width=True)
-    elif binary_img_for_contours is not None: 
-        st.image(output_image_contours, caption='輝点は見つかりませんでした', use_container_width=True)
-    else:
-        st.info("輝点検出未実施")
+    with col4:
+        st.subheader("3. 輝点検出とマーキング")
+        if 'contours' in locals() and contours and binary_img_for_contours is not None:
+             st.image(output_image_contours, caption=f'検出された輝点 (緑の輪郭、面積範囲: {min_area}-{max_area})', use_container_width=True)
+        elif binary_img_for_contours is not None: 
+            st.image(output_image_contours, caption='輝点は見つかりませんでした', use_container_width=True)
+        else:
+            st.info("輝点検出未実施")
 
     display_count_prominently(result_placeholder, st.session_state.counted_spots_value)
 
