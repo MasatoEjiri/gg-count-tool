@@ -6,6 +6,15 @@ import cv2
 # アプリのタイトルを設定
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_html=True)
 
+# ★★★ 「使用方法」を追加 ★★★
+st.markdown("""
+### 使用方法
+1.  画像を左スペース（サイドバー）にアップロードしてください。
+2.  左サイドバーの「1. 二値化」の閾値を動かして、メインエリアに表示される「1. 二値化処理後」の画像が、輝点と背景が適切に分離された状態（実物に近い見え方）になるように調整してください。
+3.  （それでもカウント値がおかしい場合や、ドットがくっついている場合は、サイドバーの「2. 形態学的処理」や「3. 輝点フィルタリング」の各パラメータも調整してみてください。）
+""")
+st.markdown("---") # 見やすくするために区切り線を追加
+
 # --- 結果表示用のプレースホルダーをページ上部に定義 ---
 result_placeholder = st.empty()
 
@@ -45,9 +54,9 @@ if 'counted_spots_value' not in st.session_state:
     st.session_state.counted_spots_value = "---" 
 if "binary_threshold_value" not in st.session_state: 
     st.session_state.binary_threshold_value = 88
-if "threshold_slider_for_binary" not in st.session_state: # コールバック用キーも初期化
+if "threshold_slider_for_binary" not in st.session_state: 
     st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
-if "threshold_number_for_binary" not in st.session_state: # コールバック用キーも初期化
+if "threshold_number_for_binary" not in st.session_state: 
     st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
 
 # --- コールバック関数の定義 ---
@@ -86,7 +95,8 @@ if uploaded_file is not None:
     kernel_size_blur = 1 
 
     st.sidebar.subheader("1. 二値化") 
-    st.sidebar.markdown("この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。")
+    # ★★★ ここの説明文を削除 ★★★
+    # st.sidebar.markdown("この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。") 
     
     st.sidebar.slider(
         '閾値 (スライダーで調整)', 
@@ -109,9 +119,8 @@ if uploaded_file is not None:
     - **小さくすると:** より暗いピクセルも白（輝点候補）となり、暗い輝点も拾いやすくなりますが、背景ノイズを拾いやすくなります。
     """)
 
-    # ★★★ ここに新しい空白と説明文を追加 ★★★
-    st.sidebar.markdown("<br>", unsafe_allow_html=True)  # 空白行を挿入
-    st.sidebar.markdown("_二値化操作だけでうまくいかない場合は下記設定も変更してみてください。_") # 斜体で説明文を追加
+    st.sidebar.markdown("<br>", unsafe_allow_html=True)
+    st.sidebar.markdown("_二値化操作だけでうまくいかない場合は下記設定も変更してみてください。_")
 
     st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
     morph_kernel_shape_options = { "楕円 (Ellipse)": cv2.MORPH_ELLIPSE, "矩形 (Rectangle)": cv2.MORPH_RECT, "十字 (Cross)": cv2.MORPH_CROSS }
