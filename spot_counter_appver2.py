@@ -7,6 +7,8 @@ import cv2
 try:
     logo_image = Image.open("GG_logo.tiff") 
     st.image(logo_image, width=180) # ロゴの幅を180pxに設定 (お好みで調整してください)
+except FileNotFoundError:
+    st.error("ロゴ画像 (GG_logo.jpg) が見つかりません。アプリのメインファイルと同じフォルダに配置してください。")
 
 # アプリのタイトルを設定
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_html=True)
