@@ -3,31 +3,13 @@ from PIL import Image
 import numpy as np
 import cv2
 
-# ★★★ ロゴ表示部分を削除 ★★★
-# try:
-#     logo_image = Image.open("GG_logo.tiff") 
-#     st.image(logo_image, width=180) 
-# except FileNotFoundError:
-#     st.error("ロゴ画像 (GG_logo.tiff) が見つかりません。アプリのメインファイルと同じフォルダに配置してください。")
-# except Exception as e: 
-#     st.error(f"ロゴ画像 (GG_logo.tiff) の読み込み中にエラーが発生しました: {e}")
-
 # アプリのタイトルを設定
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_html=True)
-
-# 「使用方法」
-st.markdown("""
-### 使用方法
-1. 画像を左にアップロードしてください。
-2. 左サイドバーの「1. 二値化」の閾値を動かして、「1. 二値化処理後」の画像が、輝点と背景が適切に分離された状態（実物に近い見え方）になるように調整してください。
-3. （それでもカウント値がおかしい場合は、サイドバーの「2. 形態学的処理」や「3. 輝点フィルタリング」の各パラメータも調整してみてください。）
-""")
-st.markdown("---") # 区切り線
 
 # --- 結果表示用のプレースホルダーをページ上部に定義 ---
 result_placeholder = st.empty()
 
-# --- カスタマイズされた結果表示関数 ---
+# --- カスタマイズされた結果表示関数 (スティッキー表示に対応) ---
 def display_count_prominently(placeholder, count_value):
     label_text = "【解析結果】検出された輝点の数"
     value_text = str(count_value) 
@@ -51,6 +33,9 @@ def display_count_prominently(placeholder, count_value):
         max-width: 600px;
         margin-left: auto;
         margin-right: auto;
+        position: sticky; /* ★★★ スティッキー表示 ★★★ */
+        top: 10px;        /* ★★★ 上からの位置 ★★★ */
+        z-index: 1000;    /* ★★★ 重ね順 ★★★ */
     ">
         <p style="font-size: 18px; margin-bottom: 8px;">{label_text}</p>
         <p style="font-size: 56px; font-weight: bold; margin-top: 0px; color: {value_font_color};">{value_text}</p>
@@ -105,20 +90,19 @@ if uploaded_file is not None:
         temp_array = np.array(temp_rgba)
         img_gray = cv2.cvtColor(temp_array, cv2.COLOR_RGBA2GRAY)
     elif pil_image.mode in ['I;16', 'I;16B', 'I;16L', 'I']: 
-        if img_array.dtype == np.uint16 or img_array.dtype == np.int32 : # Add np.int32 for 'I' mode
+        if img_array.dtype == np.uint16 or img_array.dtype == np.int32 : 
             img_array_normalized = cv2.normalize(img_array, None, 0, 255, cv2.NORM_MINMAX)
             img_gray = img_array_normalized.astype(np.uint8)
-        elif img_array.dtype == np.float32 or img_array.dtype == np.float64: # Handle float types
+        elif img_array.dtype == np.float32 or img_array.dtype == np.float64: 
             img_array_normalized = cv2.normalize(img_array, None, 0, 255, cv2.NORM_MINMAX)
             img_gray = img_array_normalized.astype(np.uint8)
         else: 
-            img_gray = img_array.astype(np.uint8) # Try to convert other types to uint8
-            if img_gray.max() > 255 or img_gray.min() < 0: # if conversion is still not in range
+            img_gray = img_array.astype(np.uint8) 
+            if img_gray.max() > 255 or img_gray.min() < 0: 
                  st.warning(f"画像のモード ({pil_image.mode}, dtype: {img_array.dtype}) の8bit変換が不正確な可能性があります。値を0-255にクリップします。")
-                 img_gray = np.clip(img_array, 0, 255).astype(np.uint8) # Fallback to clipping
+                 img_gray = np.clip(img_array, 0, 255).astype(np.uint8)
             else:
                  st.warning(f"画像のモード ({pil_image.mode}, dtype: {img_array.dtype}) の8bit変換を行いました。")
-
     else: 
         img_gray = img_array.copy()
         st.warning(f"画像のモード ({pil_image.mode}) が予期しない形式です。グレースケール変換に失敗する可能性があります。")
@@ -180,23 +164,20 @@ if uploaded_file is not None:
     # --- メインエリアでの画像表示と処理 ---
     st.header("処理ステップごとの画像")
     
-    # グレースケール画像 img_gray が正しく処理可能な8bit画像であることを確認/変換
     if img_gray.dtype != np.uint8:
-        if img_gray.ndim == 2 and (img_gray.max() > 255 or img_gray.min() < 0 or img_gray.dtype != np.uint8) : # 16bitグレースケールやfloatなど
+        if img_gray.ndim == 2 and (img_gray.max() > 255 or img_gray.min() < 0 or img_gray.dtype != np.uint8) :
             img_gray_normalized = cv2.normalize(img_gray, None, 0, 255, cv2.NORM_MINMAX)
             img_gray = img_gray_normalized.astype(np.uint8)
-        elif img_gray.ndim == 3: # 何らかの理由で3チャンネルのまま来た場合 (通常は上で処理されるはず)
-             st.warning(f"グレースケール変換後のはずの画像が3チャンネルです。再度グレースケール変換を試みます。")
-             img_gray = cv2.cvtColor(img_gray, cv2.COLOR_BGR2GRAY) # BGRと仮定
-        else: # その他の特殊なケースはエラーの可能性あり
+        elif img_gray.ndim == 3: 
+             img_gray = cv2.cvtColor(img_gray, cv2.COLOR_BGR2GRAY) 
+        else: 
             try:
                 img_gray = img_gray.astype(np.uint8)
                 if img_gray.max() > 255 or img_gray.min() < 0 :
                     img_gray = np.clip(img_gray, 0, 255).astype(np.uint8)
-                    st.warning(f"グレースケール画像のデータ型/範囲をuint8に強制変換しました。")
             except Exception as e:
                 st.error(f"グレースケール画像のデータ型変換に失敗しました: {e}")
-                st.stop() # 処理を中断
+                st.stop() 
 
     if kernel_size_blur > 0:
         blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur, kernel_size_blur), 0)
@@ -219,7 +200,7 @@ if uploaded_file is not None:
         binary_img_for_contours = None
 
     current_counted_spots = 0 
-    output_image_contours = cv2.cvtColor(img_gray, cv2.COLOR_GRAY2BGR) # ベース画像を事前に準備
+    output_image_contours = cv2.cvtColor(img_gray, cv2.COLOR_GRAY2BGR)
 
     if binary_img_for_contours is not None:
         contours, hierarchy = cv2.findContours(binary_img_for_contours, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -234,7 +215,6 @@ if uploaded_file is not None:
         st.warning("輪郭検出の元となる画像が準備できませんでした。前のステップを確認してください。")
         st.session_state.counted_spots_value = "エラー"
 
-    # ★★★ メインエリアの画像表示を1カラムに変更 ★★★
     st.subheader("元の画像")
     st.image(original_img_display, caption='アップロードされた画像', use_container_width=True)
     st.markdown("---")
@@ -243,14 +223,14 @@ if uploaded_file is not None:
     if binary_img_for_morph is not None: 
         st.image(binary_img_original, caption=f'閾値: {threshold_value}', use_container_width=True)
     else:
-        st.info("二値化未実施または失敗") # st.text から st.info に変更
+        st.info("二値化未実施または失敗")
     st.markdown("---")
 
     st.subheader("2. 形態学的処理後")
     if opened_img is not None: 
         st.image(opened_img, caption=f'カーネル: {selected_shape_name} {kernel_size_morph}x{kernel_size_morph}', use_container_width=True)
     else:
-        st.info("形態学的処理未実施または失敗") # st.text から st.info に変更
+        st.info("形態学的処理未実施または失敗")
     st.markdown("---")
 
     st.subheader("3. 輝点検出とマーキング")
@@ -259,8 +239,7 @@ if uploaded_file is not None:
     elif binary_img_for_contours is not None: 
         st.image(output_image_contours, caption='輝点は見つかりませんでした', use_container_width=True)
     else:
-        st.info("輝点検出未実施") # st.text から st.info に変更
-
+        st.info("輝点検出未実施")
 
     display_count_prominently(result_placeholder, st.session_state.counted_spots_value)
 
