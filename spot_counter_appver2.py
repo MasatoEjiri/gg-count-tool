@@ -1,20 +1,24 @@
 import streamlit as st
-from PIL import Image
+from PIL import Image # Pillow (PIL)ライブラリのインポートを確認
 import numpy as np
 import cv2
+
+# ★★★ ロゴをページ左上に表示 ★★★
+try:
+    logo_image = Image.open("GG_logo.tiff") 
+    st.image(logo_image, width=180) # ロゴの幅を180pxに設定 (お好みで調整してください)
 
 # アプリのタイトルを設定
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_html=True)
 
-# ★★★ 「使用方法」の文章を修正 ★★★
+# 「使用方法」
 st.markdown("""
 ### 使用方法
 1. 画像を左にアップロードしてください。
 2. 左サイドバーの「1. 二値化」の閾値を動かして、「1. 二値化処理後」の画像が、輝点と背景が適切に分離された状態（実物に近い見え方）になるように調整してください。
 3. （それでもカウント値がおかしい場合は、サイドバーの「2. 形態学的処理」や「3. 輝点フィルタリング」の各パラメータも調整してみてください。）
 """)
-st.markdown("---") # 見やすくするために区切り線を追加
-
+st.markdown("---") # 区切り線
 
 # --- 結果表示用のプレースホルダーをページ上部に定義 ---
 result_placeholder = st.empty()
