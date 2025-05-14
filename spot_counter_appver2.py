@@ -4,7 +4,7 @@ import numpy as np
 import cv2
 
 # ★★★ ロゴ画像の表示 (ファイル名を実際のロゴ画像のファイル名に置き換えてください) ★★★
-logo_image = Image.open("GG_logo.jpg") # 画像ファイルを読み込む
+logo_image = Image.open("GG_logo.tiff") # 画像ファイルを読み込む
 st.image(logo_image, width=300) # 画像を表示。widthで幅を調整 (お好みで)
 
 # アプリのタイトルを設定
