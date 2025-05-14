@@ -1,5 +1,5 @@
 streamlit==1.30.0
 opencv-python-headless
-Pillow
+Pillow>=9.5.0  # ★★★ Pillowのバージョンを指定 (9.5.0以上など、比較的新しい安定板) ★★★
 numpy
-streamlit-drawable-canvas==0.9.3
+streamlit-drawable-canvas>=0.9.3
