@@ -4,38 +4,31 @@ import numpy as np
 import cv2
 
 # --- サイドバーの上部に結果表示用のプレースホルダーを定義 ---
-# ★★★ 解析結果表示をサイドバー上部に移動 ★★★
 result_placeholder_sidebar = st.sidebar.empty() 
 
-# --- カスタマイズされた結果表示関数 (サイドバー表示用) ---
+# --- カスタマイズされた結果表示関数 (サイドバー表示用、フォントサイズ調整) ---
 def display_count_in_sidebar(placeholder, count_value):
-    label_text = "【解析結果】輝点数" # 少し短縮
+    label_text = "【解析結果】輝点数" 
     value_text = str(count_value) 
 
-    # サイドバー用のシンプルな表示に変更 (HTML/CSSは最小限に)
-    # st.metric を直接使う方がサイドバーには馴染むかもしれません。
-    # 今回は統一感を出すため、元の関数を少しシンプルにして使います。
     background_color = "#495057"
     label_font_color = "white"
     value_font_color = "white"
     
-    # サイドバーでは横幅いっぱいに広がるため、max-widthなどは不要
     html_content = f"""
     <div style="
         border-radius: 8px;
-        padding: 15px;
+        padding: 15px; 
         text-align: center;
         background-color: {background_color};
-        margin-bottom: 15px; /* 他のサイドバー要素との間隔 */
+        margin-bottom: 15px; 
         color: {label_font_color}; 
     ">
         <p style="font-size: 16px; margin-bottom: 5px; font-weight: bold;">{label_text}</p>
-        <p style="font-size: 38px; font-weight: bold; margin-top: 0px; color: {value_font_color};">{value_text}</p>
+        <p style="font-size: 48px; font-weight: bold; margin-top: 0px; color: {value_font_color}; line-height: 1.1;">{value_text}</p>
     </div>
     """
     placeholder.markdown(html_content, unsafe_allow_html=True)
-    # あるいは、もっとシンプルに st.sidebar.metric を使う場合：
-    # placeholder.metric(label=label_text, value=value_text)
 
 
 # アプリのタイトルを設定 (メインエリア)
@@ -72,14 +65,11 @@ def sync_threshold_from_number_input():
 # --- サイドバーの残り ---
 st.sidebar.header("解析パラメータ設定")
 
-# ★★★ ファイルアップローダーの表示をシンプルに戻す ★★★
-# (点線枠のMarkdown表示を削除)
 UPLOAD_ICON = "📤" 
 uploaded_file = st.sidebar.file_uploader(
-    f"{UPLOAD_ICON} 画像をアップロード", # ラベルを以前のものに戻すか調整
+    f"{UPLOAD_ICON} 画像をアップロード",
     type=['tif', 'tiff', 'png', 'jpg', 'jpeg'],
     help="対応形式: TIF, TIFF, PNG, JPG, JPEG。"
-    # label_visibility="visible" (デフォルト) または削除
 )
 
 # サイドバー上部のプレースホルダーに初期のカウント数を表示
@@ -180,7 +170,8 @@ if uploaded_file is not None:
     """)
 
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
-    min_area = st.sidebar.number_input('輝点の最小面積 (ピクセル)', min_value=1, max_value=10000, value=1, step=1) 
+    # ★★★ 最小面積のデフォルト値を15に変更 ★★★
+    min_area = st.sidebar.number_input('輝点の最小面積 (ピクセル)', min_value=1, max_value=10000, value=15, step=1) 
     st.sidebar.caption("""
     - **大きくすると:** 小さすぎるノイズや非常に小さな輝点が除外され、カウント数が減ることがあります。
     - **小さくすると:** より小さな対象物も輝点としてカウントしますが、ノイズを誤検出する可能性も上がります。
@@ -230,7 +221,6 @@ if uploaded_file is not None:
         st.warning("輪郭検出の元となる画像が準備できませんでした。前のステップを確認してください。")
         st.session_state.counted_spots_value = "エラー"
 
-    # ★★★ メインエリアの画像表示を1カラム（縦並び）に変更 ★★★
     st.subheader("元の画像")
     st.image(original_img_display, caption='アップロードされた画像', use_container_width=True)
     st.markdown("---")
@@ -260,8 +250,7 @@ if uploaded_file is not None:
     # サイドバー上部のプレースホルダーを最新のカウント数で更新
     display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value)
 
-
-else: # 画像がアップロードされていない場合
+else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
     st.session_state.counted_spots_value = "---"
     # サイドバー上部のプレースホルダーを更新 (画像がない場合)
