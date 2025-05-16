@@ -2,9 +2,8 @@ import streamlit as st
 from PIL import Image
 import numpy as np
 import cv2
+from streamlit_drawable_canvas import st_canvas # ROI選択機能を元に戻す場合は必要
 import io
-import requests # Google Driveからのダウンロードに必要
-import re       # Google DriveのリンクからファイルIDを抽出するために必要
 
 # ページ設定 (一番最初に呼び出す)
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
@@ -30,9 +29,10 @@ st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_ht
 # 「使用方法」(メインエリア)
 st.markdown("""
 ### 使用方法
-1. 画像を左にアップロードしてください。（またはGoogle Driveのリンクを指定）
-2. 左サイドバーの「1. 二値化」の閾値を動かして、「1. 二値化処理後」の画像が、輝点と背景が適切に分離された状態（実物に近い見え方）になるように調整してください。
-3. （それでもカウント値がおかしい場合は、サイドバーの「2. 形態学的処理」や「3. 輝点フィルタリング」の各パラメータも調整してみてください。）
+1. 画像を左にアップロードしてください。
+2. **(オプション)** 「1. 元の画像 と ROI選択」の下に表示される画像上で、解析したいエリアをマウスでドラッグして四角で囲ってください。最後に描画した四角形がROIとなります。囲まない場合は画像全体が対象になります。
+3. 左サイドバーの「1. 二値化」の閾値を動かして、「1. 二値化処理後」の画像（選択エリアがある場合はその部分）が、輝点と背景が適切に分離された状態になるように調整してください。
+4. （それでもカウント値がおかしい場合は、サイドバーの「2. 形態学的処理」や「3. 輝点フィルタリング」の各パラメータも調整してみてください。）
 """)
 st.markdown("---") 
 
@@ -52,113 +52,138 @@ def sync_threshold_from_number_input():
 
 # --- サイドバー ---
 st.sidebar.header("解析パラメータ設定")
-
-# 画像入力方法の選択
-input_method = st.sidebar.radio(
-    "画像の入力方法を選択:",
-    ('ローカルファイルからアップロード', 'Google Drive の共有リンクを使用'),
-    key="input_method_radio"
-)
-
-pil_image_original = None # 読み込まれたPillowイメージオブジェクトを格納
-
-if input_method == 'ローカルファイルからアップロード':
-    UPLOAD_ICON = "📤" 
-    uploaded_file_local = st.sidebar.file_uploader(
-        f"{UPLOAD_ICON} 画像をアップロード", 
-        type=['tif', 'tiff', 'png', 'jpg', 'jpeg'], 
-        help="対応形式: TIF, TIFF, PNG, JPG, JPEG。"
-    )
-    if uploaded_file_local is not None:
-        try:
-            uploaded_file_bytes = uploaded_file_local.getvalue()
-            pil_image_original = Image.open(io.BytesIO(uploaded_file_bytes))
-        except Exception as e:
-            st.sidebar.error(f"ローカル画像の読み込みに失敗: {e}")
-            pil_image_original = None
-            st.session_state.counted_spots_value = "エラー" # エラー時はカウントもエラーに
-
-elif input_method == 'Google Drive の共有リンクを使用':
-    gdrive_url = st.sidebar.text_input("Google Drive の共有可能な画像リンク:", help="「リンクを知っている全員」に共有設定してください。")
-    if gdrive_url:
-        file_id = None
-        # 様々なGoogle Driveリンク形式からファイルIDを抽出
-        patterns = [
-            r'/file/d/([a-zA-Z0-9_-]+)/view',
-            r'/file/d/([a_zA-Z0-9_-]+)/edit',
-            r'id=([a-zA-Z0-9_-]+)',
-            r'/d/([a-zA-Z0-9_-]{25,})' # Direct link often has longer ID like this
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, gdrive_url)
-            if match:
-                file_id = match.group(1)
-                break
-        
-        if file_id:
-            st.sidebar.info(f"ファイルID: {file_id} を検出しました。ダウンロードを試みます...")
-            download_url = f'https://drive.google.com/uc?export=download&id={file_id}'
-            try:
-                response = requests.get(download_url, stream=True, timeout=15) # タイムアウトを設定
-                response.raise_for_status()
-                pil_image_original = Image.open(io.BytesIO(response.content))
-                st.sidebar.success("Google Driveから画像を読み込みました！")
-            except requests.exceptions.Timeout:
-                st.sidebar.error("Google Driveからのダウンロードがタイムアウトしました。ファイルサイズが大きいか、ネットワークが不安定かもしれません。")
-                pil_image_original = None
-                st.session_state.counted_spots_value = "エラー"
-            except requests.exceptions.RequestException as e:
-                st.sidebar.error(f"Google Driveからのダウンロードに失敗: {e}")
-                st.sidebar.caption("ファイルの共有設定（「リンクを知っている全員が閲覧可」）、リンクの正しさを確認してください。")
-                pil_image_original = None
-                st.session_state.counted_spots_value = "エラー"
-            except Exception as e_pil:
-                st.sidebar.error(f"ダウンロードした画像をPillowで開けませんでした: {e_pil}")
-                pil_image_original = None
-                st.session_state.counted_spots_value = "エラー"
-        elif gdrive_url: # URLは入力されたがIDが見つからない場合
-            st.sidebar.warning("有効なGoogle DriveリンクからファイルIDを抽出できませんでした。")
-            pil_image_original = None
-            st.session_state.counted_spots_value = "---"
-
-
-# サイドバー上部のプレースホルダーに初期/更新後のカウント数を表示
+UPLOAD_ICON = "📤" 
+uploaded_file = st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアップロード", type=['tif', 'tiff', 'png', 'jpg', 'jpeg'], help="対応形式: TIF, TIFF, PNG, JPG, JPEG。")
 display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value)
 
-# --- メイン処理 (画像が正常に読み込めた場合のみ実行) ---
-if pil_image_original is not None:
-    # 表示用にRGBのPillowイメージを準備
-    try:
-        pil_image_rgb_for_display = pil_image_original.convert("RGB")
-    except Exception as e:
-        st.error(f"画像のRGB変換に失敗しました: {e}")
-        st.stop()
+# --- メイン処理 ---
+if uploaded_file is not None:
+    # --- 画像の読み込みと初期表示の堅牢化 ---
+    st.sidebar.markdown("---") # アップロード情報の前に区切り
+    st.sidebar.write(f"**アップロードファイル情報:**")
+    st.sidebar.caption(f"名前: `{uploaded_file.name}`")
+    st.sidebar.caption(f"タイプ: `{uploaded_file.type}`")
+    st.sidebar.caption(f"サイズ: `{uploaded_file.size}` bytes")
+    st.sidebar.markdown("---")
 
-    # OpenCV処理用にNumPy配列を準備
-    img_array_rgb_for_opencv = np.array(pil_image_rgb_for_display) 
-    img_gray = cv2.cvtColor(img_array_rgb_for_opencv, cv2.COLOR_RGB2GRAY)
+
+    pil_image_original = None
+    pil_image_rgb_for_display_and_canvas = None # 表示とキャンバス背景、OpenCVの元になるPillow RGB
+
+    try:
+        uploaded_file_bytes = uploaded_file.getvalue()
+        if not uploaded_file_bytes:
+            st.error("アップロードされたファイルが空、または読み込めませんでした。")
+            st.stop()
+        
+        # st.sidebar.write(f"読み込んだバイト数: {len(uploaded_file_bytes)}") # デバッグ用
+
+        try:
+            # Pillowで画像を開く試み
+            pil_image_original = Image.open(io.BytesIO(uploaded_file_bytes))
+            # st.sidebar.caption(f"Pillowで開いたモード: {pil_image_original.mode}") # デバッグ用
+        except Exception as e_pillow:
+            st.warning(f"Pillowでの画像読み込みに失敗: {e_pillow}")
+            st.info("OpenCVでの読み込みを試みます...")
+            try:
+                np_array_from_bytes = np.frombuffer(uploaded_file_bytes, np.uint8)
+                img_decoded_cv = cv2.imdecode(np_array_from_bytes, cv2.IMREAD_UNCHANGED) 
+                
+                if img_decoded_cv is None:
+                    raise ValueError("cv2.imdecodeが画像のデコードに失敗しました。")
+
+                if len(img_decoded_cv.shape) == 3 and img_decoded_cv.shape[2] == 4: # BGRA
+                    pil_image_original = Image.fromarray(cv2.cvtColor(img_decoded_cv, cv2.COLOR_BGRA2RGBA))
+                elif len(img_decoded_cv.shape) == 3 and img_decoded_cv.shape[2] == 3: # BGR
+                    pil_image_original = Image.fromarray(cv2.cvtColor(img_decoded_cv, cv2.COLOR_BGR2RGB))
+                elif len(img_decoded_cv.shape) == 2: # Grayscale
+                    pil_image_original = Image.fromarray(img_decoded_cv)
+                else:
+                    raise ValueError(f"OpenCVでデコードされた画像のチャンネル数({img_decoded_cv.shape})が予期しません。")
+                # st.sidebar.caption(f"OpenCV経由 Pillowモード: {pil_image_original.mode}") # デバッグ用
+            except Exception as e_cv2:
+                st.error(f"PillowおよびOpenCVでの画像読み込みに最終的に失敗しました: {e_cv2}")
+                st.stop()
+        
+        if pil_image_original is None: # ここには来ないはずだが念のため
+             st.error("画像オブジェクトの準備に失敗しました。")
+             st.stop()
+
+        pil_image_rgb_for_display_and_canvas = pil_image_original.convert("RGB")
+        
+        # 表示用にNumPy配列(RGB, uint8)を準備
+        np_array_rgb_uint8_for_display = np.array(pil_image_rgb_for_display_and_canvas)
+        if np_array_rgb_uint8_for_display.dtype != np.uint8:
+            if np.issubdtype(np_array_rgb_uint8_for_display.dtype, np.floating):
+                if np_array_rgb_uint8_for_display.min() >= 0.0 and np_array_rgb_uint8_for_display.max() <= 1.0:
+                    np_array_rgb_uint8_for_display = (np_array_rgb_uint8_for_display * 255).astype(np.uint8)
+                else: 
+                    np_array_rgb_uint8_for_display = np.clip(np_array_rgb_uint8_for_display, 0, 255).astype(np.uint8)
+            elif np.issubdtype(np_array_rgb_uint8_for_display.dtype, np.integer): 
+                np_array_rgb_uint8_for_display = np.clip(np_array_rgb_uint8_for_display, 0, 255).astype(np.uint8)
+            else: 
+                np_array_rgb_uint8_for_display = np_array_rgb_uint8_for_display.astype(np.uint8)
+        
+        st.header("1. 元の画像 と ROI選択")
+        st.image(np_array_rgb_uint8_for_display, caption='アップロードされた画像 (ROI選択用)', use_container_width=True)
+        
+    except Exception as e_outer:
+        st.error(f"画像処理の初期段階で予期せぬエラー: {e_outer}")
+        st.stop() 
+
+    img_array_rgb_for_opencv = np.array(pil_image_rgb_for_display_and_canvas) 
+    img_gray_full = cv2.cvtColor(img_array_rgb_for_opencv, cv2.COLOR_RGB2GRAY)
     
-    # グレースケール画像のデータ型調整 (8bit uintに)
-    if img_gray.dtype != np.uint8:
-        if img_gray.ndim == 2 and (img_gray.max() > 255 or img_gray.min() < 0 or img_gray.dtype != np.uint8):
-            img_gray = cv2.normalize(img_gray, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-        elif img_gray.ndim == 3:
-            img_gray = cv2.cvtColor(img_gray, cv2.COLOR_BGR2GRAY).astype(np.uint8)
+    if img_gray_full.dtype != np.uint8:
+        # (グレースケール画像の8bit化処理 - 前回のものを流用)
+        if img_gray_full.ndim == 2 and (img_gray_full.max() > 255 or img_gray_full.min() < 0 or img_gray_full.dtype != np.uint8):
+            img_gray_full = cv2.normalize(img_gray_full, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        elif img_gray_full.ndim == 3:
+            img_gray_full = cv2.cvtColor(img_gray_full, cv2.COLOR_BGR2GRAY).astype(np.uint8)
         else:
             try:
-                img_gray_temp = img_gray.astype(np.uint8)
-                if img_gray_temp.max() > 255 or img_gray_temp.min() < 0:
-                    img_gray = np.clip(img_gray, 0, 255).astype(np.uint8)
-                else: img_gray = img_gray_temp
+                img_gray_full_temp = img_gray_full.astype(np.uint8)
+                if img_gray_full_temp.max() > 255 or img_gray_full_temp.min() < 0:
+                    img_gray_full = np.clip(img_gray_full, 0, 255).astype(np.uint8)
+                else: img_gray_full = img_gray_full_temp
             except Exception as e_gray_conv:
                 st.error(f"グレースケール画像のデータ型変換に失敗: {e_gray_conv}"); st.stop()
+
+    st.info("↑上の画像上で、解析したいエリアをマウスでドラッグして四角で囲ってください。最後に描画した四角形がROIとなります。")
+
+    drawing_mode = "rect"; stroke_color = "red"
+    canvas_result = st_canvas(
+        fill_color="rgba(255,0,0,0.1)", stroke_width=2, stroke_color=stroke_color,
+        background_image=pil_image_rgb_for_display_and_canvas, 
+        update_streamlit=True, height=pil_image_rgb_for_display_and_canvas.height, width=pil_image_rgb_for_display_and_canvas.width,
+        drawing_mode=drawing_mode, key="roi_canvas"
+    )
+
+    img_to_process = img_gray_full 
+    roi_coords = None 
+    base_for_marking_bgr = cv2.cvtColor(img_array_rgb_for_opencv, cv2.COLOR_RGB2BGR) 
+
+    if canvas_result.json_data is not None and canvas_result.json_data.get("objects", []):
+        if canvas_result.json_data["objects"][-1]["type"] == "rect":
+            rect = canvas_result.json_data["objects"][-1]
+            x,y,w,h = int(rect["left"]),int(rect["top"]),int(rect["width"]),int(rect["height"])
+            if w > 0 and h > 0:
+                img_h_full, img_w_full = img_gray_full.shape[:2]
+                x1_roi,y1_roi = max(0,x),max(0,y)
+                x2_roi,y2_roi = min(img_w_full,x+w),min(img_h_full,y+h)
+                if (x2_roi-x1_roi > 0) and (y2_roi-y1_roi > 0):
+                    roi_coords = (x1_roi,y1_roi,x2_roi-x1_roi,y2_roi-y1_roi)
+                    img_to_process = img_gray_full[y1_roi:y2_roi, x1_roi:x2_roi].copy()
+                    base_for_marking_bgr = cv2.cvtColor(img_array_rgb_for_opencv[y1_roi:y2_roi, x1_roi:x2_roi], cv2.COLOR_RGB2BGR)
+                    st.subheader("選択されたROI（グレースケールでの処理対象）")
+                    st.image(img_to_process, caption=f"処理対象ROI: x={x1_roi},y={y1_roi},w={x2_roi-x1_roi},h={y2_roi-y1_roi}", use_container_width=True)
+                else:
+                    st.warning("描画されたROIのサイズが無効。画像全体を処理します。"); img_to_process = img_gray_full 
     
-    # --- サイドバーの残りのパラメータ設定UI ---
-    # (これらのUIは画像が読み込まれた後に表示されるか、値が使われる)
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
-    st.sidebar.slider('閾値 (スライダーで調整)', min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
-    st.sidebar.number_input('閾値 (直接入力)', min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
+    st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
+    st.sidebar.number_input('閾値 (直接入力)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
     threshold_value = st.session_state.binary_threshold_value 
     st.sidebar.caption("""- **大きくすると:** 明るい部分のみ白に。\n- **小さくすると:** 暗い部分も白に。""")
     st.sidebar.markdown("<br>", unsafe_allow_html=True); st.sidebar.markdown("_二値化だけでうまくいかない場合は下記も調整を_")
@@ -175,30 +200,21 @@ if pil_image_original is not None:
     max_area = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,value=1000,step=1) 
     st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。""")
 
-    # --- メインエリアでの画像表示と処理 ---
-    st.header("処理ステップごとの画像")
-    
-    kernel_size_blur = 1 
-    if img_gray is None or img_gray.size == 0 : 
-        st.error("グレースケール画像の準備に失敗。処理を続行できません。")
-        st.stop()
-        
-    blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur,kernel_size_blur),0)
-
+    st.header("処理ステップごとの画像 (選択エリア内)")
+    kernel_size_blur = 1
+    if img_to_process.size==0: st.error("処理対象の画像領域が空です。"); st.stop()
+    blurred_img = cv2.GaussianBlur(img_to_process, (kernel_size_blur,kernel_size_blur),0)
     ret_thresh, binary_img_processed = cv2.threshold(blurred_img,threshold_value,255,cv2.THRESH_BINARY)
     if not ret_thresh: st.error("二値化失敗。"); binary_img_for_morph_processed=None
     else: binary_img_for_morph_processed=binary_img_processed.copy()
-    
     opened_img_processed = None 
     if binary_img_for_morph_processed is not None:
         kernel_morph_obj=cv2.getStructuringElement(morph_kernel_shape,(kernel_size_morph,kernel_size_morph))
         opened_img_processed=cv2.morphologyEx(binary_img_for_morph_processed,cv2.MORPH_OPEN,kernel_morph_obj)
         binary_img_for_contours_processed = opened_img_processed.copy()
     else: binary_img_for_contours_processed = None
-    
     current_counted_spots = 0 
-    output_image_contours_display_bgr = cv2.cvtColor(img_gray, cv2.COLOR_GRAY2BGR) # ベースは全体のグレースケールから
-
+    output_image_contours_display = base_for_marking_bgr.copy()
     if binary_img_for_contours_processed is not None:
         contours, hierarchy = cv2.findContours(binary_img_for_contours_processed,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         if 'contours' in locals() and contours: 
@@ -206,40 +222,29 @@ if pil_image_original is not None:
                 area = cv2.contourArea(contour)
                 if min_area <= area <= max_area:
                     current_counted_spots += 1
-                    cv2.drawContours(output_image_contours_display_bgr, [contour], -1, (0,255,0), 2) 
+                    cv2.drawContours(output_image_contours_display, [contour], -1, (0,255,0), 2) 
         st.session_state.counted_spots_value = current_counted_spots 
     else:
         st.warning("輪郭検出の元画像準備できず。"); st.session_state.counted_spots_value="エラー"
     
-    st.subheader("元の画像")
-    st.image(pil_image_rgb_for_display, caption='アップロードされた画像', use_container_width=True) # 表示はPillow RGB
-    st.markdown("---")
-
-    st.subheader("1. 二値化処理後")
+    st.subheader("1. 二値化処理後 (選択エリア内)")
     if binary_img_processed is not None: st.image(binary_img_processed,caption=f'閾値:{threshold_value}',use_container_width=True)
     else: st.info("二値化未実施/失敗")
     st.markdown("---")
-
-    st.subheader("2. 形態学的処理後")
+    st.subheader("2. 形態学的処理後 (選択エリア内)")
     if opened_img_processed is not None: st.image(opened_img_processed,caption=f'カーネル:{selected_shape_name} {kernel_size_morph}x{kernel_size_morph}',use_container_width=True)
     else: st.info("形態学的処理未実施/失敗")
     st.markdown("---")
+    st.subheader("3. 輝点検出とマーキング (選択エリア内または全体)")
+    display_final_marked_image = cv2.cvtColor(output_image_contours_display, cv2.COLOR_BGR2RGB)
+    if 'contours' in locals() and contours and binary_img_for_contours_processed is not None and current_counted_spots > 0 :
+         st.image(display_final_marked_image,caption=f'検出輝点(緑輪郭,面積:{min_area}-{max_area})',use_container_width=True)
+    elif binary_img_for_contours_processed is not None: 
+        st.image(display_final_marked_image,caption='輝点見つからず',use_container_width=True)
+    else: st.info("輝点検出未実施")
 
-    st.subheader("3. 輝点検出とマーキング")
-    try:
-        display_final_marked_image_rgb = cv2.cvtColor(output_image_contours_display_bgr, cv2.COLOR_BGR2RGB)
-        if 'contours' in locals() and contours and binary_img_for_contours_processed is not None and current_counted_spots > 0 :
-             st.image(display_final_marked_image_rgb,caption=f'検出輝点(緑輪郭,面積:{min_area}-{max_area})',use_container_width=True)
-        elif binary_img_for_contours_processed is not None: 
-            st.image(display_final_marked_image_rgb,caption='輝点見つからず',use_container_width=True)
-        else: st.info("輝点検出未実施")
-    except Exception as e_mark_disp:
-        st.error(f"マーキング画像の表示に失敗: {e_mark_disp}")
-
-    # サイドバー上部のプレースホルダーを最新のカウント数で更新 (処理の最後に再度呼び出し)
     display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value)
-
-else: # 画像がアップロードもリンク指定もされていない場合
-    st.info("まず、サイドバーから画像入力方法を選択し、画像を準備してください。")
+else: 
+    st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
     st.session_state.counted_spots_value = "---"
     display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value)
