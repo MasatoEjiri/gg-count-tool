@@ -110,28 +110,28 @@ if st.session_state.pil_image_to_process is not None:
     threshold_value = st.session_state.binary_threshold_value 
     st.sidebar.caption("""- **大きくすると:** 明るい部分のみ白に。\n- **小さくすると:** 暗い部分も白に。""")
     
-    st.sidebar.markdown("<br>", unsafe_allow_html=True, key="br_sb1_prev")
-    st.sidebar.markdown("_二値化操作だけでうまくいかない場合は下記設定も変更してみてください。_", key="md_sb1_prev")
+    # ★★★ key引数を削除 ★★★
+    st.sidebar.markdown("<br>", unsafe_allow_html=True) 
+    st.sidebar.markdown("_二値化操作だけでうまくいかない場合は下記設定も変更してみてください。_") 
     
     st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
     morph_kernel_shape_options = {"楕円":cv2.MORPH_ELLIPSE,"矩形":cv2.MORPH_RECT,"十字":cv2.MORPH_CROSS}
-    selected_shape_name_sb = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options.keys()),index=0, key="morph_shape_sb_key_prev") 
+    selected_shape_name_sb = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options.keys()),index=0, key="morph_shape_sb_key") 
     morph_kernel_shape = morph_kernel_shape_options[selected_shape_name_sb]
-    st.sidebar.caption("輝点の形状に合わせて。", key="caption_morph_shape_sb_prev")
-    kernel_options_morph = [1,3,5,7,9]
-    kernel_size_morph =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,value=3, key="morph_size_sb_key_prev")
-    st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""", key="caption_morph_size_sb_prev")
+    st.sidebar.caption("輝点の形状に合わせて。", key="caption_morph_shape_sb") # このキーはselectboxやcaptionでは通常問題ありません
+    kernel_options_morph = [1,3,5,7,9]; kernel_size_morph=st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,value=3, key="morph_size_sb_key")
+    st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""", key="caption_morph_size_sb")
     
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
-    min_area = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,value=15,step=1, key="min_area_sb_key_prev") 
-    st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。""", key="caption_min_area_sb_prev")
-    max_area = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,value=1000,step=1, key="max_area_sb_key_prev") 
-    st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。""", key="caption_max_area_sb_prev")
+    min_area = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,value=15,step=1, key="min_area_sb_key") 
+    st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。""", key="caption_min_area_sb")
+    max_area = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,value=1000,step=1, key="max_area_sb_key") 
+    st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。""", key="caption_max_area_sb")
 
     # --- メインエリアでの画像表示と処理 ---
     st.header("処理ステップごとの画像")
     
-    kernel_size_blur = 1 # ガウシアンブラーはUIなしで固定
+    kernel_size_blur = 1 
     if img_gray is None or img_gray.size == 0 : 
         st.error("グレースケール画像の準備に失敗しました。"); st.stop()
         
