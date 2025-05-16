@@ -10,35 +10,42 @@ st.set_page_config(page_title="輝点解析ツール", layout="wide")
 # --- メインページ上部に結果表示用のプレースホルダーを定義 ---
 result_placeholder_main = st.empty() 
 
-# --- ★★★ 表示テスト用の結果表示関数 (固定表示なし) ★★★ ---
-def display_count_test_visibility(placeholder, count_value):
-    label_text = "【解析結果】輝点数" 
-    value_text = str(count_value) 
+# --- カスタマイズされた結果表示関数 (メインページ左上固定用) ---
+# この表示ボックスのおおよその高さを計算 (padding + label + value + border)
+# (15+15) + (14+3) + (36*1.1) + (1*2) = 30 + 17 + 39.6 + 2 = ~88.6px. 余裕を見て90pxとする。
+APPROX_FIXED_BOX_HEIGHT = 95 # ピクセル (表示ボックス自体の高さ)
 
-    # 非常に目立つスタイルで、まず表示されるかを確認
+def display_count_fixed_top_left(placeholder, count_value): # 関数名を戻す
+    label_text = "【解析結果】検出された輝点の数" 
+    value_text = str(count_value) 
+    background_color = "#495057" # 濃いグレー
+    label_font_color = "white"
+    value_font_color = "white"
+    border_color = "#343a40"   # 背景より少し濃いグレー
+
     html_content = f"""
     <div style="
-        background-color: yellow; 
-        color: black; 
-        border: 5px solid red; 
-        padding: 20px; 
-        margin-top: 20px;    /* 通常フローでのマージン */
-        margin-bottom: 20px; /* 通常フローでのマージン */
-        width: 350px;        /* 固定幅 */
-        height: 120px;       /* 固定高さ */
+        position: fixed;   /* ★★★ 位置を固定 ★★★ */
+        top: 20px;         /* ★★★ 画面上部から20pxの位置 ★★★ */
+        left: 20px;        /* ★★★ 画面左端から20pxの位置 ★★★ */
+        z-index: 1000;     /* 他の要素より手前に表示 */
+        width: auto;       
+        min-width: 200px;  
+        max-width: 280px;  
+        border: 1px solid {border_color}; 
+        border-radius: 8px; 
+        padding: 15px;     
         text-align: center;
-        font-weight: bold;
+        background-color: {background_color}; /* ★★★ 背景色を戻す ★★★ */
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15); 
+        color: {label_font_color}; 
     ">
-        <p style="font-size: 18px;">{label_text}</p>
-        <p style="font-size: 40px;">{value_text}</p>
-        <p style="font-size: 12px;">(表示テスト中)</p>
+        <p style="font-size: 14px; margin-bottom: 3px; font-weight: bold;">{label_text}</p>
+        <p style="font-size: 36px; font-weight: bold; margin-top: 0px; color: {value_font_color}; line-height: 1.1;">{value_text}</p>
     </div>
     """
-    with placeholder.container(): # 念のためコンテナでクリア
+    with placeholder.container():
         placeholder.markdown(html_content, unsafe_allow_html=True)
-
-# ★★★ 固定表示用のスペーサーを削除 ★★★
-# st.markdown(f"<div style='height: {SPACER_HEIGHT_FOR_FIXED_BOX}px;'></div>", unsafe_allow_html=True)
 
 # --- セッションステートの初期化 (変更なし) ---
 if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots_value = "---" 
@@ -52,8 +59,14 @@ if "max_area_sb_key" not in st.session_state: st.session_state.max_area_sb_key =
 if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
 
-# ★★★ メインページ上部の結果表示の初期呼び出し (タイトルより前) ★★★
-display_count_test_visibility(result_placeholder_main, st.session_state.counted_spots_value)
+
+# ★★★ メインページ上部の結果表示の初期呼び出し (スペーサーやタイトルの前) ★★★
+display_count_fixed_top_left(result_placeholder_main, st.session_state.counted_spots_value)
+
+# ★★★ 固定表示ボックスのためのスペーサーを再導入 ★★★
+# 固定ボックスのtop位置 + ボックスのおおよその高さ + 少しの余白で、次のコンテンツが隠れないように
+SPACER_HEIGHT = 20 + APPROX_FIXED_BOX_HEIGHT + 20 # top 20px + box height + 20px bottom margin for title
+st.markdown(f"<div style='height: {SPACER_HEIGHT}px;'></div>", unsafe_allow_html=True)
 
 
 # アプリのタイトル (メインエリア)
@@ -116,12 +129,12 @@ if uploaded_file_widget is not None:
         st.sidebar.error(f"アップロード画像の読み込みに失敗: {e}")
         st.session_state.pil_image_to_process = None 
         st.session_state.counted_spots_value = "読込エラー" 
-        display_count_at_top_of_main_page(result_placeholder_main, st.session_state.counted_spots_value) # 表示関数名を変更
+        display_count_fixed_top_left(result_placeholder_main, st.session_state.counted_spots_value) # 表示関数名を修正
         st.stop()
 
 # --- メイン処理 (st.session_state.pil_image_to_process があれば実行) ---
 if st.session_state.pil_image_to_process is not None:
-    # (画像処理と表示ロジックは前回と同様ですが、最後に display_count_at_top_of_main_page を呼びます)
+    # (画像処理と表示ロジックは前回と同様ですが、最後に display_count_fixed_top_left を呼びます)
     # ... (original_img_to_display_np_uint8, img_gray の準備) ...
     # ... (各種画像処理 blurred_img, binary_img_processed, opened_img_processed) ...
     # ... (輪郭検出 current_counted_spots, output_image_contours_display) ...
@@ -142,7 +155,7 @@ if st.session_state.pil_image_to_process is not None:
     except Exception as e:
         st.error(f"画像の基本変換に失敗しました: {e}"); 
         st.session_state.counted_spots_value = "変換エラー"
-        display_count_at_top_of_main_page(result_placeholder_main, st.session_state.counted_spots_value) # 表示関数名を変更
+        display_count_fixed_top_left(result_placeholder_main, st.session_state.counted_spots_value) # 表示関数名を修正
         st.stop() 
     
     st.header("処理ステップごとの画像")
@@ -150,7 +163,7 @@ if st.session_state.pil_image_to_process is not None:
     if img_gray is None or img_gray.size == 0 : 
         st.error("グレースケール画像の準備に失敗しました。"); 
         st.session_state.counted_spots_value = "処理エラー"
-        display_count_at_top_of_main_page(result_placeholder_main, st.session_state.counted_spots_value) # 表示関数名を変更
+        display_count_fixed_top_left(result_placeholder_main, st.session_state.counted_spots_value) # 表示関数名を修正
         st.stop()
         
     blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur,kernel_size_blur),0)
@@ -198,7 +211,7 @@ if st.session_state.pil_image_to_process is not None:
         st.image(display_final_marked_image_rgb,caption='輝点見つからず',use_container_width=True)
     else: st.info("輝点検出未実施")
 
-    display_count_at_top_of_main_page(result_placeholder_main, st.session_state.counted_spots_value) # メインページ上部を更新
+    display_count_fixed_top_left(result_placeholder_main, st.session_state.counted_spots_value) # メインページ上部を更新
 else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
-    display_count_at_top_of_main_page(result_placeholder_main, st.session_state.counted_spots_value) # メインページ上部を更新
+    display_count_fixed_top_left(result_placeholder_main, st.session_state.counted_spots_value) # メインページ上部を更新
