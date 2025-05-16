@@ -102,7 +102,7 @@ if st.session_state.pil_image_to_process is not None:
         st.error(f"画像の基本変換に失敗しました: {e}")
         st.stop() 
 
-    # --- サイドバーのパラメータ設定 (ウィジェット定義) ---
+    # サイドバーのパラメータ設定UIの定義
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
     st.sidebar.slider('閾値 (スライダーで調整)', min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
@@ -174,12 +174,12 @@ if st.session_state.pil_image_to_process is not None:
 
     # ★★★ 「2. 形態学的処理後」を st.expander を使って折りたたむ ★★★
     with st.expander("▼ 2. 形態学的処理後を見る", expanded=False): 
-        # st.subheader("2. 形態学的処理後") # エキスパンダータイトルと重複するのでコメントアウトも検討
+        # st.subheader("2. 形態学的処理後") # エキスパンダーのタイトルと重複するのでコメントアウトまたは削除も可
         if opened_img_processed is not None: 
             st.image(opened_img_processed,caption=f'カーネル:{selected_shape_name} {kernel_size_morph}x{kernel_size_morph}',use_container_width=True)
         else: 
             st.info("形態学的処理未実施または失敗")
-    st.markdown("---")
+    st.markdown("---") # エキスパンダーの後ろに区切り線
 
     st.subheader("3. 輝点検出とマーキング")
     display_final_marked_image_rgb = cv2.cvtColor(output_image_contours_display, cv2.COLOR_BGR2RGB)
