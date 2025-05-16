@@ -39,6 +39,9 @@ if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots
 if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 58
 if "threshold_slider_for_binary" not in st.session_state: st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
 if "threshold_number_for_binary" not in st.session_state: st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
+if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
+if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
+
 
 # --- コールバック関数の定義 ---
 def sync_threshold_from_slider():
@@ -56,15 +59,14 @@ display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_sp
 
 # --- メイン処理 ---
 if uploaded_file is not None:
-    original_img_to_display_np_uint8 = None # 初期表示用のNumPy配列 (RGB, uint8)
-    img_gray = None                         # OpenCV処理用のグレースケール画像 (uint8)
+    original_img_to_display_np_uint8 = None 
+    img_gray = None                         
 
     try:
         uploaded_file_bytes = uploaded_file.getvalue()
         pil_image_original = Image.open(io.BytesIO(uploaded_file_bytes))
-        pil_image_rgb = pil_image_original.convert("RGB") # PillowでRGBに
+        pil_image_rgb = pil_image_original.convert("RGB") 
         
-        # 表示用にNumPy配列(RGB, uint8)を準備
         temp_np_array = np.array(pil_image_rgb)
         if temp_np_array.dtype != np.uint8:
             if np.issubdtype(temp_np_array.dtype, np.floating):
@@ -79,16 +81,15 @@ if uploaded_file is not None:
         else: 
             original_img_to_display_np_uint8 = temp_np_array
         
-        # OpenCV処理用のグレースケール画像 (uint8) を作成
         img_gray = cv2.cvtColor(original_img_to_display_np_uint8, cv2.COLOR_RGB2GRAY)
-        if img_gray.dtype != np.uint8: # 念のため確認
+        if img_gray.dtype != np.uint8: 
             img_gray = img_gray.astype(np.uint8)
 
     except Exception as e:
         st.error(f"画像の読み込みまたは基本変換に失敗しました: {e}")
         st.stop() 
 
-    # --- サイドバーのパラメータ設定 ---
+    # サイドバーのパラメータ設定UIの定義 (画像がロードされた後に表示されても良い)
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
     st.sidebar.slider('閾値 (スライダーで調整)', min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
@@ -109,13 +110,12 @@ if uploaded_file is not None:
     max_area = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,value=1000,step=1) 
     st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。""")
 
-    # --- メインエリアでの画像表示と処理 (ROIなし、常に画像全体を処理) ---
+    # メインエリアでの画像表示と処理
     st.header("処理ステップごとの画像")
     
-    kernel_size_blur = 1 # 固定
+    kernel_size_blur = 1 
     if img_gray is None or img_gray.size == 0 : 
-        st.error("グレースケール画像の準備に失敗しました。")
-        st.stop()
+        st.error("グレースケール画像の準備に失敗しました。"); st.stop()
         
     blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur,kernel_size_blur),0)
 
@@ -131,27 +131,23 @@ if uploaded_file is not None:
     else: binary_img_for_contours_processed = None
     
     current_counted_spots = 0 
-    # マーキング用ベース画像は、original_img_to_display_np_uint8 (RGB, uint8) をBGRに変換して使用
     output_image_contours_display = cv2.cvtColor(original_img_to_display_np_uint8, cv2.COLOR_RGB2BGR)
 
     if binary_img_for_contours_processed is not None:
-        # 輪郭検出は処理後の二値画像 (binary_img_for_contours_processed) に対して行う
         contours, hierarchy = cv2.findContours(binary_img_for_contours_processed,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         if 'contours' in locals() and contours: 
             for contour in contours:
                 area = cv2.contourArea(contour)
                 if min_area <= area <= max_area:
                     current_counted_spots += 1
-                    # 輪郭は output_image_contours_display (全体のカラー画像) に描画
                     cv2.drawContours(output_image_contours_display, [contour], -1, (0,255,0), 2) 
         st.session_state.counted_spots_value = current_counted_spots 
     else:
         st.warning("輪郭検出の元画像準備できず。"); st.session_state.counted_spots_value="エラー"
     
-    # メインエリアの画像表示 (1カラム)
     st.subheader("元の画像")
     if original_img_to_display_np_uint8 is not None:
-        st.image(original_img_to_display_np_uint8, caption='アップロードされた画像', use_container_width=True)
+        st.image(original_img_to_display_np_uint8, caption=f"アップロード: {uploaded_file.name if uploaded_file else 'N/A'}", use_container_width=True)
     st.markdown("---")
 
     st.subheader("1. 二値化処理後")
