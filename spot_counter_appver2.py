@@ -108,7 +108,7 @@ if st.session_state.pil_image_to_process is not None:
     st.sidebar.slider('閾値 (スライダーで調整)', min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
     st.sidebar.number_input('閾値 (直接入力)', min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
     threshold_value = st.session_state.binary_threshold_value 
-    st.sidebar.caption("""- **大きくすると:** 明るい部分のみ白に。\n- **小さくすると:** 暗い部分も白に。""") # keyなし
+    st.sidebar.caption("""- **大きくすると:** 明るい部分のみ白に。\n- **小さくすると:** 暗い部分も白に。""")
     
     st.sidebar.markdown("<br>", unsafe_allow_html=True) 
     st.sidebar.markdown("_二値化操作だけでうまくいかない場合は下記設定も変更してみてください。_") 
@@ -117,15 +117,15 @@ if st.session_state.pil_image_to_process is not None:
     morph_kernel_shape_options = {"楕円":cv2.MORPH_ELLIPSE,"矩形":cv2.MORPH_RECT,"十字":cv2.MORPH_CROSS}
     selected_shape_name = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options.keys()),index=0, key="morph_shape_sb_key") 
     morph_kernel_shape = morph_kernel_shape_options[selected_shape_name]
-    st.sidebar.caption("輝点の形状に合わせて。") # ★★★ key削除 ★★★
+    st.sidebar.caption("輝点の形状に合わせて。") 
     kernel_options_morph = [1,3,5,7,9]; kernel_size_morph=st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,value=3, key="morph_size_sb_key")
-    st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""") # ★★★ key削除 ★★★
+    st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""") 
     
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
     min_area = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,value=15,step=1, key="min_area_sb_key") 
-    st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。(画像リサイズ時注意)""") # ★★★ key削除 ★★★
+    st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。(画像リサイズ時注意)""") 
     max_area = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,value=1000,step=1, key="max_area_sb_key") 
-    st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。(画像リサイズ時注意)""") # ★★★ key削除 ★★★
+    st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。(画像リサイズ時注意)""") 
 
     # --- メインエリアでの画像表示と処理 ---
     st.header("処理ステップごとの画像")
@@ -172,9 +172,13 @@ if st.session_state.pil_image_to_process is not None:
     else: st.info("二値化未実施/失敗")
     st.markdown("---")
 
-    st.subheader("2. 形態学的処理後")
-    if opened_img_processed is not None: st.image(opened_img_processed,caption=f'カーネル:{selected_shape_name} {kernel_size_morph}x{kernel_size_morph}',use_container_width=True)
-    else: st.info("形態学的処理未実施/失敗")
+    # ★★★ 「2. 形態学的処理後」を st.expander を使って折りたたむ ★★★
+    with st.expander("▼ 2. 形態学的処理後を見る", expanded=False): 
+        # st.subheader("2. 形態学的処理後") # エキスパンダータイトルと重複するのでコメントアウトも検討
+        if opened_img_processed is not None: 
+            st.image(opened_img_processed,caption=f'カーネル:{selected_shape_name} {kernel_size_morph}x{kernel_size_morph}',use_container_width=True)
+        else: 
+            st.info("形態学的処理未実施または失敗")
     st.markdown("---")
 
     st.subheader("3. 輝点検出とマーキング")
