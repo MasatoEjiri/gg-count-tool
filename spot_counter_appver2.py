@@ -10,35 +10,17 @@ st.set_page_config(page_title="輝点解析ツール", layout="wide")
 # --- サイドバーの上部に結果表示用のプレースホルダーを定義 ---
 result_placeholder_sidebar = st.sidebar.empty() 
 
-# --- カスタマイズされた結果表示関数 (サイドバー表示用、st.metricを使用) ---
+# --- カスタマイズされた結果表示関数 (サイドバー表示用) ---
 def display_count_in_sidebar(placeholder, count_value):
-    label_text = "【解析結果】輝点数"
-    
-    value_to_display = count_value
-    if isinstance(count_value, str) and count_value.isdigit():
-        value_to_display = int(count_value)
-    # "---" や "エラー" は文字列としてそのままst.metricに渡す
-
-    # placeholder.container() を使って、プレースホルダーの内容をクリアしてから新しい要素を挿入
-    with placeholder.container(): 
-        st.metric(label=label_text, value=value_to_display)
-        # 見た目を以前に近づけるためのCSS (オプション)
-        # st.markdown("""
-        # <style>
-        # /* サイドバーのstMetricコンテナを特定する方法は難しいので、限定的な適用になるか、よりグローバルなCSSが必要 */
-        # div[data-testid="stMetric"] { 
-        #     background-color: #495057; 
-        #     color: white; 
-        #     border-radius: 8px; 
-        #     padding: 15px; 
-        #     margin-bottom: 15px;
-        #     text-align: center; /* st.metricのラベルと値はデフォルトで左寄せなので注意 */
-        # }
-        # div[data-testid="stMetric"] > div > div > div[data-testid="stMetricLabel"] { color: white; font-size: 16px; font-weight: bold; }
-        # div[data-testid="stMetric"] > div > div > div[data-testid="stMetricValue"] { color: white; font-size: 48px; font-weight: bold; line-height: 1.1;}
-        # </style>
-        # """, unsafe_allow_html=True)
-
+    label_text = "【解析結果】輝点数" 
+    value_text = str(count_value) 
+    background_color = "#495057"; label_font_color = "white"; value_font_color = "white"
+    html_content = f"""
+    <div style="border-radius:8px; padding:15px; text-align:center; background-color:{background_color}; margin-bottom:15px; color:{label_font_color};">
+        <p style="font-size:16px; margin-bottom:5px; font-weight:bold;">{label_text}</p>
+        <p style="font-size:48px; font-weight:bold; margin-top:0px; color:{value_font_color}; line-height:1.1;">{value_text}</p>
+    </div>"""
+    placeholder.markdown(html_content, unsafe_allow_html=True)
 
 # アプリのタイトル (メインエリア)
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_html=True)
@@ -74,17 +56,29 @@ st.sidebar.header("解析パラメータ設定")
 UPLOAD_ICON = "📤" 
 uploaded_file_widget = st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアップロード", type=['tif', 'tiff', 'png', 'jpg', 'jpeg'], help="対応形式: TIF, TIFF, PNG, JPG, JPEG。")
 
-display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value) # 初期表示
+display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value)
 
-# --- メイン処理 ---
+# --- 画像読み込みロジック (ファイルアップロードのみ) ---
 if uploaded_file_widget is not None:
+    try:
+        uploaded_file_bytes = uploaded_file_widget.getvalue()
+        pil_img = Image.open(io.BytesIO(uploaded_file_bytes))
+        st.session_state.pil_image_to_process = pil_img
+        st.session_state.image_source_caption = f"アップロード: {uploaded_file_widget.name}"
+    except Exception as e:
+        st.sidebar.error(f"アップロード画像の読み込みに失敗: {e}")
+        st.session_state.pil_image_to_process = None
+else: 
+    st.session_state.pil_image_to_process = None
+
+
+# --- メイン処理 (st.session_state.pil_image_to_process があれば実行) ---
+if st.session_state.pil_image_to_process is not None:
     original_img_to_display_np_uint8 = None 
     img_gray = None                         
 
     try:
-        uploaded_file_bytes = uploaded_file_widget.getvalue()
-        pil_image_original = Image.open(io.BytesIO(uploaded_file_bytes))
-        pil_image_rgb = pil_image_original.convert("RGB") 
+        pil_image_rgb = st.session_state.pil_image_to_process.convert("RGB")
         
         temp_np_array = np.array(pil_image_rgb)
         if temp_np_array.dtype != np.uint8:
@@ -105,15 +99,16 @@ if uploaded_file_widget is not None:
             img_gray = img_gray.astype(np.uint8)
 
     except Exception as e:
-        st.error(f"画像の読み込みまたは基本変換に失敗しました: {e}")
+        st.error(f"画像の基本変換に失敗しました: {e}")
         st.stop() 
 
+    # --- サイドバーのパラメータ設定 (ウィジェット定義) ---
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
     st.sidebar.slider('閾値 (スライダーで調整)', min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
     st.sidebar.number_input('閾値 (直接入力)', min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
     threshold_value = st.session_state.binary_threshold_value 
-    st.sidebar.caption("""- **大きくすると:** 明るい部分のみ白に。\n- **小さくすると:** 暗い部分も白に。""")
+    st.sidebar.caption("""- **大きくすると:** 明るい部分のみ白に。\n- **小さくすると:** 暗い部分も白に。""") # keyなし
     
     st.sidebar.markdown("<br>", unsafe_allow_html=True) 
     st.sidebar.markdown("_二値化操作だけでうまくいかない場合は下記設定も変更してみてください。_") 
@@ -122,32 +117,39 @@ if uploaded_file_widget is not None:
     morph_kernel_shape_options = {"楕円":cv2.MORPH_ELLIPSE,"矩形":cv2.MORPH_RECT,"十字":cv2.MORPH_CROSS}
     selected_shape_name = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options.keys()),index=0, key="morph_shape_sb_key") 
     morph_kernel_shape = morph_kernel_shape_options[selected_shape_name]
-    st.sidebar.caption("輝点の形状に合わせて。", key="caption_morph_shape_sb") 
+    st.sidebar.caption("輝点の形状に合わせて。") # ★★★ key削除 ★★★
     kernel_options_morph = [1,3,5,7,9]; kernel_size_morph=st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,value=3, key="morph_size_sb_key")
-    st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""", key="caption_morph_size_sb")
+    st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""") # ★★★ key削除 ★★★
     
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
     min_area = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,value=15,step=1, key="min_area_sb_key") 
-    st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。""", key="caption_min_area_sb")
+    st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。(画像リサイズ時注意)""") # ★★★ key削除 ★★★
     max_area = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,value=1000,step=1, key="max_area_sb_key") 
-    st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。""", key="caption_max_area_sb")
+    st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。(画像リサイズ時注意)""") # ★★★ key削除 ★★★
 
+    # --- メインエリアでの画像表示と処理 ---
     st.header("処理ステップごとの画像")
+    
     kernel_size_blur = 1 
     if img_gray is None or img_gray.size == 0 : 
         st.error("グレースケール画像の準備に失敗しました。"); st.stop()
+        
     blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur,kernel_size_blur),0)
+
     ret_thresh, binary_img_processed = cv2.threshold(blurred_img,threshold_value,255,cv2.THRESH_BINARY)
     if not ret_thresh: st.error("二値化失敗。"); binary_img_for_morph_processed=None
     else: binary_img_for_morph_processed=binary_img_processed.copy()
+    
     opened_img_processed = None 
     if binary_img_for_morph_processed is not None:
         kernel_morph_obj=cv2.getStructuringElement(morph_kernel_shape,(kernel_size_morph,kernel_size_morph))
         opened_img_processed=cv2.morphologyEx(binary_img_for_morph_processed,cv2.MORPH_OPEN,kernel_morph_obj)
         binary_img_for_contours_processed = opened_img_processed.copy()
     else: binary_img_for_contours_processed = None
+    
     current_counted_spots = 0 
     output_image_contours_display = cv2.cvtColor(original_img_to_display_np_uint8, cv2.COLOR_RGB2BGR) 
+
     if binary_img_for_contours_processed is not None:
         contours, hierarchy = cv2.findContours(binary_img_for_contours_processed,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         if 'contours' in locals() and contours: 
@@ -162,16 +164,19 @@ if uploaded_file_widget is not None:
     
     st.subheader("元の画像")
     if original_img_to_display_np_uint8 is not None:
-        st.image(original_img_to_display_np_uint8, caption=f"アップロード: {uploaded_file_widget.name if uploaded_file_widget else 'N/A'}", use_container_width=True)
+        st.image(original_img_to_display_np_uint8, caption=st.session_state.image_source_caption, use_container_width=True)
     st.markdown("---")
+
     st.subheader("1. 二値化処理後")
     if binary_img_processed is not None: st.image(binary_img_processed,caption=f'閾値:{threshold_value}',use_container_width=True)
     else: st.info("二値化未実施/失敗")
     st.markdown("---")
+
     st.subheader("2. 形態学的処理後")
     if opened_img_processed is not None: st.image(opened_img_processed,caption=f'カーネル:{selected_shape_name} {kernel_size_morph}x{kernel_size_morph}',use_container_width=True)
     else: st.info("形態学的処理未実施/失敗")
     st.markdown("---")
+
     st.subheader("3. 輝点検出とマーキング")
     display_final_marked_image_rgb = cv2.cvtColor(output_image_contours_display, cv2.COLOR_BGR2RGB)
     if 'contours' in locals() and contours and binary_img_for_contours_processed is not None and current_counted_spots > 0 :
@@ -181,6 +186,7 @@ if uploaded_file_widget is not None:
     else: st.info("輝点検出未実施")
 
     display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value)
+
 else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
     st.session_state.counted_spots_value = "---"
