@@ -11,8 +11,7 @@ st.set_page_config(page_title="輝点解析ツール", layout="wide")
 result_placeholder_main = st.empty() 
 
 # --- カスタマイズされた結果表示関数 (メインページ左上固定用) ---
-# この関数の表示ボックスのおおよその高さを指定 (コンテンツの重なり防止用)
-FIXED_RESULT_BOX_APPROX_HEIGHT = 110 # ピクセル (padding + label + value font sizes + margins)
+FIXED_RESULT_BOX_APPROX_HEIGHT = 110 
 
 def display_count_fixed_top_right(placeholder, count_value):
     label_text = "【解析結果】検出された輝点の数" 
@@ -20,34 +19,33 @@ def display_count_fixed_top_right(placeholder, count_value):
     background_color = "#495057"; 
     label_font_color = "white"; 
     value_font_color = "white"
-    border_color = "#adb5bd"; # 少し明るいグレーの枠線
+    border_color = "#adb5bd"; 
 
     html_content = f"""
     <div style="
         position: fixed;   
-        top: 40px;         /* ★★★ 画面上部からの距離を調整 (例: 20px -> 40px) ★★★ */
+        top: 40px;         
         left: 20px;        
         z-index: 1000;     
         width: auto;       
         min-width: 210px;  
         max-width: 300px;  
-        border: 2px solid {border_color}; /* ★★★ 枠線を太く、色変更 ★★★ */
+        border: 2px solid {border_color}; 
         border-radius: 10px; 
         padding: 15px;     
         text-align: center;
         background-color: {background_color};
-        box-shadow: 0 8px 16px rgba(0,0,0,0.25); /* ★★★ 影を少し強く ★★★ */
+        box-shadow: 0 8px 16px rgba(0,0,0,0.25); 
         color: {label_font_color}; 
     ">
-        <p style="font-size: 15px; margin-bottom: 4px; font-weight: bold;">{label_text}</p> {/* ラベルフォント少し大きく */}
-        <p style="font-size: 38px; font-weight: bold; margin-top: 0px; color: {value_font_color}; line-height: 1.1;">{value_text}</p> {/* 数値フォント少し大きく */}
+        <p style="font-size: 15px; margin-bottom: 4px; font-weight: bold;">{label_text}</p>
+        <p style="font-size: 38px; font-weight: bold; margin-top: 0px; color: {value_font_color}; line-height: 1.1;">{value_text}</p>
     </div>
     """
     placeholder.markdown(html_content, unsafe_allow_html=True)
 
-# ★★★ 固定表示ボックスのためのスペーサーの高さを調整 ★★★
-# 固定ボックスのtop位置 + ボックスのおおよその高さ + 少しの余白
-SPACER_HEIGHT_FOR_FIXED_BOX = 40 + FIXED_RESULT_BOX_APPROX_HEIGHT + 10 # top 40px + box height + 10px margin
+# 固定表示ボックスのためのスペーサー
+SPACER_HEIGHT_FOR_FIXED_BOX = 40 + FIXED_RESULT_BOX_APPROX_HEIGHT + 10 
 st.markdown(f"<div style='height: {SPACER_HEIGHT_FOR_FIXED_BOX}px;'></div>", unsafe_allow_html=True)
 
 
