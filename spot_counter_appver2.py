@@ -10,46 +10,50 @@ st.set_page_config(page_title="輝点解析ツール", layout="wide")
 # --- メインページ上部に結果表示用のプレースホルダーを定義 ---
 result_placeholder_main = st.empty() 
 
-# --- カスタマイズされた結果表示関数 (メインページ左上固定用) ---
-# この関数の表示ボックスのおおよその高さを指定 (コンテンツの重なり防止用)
-# padding(15*2) + label(15) + margin(4) + value(38*1.1) + border(2*2) approx 95px
-APPROX_FIXED_BOX_ACTUAL_HEIGHT = 95 
-
-def display_count_fixed_top_left(placeholder, count_value):
-    label_text = "【解析結果】検出された輝点の数" 
+# --- ★★★ 表示テスト用の結果表示関数 (固定表示なし) ★★★ ---
+def display_count_test_visibility(placeholder, count_value):
+    label_text = "【解析結果】輝点数" 
     value_text = str(count_value) 
-    background_color = "#495057" 
-    label_font_color = "white"   
-    value_font_color = "white"   
-    border_color = "#6c757d"      # 背景より少し明るいグレーの枠線
 
+    # 非常に目立つスタイルで、まず表示されるかを確認
     html_content = f"""
     <div style="
-        position: fixed;   
-        top: 40px;         
-        left: 20px;        
-        z-index: 9999;     /* ★★★ z-indexを大きな値に ★★★ */
-        width: auto;       
-        min-width: 210px;  
-        max-width: 300px;  
-        border: 2px solid {border_color}; /* ★★★ 枠線を調整 ★★★ */
-        border-radius: 10px; 
-        padding: 15px;     
+        background-color: yellow; 
+        color: black; 
+        border: 5px solid red; 
+        padding: 20px; 
+        margin-top: 20px;    /* 通常フローでのマージン */
+        margin-bottom: 20px; /* 通常フローでのマージン */
+        width: 350px;        /* 固定幅 */
+        height: 120px;       /* 固定高さ */
         text-align: center;
-        background-color: {background_color}; /* ★★★ 灰色の背景 ★★★ */
-        box-shadow: 0 8px 16px rgba(0,0,0,0.3); /* ★★★ 影を調整 ★★★ */
-        color: {label_font_color}; 
+        font-weight: bold;
     ">
-        <p style="font-size: 15px; margin-bottom: 4px; font-weight: bold;">{label_text}</p>
-        <p style="font-size: 38px; font-weight: bold; margin-top: 0px; color: {value_font_color}; line-height: 1.1;">{value_text}</p>
+        <p style="font-size: 18px;">{label_text}</p>
+        <p style="font-size: 40px;">{value_text}</p>
+        <p style="font-size: 12px;">(表示テスト中)</p>
     </div>
     """
-    with placeholder.container():
+    with placeholder.container(): # 念のためコンテナでクリア
         placeholder.markdown(html_content, unsafe_allow_html=True)
 
-# 固定表示ボックスのためのスペーサー (固定ボックスのtop位置 + ボックスのおおよその高さ + 少しの余白)
-SPACER_HEIGHT_FOR_FIXED_BOX = 40 + APPROX_FIXED_BOX_ACTUAL_HEIGHT + 20 # top 40px + box height + 20px margin
-st.markdown(f"<div style='height: {SPACER_HEIGHT_FOR_FIXED_BOX}px;'></div>", unsafe_allow_html=True)
+# ★★★ 固定表示用のスペーサーを削除 ★★★
+# st.markdown(f"<div style='height: {SPACER_HEIGHT_FOR_FIXED_BOX}px;'></div>", unsafe_allow_html=True)
+
+# --- セッションステートの初期化 (変更なし) ---
+if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots_value = "---" 
+if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 58
+if "threshold_slider_for_binary" not in st.session_state: st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
+if "threshold_number_for_binary" not in st.session_state: st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
+if "morph_shape_sb_key" not in st.session_state: st.session_state.morph_shape_sb_key = "楕円" 
+if "morph_size_sb_key" not in st.session_state: st.session_state.morph_size_sb_key = 3
+if "min_area_sb_key" not in st.session_state: st.session_state.min_area_sb_key = 1 
+if "max_area_sb_key" not in st.session_state: st.session_state.max_area_sb_key = 1000
+if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
+if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
+
+# ★★★ メインページ上部の結果表示の初期呼び出し (タイトルより前) ★★★
+display_count_test_visibility(result_placeholder_main, st.session_state.counted_spots_value)
 
 
 # アプリのタイトル (メインエリア)
@@ -64,24 +68,12 @@ st.markdown("""
 """)
 st.markdown("---") 
 
-# --- セッションステートの初期化 ---
-# (変更なし)
-if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots_value = "---" 
-if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 58
-if "threshold_slider_for_binary" not in st.session_state: st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
-if "threshold_number_for_binary" not in st.session_state: st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
-if "morph_shape_sb_key" not in st.session_state: st.session_state.morph_shape_sb_key = "楕円" 
-if "morph_size_sb_key" not in st.session_state: st.session_state.morph_size_sb_key = 3
-if "min_area_sb_key" not in st.session_state: st.session_state.min_area_sb_key = 1 
-if "max_area_sb_key" not in st.session_state: st.session_state.max_area_sb_key = 1000
-if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
-if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
 
 # --- コールバック関数の定義 (変更なし) ---
-def sync_threshold_from_slider():
+def sync_threshold_from_slider(): # ... (内容は変更なし)
     st.session_state.binary_threshold_value = st.session_state.threshold_slider_for_binary
     st.session_state.threshold_number_for_binary = st.session_state.threshold_slider_for_binary
-def sync_threshold_from_number_input():
+def sync_threshold_from_number_input(): # ... (内容は変更なし)
     st.session_state.binary_threshold_value = st.session_state.threshold_number_for_binary
     st.session_state.threshold_slider_for_binary = st.session_state.threshold_number_for_binary
 
@@ -113,10 +105,7 @@ max_area_sb = st.sidebar.number_input('最大面積',min_value=1,max_value=10000
 st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。(画像リサイズ時注意)""") 
 
 
-# --- メイン処理の最初の方で、メインページのプレースホルダーに初期値を表示 ---
-display_count_fixed_top_left(result_placeholder_main, st.session_state.counted_spots_value)
-
-
+# --- 画像読み込みロジック (ファイルアップロードのみ) ---
 if uploaded_file_widget is not None:
     try:
         uploaded_file_bytes = uploaded_file_widget.getvalue()
@@ -127,12 +116,15 @@ if uploaded_file_widget is not None:
         st.sidebar.error(f"アップロード画像の読み込みに失敗: {e}")
         st.session_state.pil_image_to_process = None 
         st.session_state.counted_spots_value = "読込エラー" 
-        display_count_fixed_top_left(result_placeholder_main, st.session_state.counted_spots_value)
+        display_count_at_top_of_main_page(result_placeholder_main, st.session_state.counted_spots_value) # 表示関数名を変更
         st.stop()
 
+# --- メイン処理 (st.session_state.pil_image_to_process があれば実行) ---
 if st.session_state.pil_image_to_process is not None:
-    original_img_to_display_np_uint8 = None 
-    img_gray = None                         
+    # (画像処理と表示ロジックは前回と同様ですが、最後に display_count_at_top_of_main_page を呼びます)
+    # ... (original_img_to_display_np_uint8, img_gray の準備) ...
+    # ... (各種画像処理 blurred_img, binary_img_processed, opened_img_processed) ...
+    # ... (輪郭検出 current_counted_spots, output_image_contours_display) ...
     try:
         pil_image_rgb = st.session_state.pil_image_to_process.convert("RGB")
         temp_np_array = np.array(pil_image_rgb)
@@ -148,15 +140,19 @@ if st.session_state.pil_image_to_process is not None:
         img_gray = cv2.cvtColor(original_img_to_display_np_uint8, cv2.COLOR_RGB2GRAY)
         if img_gray.dtype != np.uint8: img_gray = img_gray.astype(np.uint8)
     except Exception as e:
-        st.error(f"画像の基本変換に失敗しました: {e}")
+        st.error(f"画像の基本変換に失敗しました: {e}"); 
         st.session_state.counted_spots_value = "変換エラー"
-        display_count_fixed_top_left(result_placeholder_main, st.session_state.counted_spots_value)
+        display_count_at_top_of_main_page(result_placeholder_main, st.session_state.counted_spots_value) # 表示関数名を変更
         st.stop() 
     
     st.header("処理ステップごとの画像")
     kernel_size_blur = 1 
     if img_gray is None or img_gray.size == 0 : 
-        st.error("グレースケール画像の準備に失敗しました。"); st.stop()
+        st.error("グレースケール画像の準備に失敗しました。"); 
+        st.session_state.counted_spots_value = "処理エラー"
+        display_count_at_top_of_main_page(result_placeholder_main, st.session_state.counted_spots_value) # 表示関数名を変更
+        st.stop()
+        
     blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur,kernel_size_blur),0)
     ret_thresh, binary_img_processed = cv2.threshold(blurred_img,threshold_value_sb,255,cv2.THRESH_BINARY)
     if not ret_thresh: st.error("二値化失敗。"); binary_img_for_morph_processed=None
@@ -202,8 +198,7 @@ if st.session_state.pil_image_to_process is not None:
         st.image(display_final_marked_image_rgb,caption='輝点見つからず',use_container_width=True)
     else: st.info("輝点検出未実施")
 
-    display_count_fixed_top_left(result_placeholder_main, st.session_state.counted_spots_value)
-
+    display_count_at_top_of_main_page(result_placeholder_main, st.session_state.counted_spots_value) # メインページ上部を更新
 else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
-    display_count_fixed_top_left(result_placeholder_main, st.session_state.counted_spots_value)
+    display_count_at_top_of_main_page(result_placeholder_main, st.session_state.counted_spots_value) # メインページ上部を更新
