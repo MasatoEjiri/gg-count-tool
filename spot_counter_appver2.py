@@ -11,45 +11,39 @@ st.set_page_config(page_title="輝点解析ツール", layout="wide")
 result_placeholder_main = st.empty() 
 
 # --- カスタマイズされた結果表示関数 (メインページ右上固定用) ---
-# この関数の表示ボックスのおおよその高さを指定 (コンテンツの重なり防止用)
-# padding(15*2) + label(14) + margin(3) + value(36*1.1) => 30+14+3+39.6 = ~87px. 枠線とシャドウ考慮で。
-FIXED_RESULT_BOX_APPROX_HEIGHT = 100 # ピクセル (実際の高さに応じて調整)
+FIXED_RESULT_BOX_APPROX_HEIGHT = 100 
 
-def display_count_fixed_top_right(placeholder, count_value): # 関数名を変更
-    label_text = "【解析結果】輝点数" 
+def display_count_fixed_top_right(placeholder, count_value):
+    label_text = "【解析結果】検出された輝点の数" 
     value_text = str(count_value) 
     background_color = "#495057"; label_font_color = "white"; value_font_color = "white"
     border_color = "#343a40"
 
     html_content = f"""
     <div style="
-        position: fixed;   /* 位置を固定 */
-        top: 20px;         /* 画面上部から20pxの位置 */
-        right: 20px;       /* ★★★ 画面右端から20pxの位置 ★★★ */
-        z-index: 1000;     /* 他の要素より手前に表示 */
-        width: auto;       /* 幅は内容に合わせる */
-        min-width: 180px;  /* 最小幅を指定 */
-        max-width: 250px;  /* 最大幅を指定 (右上なので少しコンパクトに) */
+        position: fixed;   
+        top: 20px;         
+        right: 20px;       
+        z-index: 1000;     
+        width: auto;       
+        min-width: 180px;  
+        max-width: 250px;  
         border: 1px solid {border_color}; 
         border-radius: 8px; 
-        padding: 10px 15px; /* パディングを少し調整 (上下 短め、左右 普通) */    
+        padding: 10px 15px;     
         text-align: center;
         background-color: {background_color};
         box-shadow: 0 4px 8px rgba(0,0,0,0.15); 
         color: {label_font_color}; 
     ">
         <p style="font-size: 14px; margin-bottom: 3px; font-weight: bold;">{label_text}</p>
-        <p style="font-size: 32px; font-weight: bold; margin-top: 0px; color: {value_font_color}; line-height: 1.1;">{value_text}</p> {/* フォント少し小さく */}
+        <p style="font-size: 32px; font-weight: bold; margin-top: 0px; color: {value_font_color}; line-height: 1.1;">{value_text}</p>
     </div>
     """
     placeholder.markdown(html_content, unsafe_allow_html=True)
 
-# ★★★ 固定表示ボックスのためのスペーサー (タイトルの前、メインコンテンツの開始位置を調整) ★★★
-# 右上に配置する場合、メインコンテンツ全体の開始位置を下げる必要は必ずしもないかもしれませんが、
-# タイトルなどが非常に上にある場合、隠れる可能性があるので、念のため設けます。
-# 必要なければこの spacer_html の行をコメントアウトまたは削除してください。
-spacer_html = f"<div style='height: {FIXED_RESULT_BOX_APPROX_HEIGHT // 2}px;'></div>" # ボックスの高さの半分程度のマージンをタイトル上に
-st.markdown(spacer_html, unsafe_allow_html=True)
+# 固定表示ボックスのためのスペーサー
+st.markdown(f"<div style='height: {FIXED_RESULT_BOX_APPROX_HEIGHT // 2}px;'></div>", unsafe_allow_html=True)
 
 
 # アプリのタイトル (メインエリア)
@@ -66,7 +60,6 @@ st.markdown("---")
 
 # --- セッションステートの初期化 ---
 if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots_value = "---" 
-# (他のセッションステート初期化は変更なし)
 if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 58
 if "threshold_slider_for_binary" not in st.session_state: st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
 if "threshold_number_for_binary" not in st.session_state: st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
@@ -82,7 +75,7 @@ if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
 
 
-# --- コールバック関数の定義 (変更なし) ---
+# --- コールバック関数の定義 ---
 def sync_threshold_from_slider():
     st.session_state.binary_threshold_value = st.session_state.threshold_slider_for_binary
     st.session_state.threshold_number_for_binary = st.session_state.threshold_slider_for_binary
@@ -94,32 +87,6 @@ def sync_threshold_from_number_input():
 st.sidebar.header("解析パラメータ設定")
 UPLOAD_ICON = "📤" 
 uploaded_file_widget = st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアップロード", type=['tif', 'tiff', 'png', 'jpg', 'jpeg'], help="対応形式: TIF, TIFF, PNG, JPG, JPEG。")
-
-# ★★★ サイドバーの初期結果表示を削除 ★★★
-# display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value) 
-
-# (サイドバーのパラメータUI定義は変更なし)
-st.sidebar.subheader("1. 二値化") 
-st.sidebar.markdown("_この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
-st.sidebar.slider('閾値 (スライダーで調整)', min_value=0,max_value=255,step=1,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
-st.sidebar.number_input('閾値 (直接入力)', min_value=0,max_value=255,step=1,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
-threshold_value_sb = st.session_state.binary_threshold_value 
-st.sidebar.caption("""- **大きくすると:** 明るい部分のみ白に。\n- **小さくすると:** 暗い部分も白に。""")
-st.sidebar.markdown("<br>", unsafe_allow_html=True) 
-st.sidebar.markdown("_二値化操作だけでうまくいかない場合は下記設定も変更してみてください。_") 
-st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
-morph_kernel_shape_options_display = {"楕円":cv2.MORPH_ELLIPSE,"矩形":cv2.MORPH_RECT,"十字":cv2.MORPH_CROSS}
-selected_shape_name_sb = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options_display.keys()), key="morph_shape_sb_key") 
-morph_kernel_shape_sb = morph_kernel_shape_options_display[selected_shape_name_sb]
-st.sidebar.caption("輝点の形状に合わせて。") 
-kernel_options_morph = [1,3,5,7,9]; kernel_size_morph_sb =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph, key="morph_size_sb_key")
-st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""") 
-st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
-min_area_sb = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1, key="min_area_sb_key") 
-st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。(画像リサイズ時注意)""") 
-max_area_sb = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1, key="max_area_sb_key") 
-st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。(画像リサイズ時注意)""") 
-
 
 # --- メイン処理の最初の方で、メインページのプレースホルダーに初期値を表示 ---
 display_count_fixed_top_right(result_placeholder_main, st.session_state.counted_spots_value)
@@ -134,7 +101,7 @@ if uploaded_file_widget is not None:
     except Exception as e:
         st.sidebar.error(f"アップロード画像の読み込みに失敗: {e}")
         st.session_state.pil_image_to_process = None 
-        st.session_state.counted_spots_value = "読込エラー" # エラー時も表示更新
+        st.session_state.counted_spots_value = "読込エラー" 
         display_count_fixed_top_right(result_placeholder_main, st.session_state.counted_spots_value)
         st.stop()
 
@@ -161,14 +128,33 @@ if st.session_state.pil_image_to_process is not None:
         display_count_fixed_top_right(result_placeholder_main, st.session_state.counted_spots_value)
         st.stop() 
     
+    # サイドバーのパラメータ設定UI (ウィジェット定義)
+    st.sidebar.subheader("1. 二値化") 
+    st.sidebar.markdown("_この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
+    st.sidebar.slider('閾値 (スライダーで調整)', min_value=0,max_value=255,step=1,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
+    st.sidebar.number_input('閾値 (直接入力)', min_value=0,max_value=255,step=1,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
+    threshold_value_sb = st.session_state.binary_threshold_value 
+    st.sidebar.caption("""- **大きくすると:** 明るい部分のみ白に。\n- **小さくすると:** 暗い部分も白に。""")
+    st.sidebar.markdown("<br>", unsafe_allow_html=True) 
+    st.sidebar.markdown("_二値化操作だけでうまくいかない場合は下記設定も変更してみてください。_") 
+    st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
+    morph_kernel_shape_options_display = {"楕円":cv2.MORPH_ELLIPSE,"矩形":cv2.MORPH_RECT,"十字":cv2.MORPH_CROSS}
+    selected_shape_name_sb = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options_display.keys()), key="morph_shape_sb_key") 
+    morph_kernel_shape_sb = morph_kernel_shape_options_display[selected_shape_name_sb]
+    st.sidebar.caption("輝点の形状に合わせて。") 
+    kernel_options_morph = [1,3,5,7,9]; kernel_size_morph_sb =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph, key="morph_size_sb_key")
+    st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""") 
+    st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
+    min_area_sb = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1, key="min_area_sb_key") 
+    st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。(画像リサイズ時注意)""") 
+    max_area_sb = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1, key="max_area_sb_key") 
+    st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。(画像リサイズ時注意)""") 
+
+    # --- メインエリアでの画像表示と処理 ---
     st.header("処理ステップごとの画像")
     kernel_size_blur = 1 
     if img_gray is None or img_gray.size == 0 : 
-        st.error("グレースケール画像の準備に失敗しました。")
-        st.session_state.counted_spots_value = "処理エラー"
-        display_count_fixed_top_right(result_placeholder_main, st.session_state.counted_spots_value)
-        st.stop()
-        
+        st.error("グレースケール画像の準備に失敗しました。"); st.stop()
     blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur,kernel_size_blur),0)
     ret_thresh, binary_img_processed = cv2.threshold(blurred_img,threshold_value_sb,255,cv2.THRESH_BINARY)
     if not ret_thresh: st.error("二値化失敗。"); binary_img_for_morph_processed=None
@@ -214,9 +200,8 @@ if st.session_state.pil_image_to_process is not None:
         st.image(display_final_marked_image_rgb,caption='輝点見つからず',use_container_width=True)
     else: st.info("輝点検出未実施")
 
-    # ★★★ メインページ上部のプレースホルダーを最新のカウント数で更新 ★★★
     display_count_fixed_top_right(result_placeholder_main, st.session_state.counted_spots_value)
 
-else: # 画像がアップロードされていない場合
+else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
-    # display_count_fixed_top_right(result_placeholder_main, st.session_state.counted_spots_value) # 初期表示はスクリプト上部で行うので重複削除
+    display_count_fixed_top_right(result_placeholder_main, st.session_state.counted_spots_value)
