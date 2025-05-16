@@ -7,13 +7,13 @@ import io
 # ページ設定 (一番最初に呼び出す)
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
-# ★★★ キャッシュする画像読み込み関数を修正 (リサイズ機能付き) ★★★
+# キャッシュする画像読み込み関数を定義
 @st.cache_data 
 def load_and_prepare_image_data(uploaded_file_bytes, uploaded_file_name_for_caption, max_image_dim=1280):
     pil_image_original = Image.open(io.BytesIO(uploaded_file_bytes))
     
     original_width, original_height = pil_image_original.size
-    pil_image_to_process = pil_image_original.copy() # リサイズ操作用にコピー
+    pil_image_to_process = pil_image_original.copy()
 
     if original_width > max_image_dim or original_height > max_image_dim:
         pil_image_to_process.thumbnail((max_image_dim, max_image_dim))
@@ -62,10 +62,9 @@ st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_ht
 st.markdown("""
 ### 使用方法
 1. 画像を左にアップロードしてください。画像は長辺が1280ピクセルを超える場合、自動的に縮小されます。
-2. 左サイドバーの「1. 二値化」の閾値を動かして、「1. 二値化処理後」の画像が、輝点と背景が適切に分離された状態になるように調整してください。
-3. （それでもカウント値がおかしい場合は、サイドバーの「2. 形態学的処理」や「3. 輝点フィルタリング」の各パラメータも調整してみてください。）
-**注意:** 画像がリサイズされた場合、面積パラメータ（最小面積・最大面積）の感覚が変わる点にご注意ください。
-""")
+2. 左サイドバーのパラメータを調整し、メインエリアの「4. 輝点検出とマーキング」で輝点が正しく検出されるようにしてください。
+3. 特に「1. ノイズ除去」と「2. 二値化」の設定が重要です。各ステップの画像を下の折りたたみセクションで確認しながら調整します。
+""") 
 st.markdown("---") 
 
 # --- セッションステートの初期化 ---
@@ -73,7 +72,6 @@ if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots
 if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 58
 if "threshold_slider_for_binary" not in st.session_state: st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
 if "threshold_number_for_binary" not in st.session_state: st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
-# pil_image_to_process と image_source_caption はキャッシュ関数から返されるのでセッションステートは不要に
 
 # --- コールバック関数の定義 ---
 def sync_threshold_from_slider():
@@ -87,35 +85,42 @@ def sync_threshold_from_number_input():
 st.sidebar.header("解析パラメータ設定")
 UPLOAD_ICON = "📤" 
 uploaded_file_widget = st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアップロード", type=['tif', 'tiff', 'png', 'jpg', 'jpeg'], help="対応形式: TIF, TIFF, PNG, JPG, JPEG。長辺1280px超は縮小されます。")
-display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value)
+display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value) 
 
-# サイドバーのパラメータ設定UI (画像がアップロードされていなくても表示する)
-st.sidebar.subheader("1. 二値化") 
-st.sidebar.markdown("_この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
+st.sidebar.subheader("1. ノイズ除去 (ガウシアンブラー)") 
+kernel_options_blur = [1, 3, 5, 7, 9, 11, 13, 15]
+kernel_size_blur_sb = st.sidebar.select_slider( 
+    'カーネルサイズ (奇数を選択)', options=kernel_options_blur, value=3, key="blur_kernel_size_slider"
+)
+st.sidebar.caption("""- **大きくすると:** ぼかしが強くなりノイズが減りますが、輝点もぼやけます。\n- **小さくすると:** ぼかしが弱く、輪郭はシャープですがノイズが残りやすいです。(1はほぼ効果なし)""")
+
+st.sidebar.subheader("2. 二値化") 
+st.sidebar.markdown("_この値を色々変更して、「二値化処理後」画像を実物に近づけてください。_")
 st.sidebar.slider('閾値 (スライダーで調整)', min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
 st.sidebar.number_input('閾値 (直接入力)', min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
-threshold_value_sb = st.session_state.binary_threshold_value # 変数名変更 _sb
+threshold_value_sb = st.session_state.binary_threshold_value 
 st.sidebar.caption("""- **大きくすると:** 明るい部分のみ白に。\n- **小さくすると:** 暗い部分も白に。""")
 st.sidebar.markdown("<br>", unsafe_allow_html=True); st.sidebar.markdown("_二値化だけでうまくいかない場合は下記も調整を_")
-st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
+
+st.sidebar.subheader("3. 形態学的処理 (オープニング)") 
 morph_kernel_shape_options = {"楕円":cv2.MORPH_ELLIPSE,"矩形":cv2.MORPH_RECT,"十字":cv2.MORPH_CROSS}
 selected_shape_name_sb = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options.keys()),index=0, key="morph_shape_sb") 
 morph_kernel_shape_sb = morph_kernel_shape_options[selected_shape_name_sb]
 st.sidebar.caption("輝点の形状に合わせて。")
 kernel_options_morph = [1,3,5,7,9]; kernel_size_morph_sb =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,value=3, key="morph_size_sb")
 st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""")
-st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
+
+st.sidebar.subheader("4. 輝点フィルタリング (面積)") 
 min_area_sb = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,value=15,step=1, key="min_area_sb") 
-st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。(画像リサイズ時注意)""") # 注意書き追加
+st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。(画像リサイズ時注意)""")
 max_area_sb = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,value=1000,step=1, key="max_area_sb") 
-st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。(画像リサイズ時注意)""") # 注意書き追加
+st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。(画像リサイズ時注意)""")
 
 
 # --- メイン処理 ---
 if uploaded_file_widget is not None:
     uploaded_file_bytes = uploaded_file_widget.getvalue()
     try:
-        # ★★★ キャッシュ関数からリサイズ後の画像と情報を取得 ★★★
         original_img_to_display_np_uint8, img_gray, image_caption_from_load = load_and_prepare_image_data(
             uploaded_file_bytes, 
             uploaded_file_widget.name
@@ -126,8 +131,7 @@ if uploaded_file_widget is not None:
     
     st.header("処理ステップごとの画像")
             
-    kernel_size_blur = 1 
-    blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur, kernel_size_blur),0)
+    blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur_sb, kernel_size_blur_sb),0)
 
     ret_thresh, binary_img_processed = cv2.threshold(blurred_img, threshold_value_sb, 255, cv2.THRESH_BINARY)
     if not ret_thresh: st.error("二値化失敗。"); binary_img_for_morph_processed=None
@@ -150,7 +154,8 @@ if uploaded_file_widget is not None:
                 area = cv2.contourArea(contour)
                 if min_area_sb <= area <= max_area_sb: 
                     current_counted_spots += 1
-                    cv2.drawContours(output_image_contours_display, [contour], -1, (0,255,0), 2) 
+                    # ★★★ 輪郭の色を青に変更 ★★★
+                    cv2.drawContours(output_image_contours_display, [contour], -1, (255, 0, 0), 2) 
         st.session_state.counted_spots_value = current_counted_spots 
     else:
         st.warning("輪郭検出の元画像準備できず。"); st.session_state.counted_spots_value="エラー"
@@ -159,20 +164,27 @@ if uploaded_file_widget is not None:
         if original_img_to_display_np_uint8 is not None:
             st.image(original_img_to_display_np_uint8, caption=image_caption_from_load, use_container_width=True)
     
-    with st.expander("1. 二値化処理後を見る", expanded=False):
+    with st.expander("1. ノイズ除去後 (ガウシアンブラー) を見る", expanded=False): # デフォルトで閉じる
+         if blurred_img is not None:
+            st.image(blurred_img, caption=f'カーネル: {kernel_size_blur_sb}x{kernel_size_blur_sb}', use_container_width=True)
+         else:
+            st.info("ノイズ除去処理未実施または失敗")
+
+
+    with st.expander("2. 二値化処理後を見る", expanded=False): # デフォルトで閉じる
         if binary_img_processed is not None: 
             st.image(binary_img_processed,caption=f'閾値:{threshold_value_sb}',use_container_width=True)
         else: st.info("二値化未実施/失敗")
 
-    with st.expander("2. 形態学的処理後を見る", expanded=False):
+    with st.expander("3. 形態学的処理後を見る", expanded=False): # デフォルトで閉じる
         if opened_img_processed is not None: 
             st.image(opened_img_processed,caption=f'カーネル:{selected_shape_name_sb} {kernel_size_morph_sb}x{kernel_size_morph_sb}',use_container_width=True)
         else: st.info("形態学的処理未実施/失敗")
 
-    st.subheader("4. 輝点検出とマーキング") # ★★★ ヘッダー番号と内容修正 ★★★
+    st.subheader("4. 輝点検出とマーキング") 
     display_final_marked_image_rgb = cv2.cvtColor(output_image_contours_display, cv2.COLOR_BGR2RGB)
     if 'contours' in locals() and contours and binary_img_for_contours_processed is not None and current_counted_spots > 0 :
-         st.image(display_final_marked_image_rgb,caption=f'検出輝点(緑輪郭,面積:{min_area_sb}-{max_area_sb})',use_container_width=True)
+         st.image(display_final_marked_image_rgb,caption=f'検出輝点(青い輪郭,面積:{min_area_sb}-{max_area_sb})',use_container_width=True) # キャプションも変更
     elif binary_img_for_contours_processed is not None: 
         st.image(display_final_marked_image_rgb,caption='輝点見つからず',use_container_width=True)
     else: st.info("輝点検出未実施")
