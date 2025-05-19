@@ -28,7 +28,7 @@ st.markdown("""### 使用方法
 1. 画像を左にアップロードしてください。
 2. 画像をアップロードすると、左サイドバーに詳細な解析パラメータが表示されます。
 3. まず「1. 二値化」の閾値を動かし、「1. 二値化処理後」の画像が実物に近い見え方になるよう調整してください。
-4. 必要に応じて「2. 形態学的処理」や「3. 輝点フィルタリング」のパラメータも調整します。""") # 使用方法を少し変更
+4. 必要に応じて「2. 形態学的処理」や「3. 輝点フィルタリング」のパラメータも調整します。""")
 st.markdown("---") 
 
 # --- セッションステートの初期化 ---
@@ -73,23 +73,29 @@ if uploaded_file_widget is not None:
         display_count_fixed_top_left(result_placeholder_main, st.session_state.counted_spots_value)
         st.stop()
 else: 
-    if st.session_state.pil_image_to_process is not None: # ファイル選択がクリアされた場合
+    if st.session_state.pil_image_to_process is not None: 
         st.session_state.pil_image_to_process = None
         st.session_state.counted_spots_value = "---" 
         display_count_fixed_top_left(result_placeholder_main, st.session_state.counted_spots_value)
 
 
-# --- メイン処理と条件付きサイドバーパラメータUI表示 ---
+# --- メイン処理と、条件付きでのサイドバーパラメータUI表示 ---
 if st.session_state.pil_image_to_process is not None:
-    # --- ★★★ 画像ロード後にサイドバーのパラメータUIを定義・表示 ★★★ ---
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
-    st.sidebar.slider('閾値 (スライダーで調整)', min_value=0,max_value=255,step=1,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
-    st.sidebar.number_input('閾値 (直接入力)', min_value=0,max_value=255,step=1,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
+    # ★★★ value 引数を明示的に追加 ★★★
+    st.sidebar.slider('閾値 (スライダーで調整)', min_value=0,max_value=255,step=1,
+                      value=st.session_state.binary_threshold_value, 
+                      key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
+    st.sidebar.number_input('閾値 (直接入力)', min_value=0,max_value=255,step=1,
+                           value=st.session_state.binary_threshold_value,
+                           key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
     threshold_value_to_use = st.session_state.binary_threshold_value 
     st.sidebar.caption("""- **大きくすると:** 明るい部分のみ白に。\n- **小さくすると:** 暗い部分も白に。""")
+    
     st.sidebar.markdown("<br>", unsafe_allow_html=True) 
     st.sidebar.markdown("_二値化操作だけでうまくいかない場合は下記設定も変更してみてください。_") 
+    
     st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
     morph_kernel_shape_options_display = {"楕円":cv2.MORPH_ELLIPSE,"矩形":cv2.MORPH_RECT,"十字":cv2.MORPH_CROSS}
     selected_shape_name_sb = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options_display.keys()), key="morph_shape_sb_key") 
@@ -98,13 +104,14 @@ if st.session_state.pil_image_to_process is not None:
     kernel_options_morph = [1,3,5,7,9]
     kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph, key="morph_size_sb_key")
     st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""") 
+    
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
     min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1, key="min_area_sb_key") 
     st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。(画像リサイズ時注意)""") 
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1, key="max_area_sb_key") 
     st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。(画像リサイズ時注意)""") 
 
-    # --- メインエリアの画像処理と表示ロジック (ここからは変更少なめ) ---
+    # --- メインエリアの画像処理と表示ロジック ---
     original_img_to_display_np_uint8 = None 
     img_gray = None                         
     try:
@@ -182,7 +189,5 @@ if st.session_state.pil_image_to_process is not None:
 
     display_count_fixed_top_left(result_placeholder_main, st.session_state.counted_spots_value)
 else: 
-    # 画像がアップロードされていない場合、メインエリアには「使用方法」の下にこのメッセージのみ表示される
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
-    # display_count_fixed_top_left はスクリプト上部で初期値表示済みなのでここでは不要
-    # st.session_state.counted_spots_value = "---" # session_stateの初期化も上部で実施済み
+    # display_count_fixed_top_left はスクリプト上部で初期値表示済み
