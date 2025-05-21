@@ -7,42 +7,43 @@ import io
 # ページ設定 (一番最初に呼び出す)
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
-# ★★★ ファイルアップローダーのカスタムCSSを一旦削除（またはコメントアウト）★★★
-# file_uploader_css = """
-# <style>
-#    section[data-testid="stFileUploaderDropzone"] {
-#        border: 3px dashed white !important;       
-#        border-radius: 0.5rem !important;
-#        background-color: #495057 !important;     
-#        padding: 25px !important;
-#    }
-#    section[data-testid="stFileUploaderDropzone"] > div[data-testid="stFileUploadDropzoneInstructions"] {
-#        display: flex;
-#        flex-direction: column;
-#        align-items: center;
-#        justify-content: center;
-#    }
-#    section[data-testid="stFileUploaderDropzone"] p {
-#        color: #f8f9fa !important; 
-#        font-size: 0.9rem;      
-#        margin-bottom: 0.75rem !important;
-#    }
-#    section[data-testid="stFileUploaderDropzone"] span {
-#        color: #ced4da !important; 
-#        font-size: 0.8rem;
-#    }
-#    section[data-testid="stFileUploaderDropzone"] button {
-#        color: #ffffff !important;                 
-#        background-color: #007bff !important;      
-#        border: 1px solid #007bff !important;      
-#        padding: 0.5em 1em !important;             
-#        border-radius: 0.375rem !important;        
-#        font-weight: 500 !important;
-#        margin-top: 0.5rem !important; 
-#    }
-# </style>
-# """
-# st.markdown(file_uploader_css, unsafe_allow_html=True)
+# ★★★ ファイルアップローダーのカスタムCSSを再追加 ★★★
+file_uploader_css = """
+<style>
+    section[data-testid="stFileUploaderDropzone"] {
+        border: 3px dashed white !important;       /* 枠線の太さを3pxに変更 */
+        border-radius: 0.5rem !important;
+        background-color: #495057 !important;     /* 背景をダークグレーに */
+        padding: 25px !important;
+    }
+    section[data-testid="stFileUploaderDropzone"] > div[data-testid="stFileUploadDropzoneInstructions"] {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    section[data-testid="stFileUploaderDropzone"] p {
+        color: #f8f9fa !important; 
+        font-size: 0.9rem;      
+        margin-bottom: 0.75rem !important;
+    }
+    section[data-testid="stFileUploaderDropzone"] span {
+        color: #ced4da !important; 
+        font-size: 0.8rem;
+    }
+    section[data-testid="stFileUploaderDropzone"] button {
+        color: #ffffff !important;                 
+        background-color: #007bff !important;      
+        border: 1px solid #007bff !important;      
+        padding: 0.5em 1em !important;             
+        border-radius: 0.375rem !important;        
+        font-weight: 500 !important;
+        margin-top: 0.5rem !important; 
+    }
+</style>
+"""
+st.markdown(file_uploader_css, unsafe_allow_html=True)
+
 
 # --- サイドバーの上部に結果表示用のプレースホルダーを定義 ---
 result_placeholder_sidebar = st.sidebar.empty() 
@@ -166,7 +167,6 @@ if st.session_state.pil_image_to_process is not None:
     except Exception as e:
         st.error(f"画像の基本変換に失敗しました: {e}"); 
         st.session_state.counted_spots_value = "変換エラー"
-        display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value)
         st.stop() 
     
     st.header("処理ステップごとの画像")
@@ -174,7 +174,6 @@ if st.session_state.pil_image_to_process is not None:
     if img_gray is None or img_gray.size == 0 : 
         st.error("グレースケール画像の準備に失敗しました。"); 
         st.session_state.counted_spots_value = "処理エラー"
-        display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value)
         st.stop()
         
     blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur,kernel_size_blur),0)
