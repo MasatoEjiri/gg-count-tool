@@ -7,22 +7,28 @@ import io
 # ページ設定 (一番最初に呼び出す)
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
-# ★★★ ファイルアップローダーの枠線と背景、テキスト配置を調整するCSS ★★★
+# ★★★ ファイルアップローダーのCSSをクラシック＆シックな感じに変更 ★★★
 file_uploader_css = """
 <style>
     section[data-testid="stFileUploaderDropzone"] {
-        border: 2px dashed white !important;       /* 点線を白く */
-        border-radius: 0.5rem !important;
-        background-color: #e9ecef !important;     /* 中をグレーに (少し明るめのグレー) */
-        padding: 25px !important;                 /* パディングを少し調整 */
+        border: 1px solid #ced4da !important;       /* 枠線: 薄いグレーの単線 */
+        border-radius: 0.375rem !important;         /* 角丸を少し (Bootstrap風) */
+        background-color: #f8f9fa !important;     /* 背景: 非常に薄いグレー (オフホワイトに近い) */
+        padding: 20px !important;                 /* パディングを少し調整 */
         text-align: center !important;            /* 中のテキスト要素を中央揃え */
     }
-    section[data-testid="stFileUploaderDropzone"] p,
+    section[data-testid="stFileUploaderDropzone"] p {
+        color: #495057 !important; /* テキストは濃いめのグレー */
+        font-size: 0.95rem;       /* フォントサイズを少し調整 */
+        margin-bottom: 0.5rem;    /* 段落下のマージン調整 */
+    }
     section[data-testid="stFileUploaderDropzone"] span {
-        color: #495057 !important; /* 少し濃いめのグレーで文字を見やすく */
+        color: #6c757d !important; /* スパンテキストはやや薄いグレー */
+        font-size: 0.85rem;
     }
     section[data-testid="stFileUploaderDropzone"] button {
-        color: #007bff !important; /* ボタンの文字を青に (例) */
+        color: #007bff !important; /* ボタンの文字は標準的な青 (変更可) */
+        font-weight: 500 !important; /* 少し太字に */
     }
 </style>
 """
@@ -221,4 +227,4 @@ if st.session_state.pil_image_to_process is not None:
 
 else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
-    # display_count_in_sidebar は初期表示済みなのでここでは不要な場合も
+    # display_count_in_sidebar は初期表示済み
