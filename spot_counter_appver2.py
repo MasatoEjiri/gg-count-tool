@@ -45,8 +45,8 @@ if "threshold_slider_for_binary" not in st.session_state: st.session_state.thres
 if "threshold_number_for_binary" not in st.session_state: st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
 if "morph_shape_sb_key" not in st.session_state: st.session_state.morph_shape_sb_key = "楕円" 
 if "morph_size_sb_key" not in st.session_state: st.session_state.morph_size_sb_key = 3
-if "min_area_sb_key_v2" not in st.session_state: st.session_state.min_area_sb_key_v2 = 1 
-if "max_area_sb_key_v2" not in st.session_state: st.session_state.max_area_sb_key_v2 = 1000 
+if "min_area_sb_key_v3" not in st.session_state: st.session_state.min_area_sb_key_v3 = 1 # Changed from _v2
+if "max_area_sb_key_v3" not in st.session_state: st.session_state.max_area_sb_key_v3 = 1000 # Changed from _v2
 if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
 
@@ -61,11 +61,6 @@ def sync_threshold_from_number_input():
 # --- サイドバーの基本部分 (常に表示) ---
 display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value) 
 st.sidebar.header("解析パラメータ設定")
-
-# ★★★ デバッグ用セッションステート表示は削除 ★★★
-# with st.sidebar.expander("セッションステート確認（デバッグ用）", expanded=False):
-#     st.json({k: v for k, v in st.session_state.items()})
-
 UPLOAD_ICON = "📤" 
 uploaded_file_widget = st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアップロード", type=['tif', 'tiff', 'png', 'jpg', 'jpeg'], help="対応形式: TIF, TIFF, PNG, JPG, JPEG。")
 
@@ -110,29 +105,28 @@ if st.session_state.pil_image_to_process is not None:
     
     st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
     morph_kernel_shape_options_display = {"楕円":cv2.MORPH_ELLIPSE,"矩形":cv2.MORPH_RECT,"十字":cv2.MORPH_CROSS}
-    selected_shape_name_sb = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options_display.keys()),
-                                                  value=st.session_state.morph_shape_sb_key, # 明示的にvalueを指定
+    selected_shape_name_sb = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options_display.keys()), 
+                                                  value=st.session_state.morph_shape_sb_key, # ★★★ value引数を追加 ★★★
                                                   key="morph_shape_sb_key") 
     morph_kernel_shape_to_use = morph_kernel_shape_options_display[selected_shape_name_sb]
     st.sidebar.caption("輝点の形状に合わせて。") 
     kernel_options_morph = [1,3,5,7,9]
-    kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,
-                                                      value=st.session_state.morph_size_sb_key, # 明示的にvalueを指定
+    kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph, 
+                                                      value=st.session_state.morph_size_sb_key, # ★★★ value引数を追加 ★★★
                                                       key="morph_size_sb_key")
     st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""") 
     
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
     min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1, 
-                                          value=st.session_state.min_area_sb_key_v2, # ★★★ value引数を明示的に指定 ★★★
-                                          key="min_area_sb_key_v2") 
+                                          value=st.session_state.min_area_sb_key_v3, # value引数でセッションステートの値を指定
+                                          key="min_area_sb_key_v3") 
     st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。(画像リサイズ時注意)""") 
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1, 
-                                          value=st.session_state.max_area_sb_key_v2, # ★★★ value引数を明示的に指定 ★★★
-                                          key="max_area_sb_key_v2") 
+                                          value=st.session_state.max_area_sb_key_v3, # value引数でセッションステートの値を指定
+                                          key="max_area_sb_key_v3") 
     st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。(画像リサイズ時注意)""") 
 
     # --- メインエリアの画像処理と表示ロジック ---
-    # (ここから下のメインエリアの処理・表示ロジックは前回から変更ありません)
     original_img_to_display_np_uint8 = None; img_gray = None                         
     try:
         pil_image_rgb = st.session_state.pil_image_to_process.convert("RGB")
@@ -171,7 +165,7 @@ if st.session_state.pil_image_to_process is not None:
         if 'contours' in locals() and contours: 
             for contour in contours:
                 area = cv2.contourArea(contour)
-                if st.session_state.min_area_sb_key_v2 <= area <= st.session_state.max_area_sb_key_v2: 
+                if st.session_state.min_area_sb_key_v3 <= area <= st.session_state.max_area_sb_key_v3: 
                     current_counted_spots += 1
                     cv2.drawContours(output_image_contours_display, [contour], -1, (255,0,0), 2) 
         st.session_state.counted_spots_value = current_counted_spots 
@@ -194,7 +188,7 @@ if st.session_state.pil_image_to_process is not None:
     st.subheader("3. 輝点検出とマーキング")
     display_final_marked_image_rgb = cv2.cvtColor(output_image_contours_display, cv2.COLOR_BGR2RGB)
     if 'contours' in locals() and contours and binary_img_for_contours_processed is not None and current_counted_spots > 0 :
-         st.image(display_final_marked_image_rgb,caption=f'検出輝点(青い輪郭,面積:{st.session_state.min_area_sb_key_v2}-{st.session_state.max_area_sb_key_v2})',use_container_width=True)
+         st.image(display_final_marked_image_rgb,caption=f'検出輝点(青い輪郭,面積:{st.session_state.min_area_sb_key_v3}-{st.session_state.max_area_sb_key_v3})',use_container_width=True)
     elif binary_img_for_contours_processed is not None: 
         st.image(display_final_marked_image_rgb,caption='輝点見つからず',use_container_width=True)
     else: st.info("輝点検出未実施")
