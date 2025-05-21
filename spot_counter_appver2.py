@@ -7,28 +7,39 @@ import io
 # ページ設定 (一番最初に呼び出す)
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
-# ★★★ ファイルアップローダーのCSSをクラシック＆シックな感じに変更 ★★★
+# ★★★ ファイルアップローダーのCSSをダークテーマ風＆中央配置試行に変更 ★★★
 file_uploader_css = """
 <style>
     section[data-testid="stFileUploaderDropzone"] {
-        border: 1px solid #ced4da !important;       /* 枠線: 薄いグレーの単線 */
-        border-radius: 0.375rem !important;         /* 角丸を少し (Bootstrap風) */
-        background-color: #f8f9fa !important;     /* 背景: 非常に薄いグレー (オフホワイトに近い) */
-        padding: 20px !important;                 /* パディングを少し調整 */
-        text-align: center !important;            /* 中のテキスト要素を中央揃え */
+        border: 2px dashed white !important;
+        border-radius: 0.5rem !important;
+        background-color: #495057 !important; /* 背景をダークグレーに */
+        padding: 25px !important;
+        /* text-align: center !important; /* flexで中央揃えするので不要な場合も */
+    }
+    section[data-testid="stFileUploaderDropzone"] > div[data-testid="stFileUploadDropzoneInstructions"] {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
     }
     section[data-testid="stFileUploaderDropzone"] p {
-        color: #495057 !important; /* テキストは濃いめのグレー */
-        font-size: 0.95rem;       /* フォントサイズを少し調整 */
-        margin-bottom: 0.5rem;    /* 段落下のマージン調整 */
+        color: #f8f9fa !important; 
+        font-size: 0.9rem;      
+        margin-bottom: 0.75rem !important;
     }
     section[data-testid="stFileUploaderDropzone"] span {
-        color: #6c757d !important; /* スパンテキストはやや薄いグレー */
-        font-size: 0.85rem;
+        color: #ced4da !important; 
+        font-size: 0.8rem;
     }
     section[data-testid="stFileUploaderDropzone"] button {
-        color: #007bff !important; /* ボタンの文字は標準的な青 (変更可) */
-        font-weight: 500 !important; /* 少し太字に */
+        color: #ffffff !important;                 
+        background-color: #007bff !important;      
+        border: 1px solid #007bff !important;      
+        padding: 0.5em 1em !important;             
+        border-radius: 0.375rem !important;        
+        font-weight: 500 !important;
+        margin-top: 0.5rem !important; /* ボタンの上のマージン調整 */
     }
 </style>
 """
