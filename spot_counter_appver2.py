@@ -11,16 +11,11 @@ st.set_page_config(page_title="輝点解析ツール", layout="wide")
 file_uploader_css = """
 <style>
     section[data-testid="stFileUploaderDropzone"] {
-        border: 3px dashed white !important;
-        border-radius: 0.5rem !important;
-        background-color: #495057 !important; 
-        padding: 25px !important;
+        border: 3px dashed white !important; border-radius: 0.5rem !important;
+        background-color: #495057 !important; padding: 25px !important;
     }
     section[data-testid="stFileUploaderDropzone"] > div[data-testid="stFileUploadDropzoneInstructions"] {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
     }
     section[data-testid="stFileUploaderDropzone"] p { color: #f8f9fa !important; font-size: 0.9rem; margin-bottom: 0.75rem !important; }
     section[data-testid="stFileUploaderDropzone"] span { color: #ced4da !important; font-size: 0.8rem; }
@@ -50,9 +45,9 @@ if "threshold_slider_for_binary" not in st.session_state: st.session_state.thres
 if "threshold_number_for_binary" not in st.session_state: st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
 if "morph_shape_sb_key" not in st.session_state: st.session_state.morph_shape_sb_key = "楕円" 
 if "morph_size_sb_key" not in st.session_state: st.session_state.morph_size_sb_key = 3
-# ★★★ キー名を変更して初期化 ★★★
+# ★★★ キー名変更後の初期化が正しいデフォルト値であることを確認 ★★★
 if "min_area_sb_key_v2" not in st.session_state: st.session_state.min_area_sb_key_v2 = 1 
-if "max_area_sb_key_v2" not in st.session_state: st.session_state.max_area_sb_key_v2 = 1000
+if "max_area_sb_key_v2" not in st.session_state: st.session_state.max_area_sb_key_v2 = 1000 
 if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
 
@@ -67,6 +62,11 @@ def sync_threshold_from_number_input():
 # --- サイドバーの基本部分 (常に表示) ---
 display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value) 
 st.sidebar.header("解析パラメータ設定")
+
+# ★★★ デバッグ用のセッションステート表示 ★★★
+with st.sidebar.expander("セッションステート確認（デバッグ用）"):
+    st.json({k: v for k, v in st.session_state.items()}) # 表示を整形
+
 UPLOAD_ICON = "📤" 
 uploaded_file_widget = st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアップロード", type=['tif', 'tiff', 'png', 'jpg', 'jpeg'], help="対応形式: TIF, TIFF, PNG, JPG, JPEG。")
 
@@ -97,15 +97,13 @@ else:
 
 # メイン処理と、条件付きでのサイドバーパラメータUI表示
 if st.session_state.pil_image_to_process is not None:
-    # --- サイドバーのパラメータ設定UI (画像ロード後に表示) ---
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
-    st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
-    st.sidebar.number_input('閾値 (直接入力)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
+    st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider) # value省略
+    st.sidebar.number_input('閾値 (直接入力)',min_value=0,max_value=255,step=1,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input) # value省略
     threshold_value_to_use = st.session_state.binary_threshold_value 
     st.sidebar.caption("""- **大きくすると:** 明るい部分のみ白に。\n- **小さくすると:** 暗い部分も白に。""")
-    st.sidebar.markdown("<br>", unsafe_allow_html=True) 
-    st.sidebar.markdown("_二値化操作だけでうまくいかない場合は下記設定も変更してみてください。_") 
+    st.sidebar.markdown("<br>", unsafe_allow_html=True); st.sidebar.markdown("_二値化だけでうまくいかない場合は下記も調整を_")
     st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
     morph_kernel_shape_options_display = {"楕円":cv2.MORPH_ELLIPSE,"矩形":cv2.MORPH_RECT,"十字":cv2.MORPH_CROSS}
     selected_shape_name_sb = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options_display.keys()), key="morph_shape_sb_key") 
@@ -116,14 +114,10 @@ if st.session_state.pil_image_to_process is not None:
     st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""") 
     
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
-    # ★★★ キー名を変更し、value引数をセッションステートから読む ★★★
-    min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1, 
-                                          value=st.session_state.min_area_sb_key_v2, 
-                                          key="min_area_sb_key_v2") 
+    # ★★★ value引数を削除し、セッションステートの初期値に依存させる ★★★
+    min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1, key="min_area_sb_key_v2") 
     st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。(画像リサイズ時注意)""") 
-    max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1, 
-                                          value=st.session_state.max_area_sb_key_v2, 
-                                          key="max_area_sb_key_v2") 
+    max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1, key="max_area_sb_key_v2") 
     st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。(画像リサイズ時注意)""") 
 
     # --- メインエリアの画像処理と表示ロジック ---
@@ -144,7 +138,6 @@ if st.session_state.pil_image_to_process is not None:
         if img_gray.dtype != np.uint8: img_gray = img_gray.astype(np.uint8)
     except Exception as e:
         st.error(f"画像の基本変換に失敗: {e}"); st.session_state.counted_spots_value="変換エラー"; st.stop() 
-    
     st.header("処理ステップごとの画像")
     kernel_size_blur = 1 
     if img_gray is None or img_gray.size == 0 : 
@@ -166,7 +159,6 @@ if st.session_state.pil_image_to_process is not None:
         if 'contours' in locals() and contours: 
             for contour in contours:
                 area = cv2.contourArea(contour)
-                # ★★★ 処理でも新しいセッションステートキーから値を取得 ★★★
                 if st.session_state.min_area_sb_key_v2 <= area <= st.session_state.max_area_sb_key_v2: 
                     current_counted_spots += 1
                     cv2.drawContours(output_image_contours_display, [contour], -1, (255,0,0), 2) 
@@ -190,7 +182,6 @@ if st.session_state.pil_image_to_process is not None:
     st.subheader("3. 輝点検出とマーキング")
     display_final_marked_image_rgb = cv2.cvtColor(output_image_contours_display, cv2.COLOR_BGR2RGB)
     if 'contours' in locals() and contours and binary_img_for_contours_processed is not None and current_counted_spots > 0 :
-         # ★★★ キャプションも新しいセッションステートキーから値を取得 ★★★
          st.image(display_final_marked_image_rgb,caption=f'検出輝点(青い輪郭,面積:{st.session_state.min_area_sb_key_v2}-{st.session_state.max_area_sb_key_v2})',use_container_width=True)
     elif binary_img_for_contours_processed is not None: 
         st.image(display_final_marked_image_rgb,caption='輝点見つからず',use_container_width=True)
