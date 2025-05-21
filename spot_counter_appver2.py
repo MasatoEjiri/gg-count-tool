@@ -7,13 +7,13 @@ import io
 # ページ設定 (一番最初に呼び出す)
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
-# ファイルアップローダーのCSS
+# ★★★ ファイルアップローダーのCSS (クラシック＆シックな感じ) ★★★
 file_uploader_css = """
 <style>
     section[data-testid="stFileUploaderDropzone"] {
-        border: 3px dashed white !important;
+        border: 2px dashed white !important;       /* 点線を白く */
         border-radius: 0.5rem !important;
-        background-color: #495057 !important; 
+        background-color: #495057 !important;     /* 背景をダークグレーに */
         padding: 25px !important;
     }
     section[data-testid="stFileUploaderDropzone"] > div[data-testid="stFileUploadDropzoneInstructions"] {
@@ -87,6 +87,7 @@ st.sidebar.header("解析パラメータ設定")
 UPLOAD_ICON = "📤" 
 uploaded_file_widget = st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアップロード", type=['tif', 'tiff', 'png', 'jpg', 'jpeg'], help="対応形式: TIF, TIFF, PNG, JPG, JPEG。")
 
+
 # --- アプリのメインタイトルと使用方法 (メインエリア) ---
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_html=True)
 st.markdown("""
@@ -97,6 +98,7 @@ st.markdown("""
 4. 必要に応じて「2. 形態学的処理」や「3. 輝点フィルタリング」のパラメータも調整します。
 """)
 st.markdown("---") 
+
 
 # --- 画像読み込みロジック ---
 if uploaded_file_widget is not None:
@@ -109,7 +111,6 @@ if uploaded_file_widget is not None:
         st.sidebar.error(f"アップロード画像の読み込みに失敗: {e}")
         st.session_state.pil_image_to_process = None 
         st.session_state.counted_spots_value = "読込エラー" 
-        # display_count_in_sidebar はメイン処理ブロックの最後で呼ばれるのでここでは不要
         st.stop()
 else: 
     if st.session_state.pil_image_to_process is not None: 
@@ -119,7 +120,7 @@ else:
 
 # --- メイン処理と、条件付きでのサイドバーパラメータUI表示 ---
 if st.session_state.pil_image_to_process is not None:
-    # --- ★★★ 画像がロードされた後に、サイドバーのパラメータUIを定義・表示 ★★★ ---
+    # --- 画像がロードされた後に、サイドバーのパラメータUIを定義・表示 ---
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
     st.sidebar.slider('閾値 (スライダーで調整)', min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
@@ -151,7 +152,7 @@ if st.session_state.pil_image_to_process is not None:
     try:
         pil_image_rgb = st.session_state.pil_image_to_process.convert("RGB")
         temp_np_array = np.array(pil_image_rgb)
-        if temp_np_array.dtype != np.uint8: # uint8への変換処理
+        if temp_np_array.dtype != np.uint8: 
             if np.issubdtype(temp_np_array.dtype, np.floating):
                 if temp_np_array.min() >= 0.0 and temp_np_array.max() <= 1.0:
                     original_img_to_display_np_uint8 = (temp_np_array * 255).astype(np.uint8)
@@ -165,7 +166,6 @@ if st.session_state.pil_image_to_process is not None:
     except Exception as e:
         st.error(f"画像の基本変換に失敗しました: {e}"); 
         st.session_state.counted_spots_value = "変換エラー"
-        # display_count_in_sidebar はメイン処理ブロックの最後で呼ばれる
         st.stop() 
     
     st.header("処理ステップごとの画像")
@@ -173,7 +173,6 @@ if st.session_state.pil_image_to_process is not None:
     if img_gray is None or img_gray.size == 0 : 
         st.error("グレースケール画像の準備に失敗しました。"); 
         st.session_state.counted_spots_value = "処理エラー"
-        # display_count_in_sidebar はメイン処理ブロックの最後で呼ばれる
         st.stop()
         
     blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur,kernel_size_blur),0)
@@ -221,11 +220,8 @@ if st.session_state.pil_image_to_process is not None:
         st.image(display_final_marked_image_rgb,caption='輝点見つからず',use_container_width=True)
     else: st.info("輝点検出未実施")
 
-else: # 画像がアップロードされていない、またはクリアされた場合
+else: # 画像がアップロードされていない場合
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
-    # st.session_state.counted_spots_value = "---" # 既にpil_image_to_processがNoneの時に設定済み
-    # display_count_in_sidebar はメイン処理ブロックの最後で呼ばれるのでここでは不要かも
 
 # サイドバー上部のプレースホルダーを常に最新のカウント数で更新
-# (画像処理があってもなくても、最後に必ず呼ばれるようにする)
 display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value)
