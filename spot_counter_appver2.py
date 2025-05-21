@@ -7,13 +7,13 @@ import io
 # ページ設定 (一番最初に呼び出す)
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
-# ★★★ ファイルアップローダーのカスタムCSSを再追加 ★★★
+# ファイルアップローダーのカスタムCSS
 file_uploader_css = """
 <style>
     section[data-testid="stFileUploaderDropzone"] {
-        border: 3px dashed white !important;       /* 枠線の太さを3pxに変更 */
+        border: 3px dashed white !important;
         border-radius: 0.5rem !important;
-        background-color: #495057 !important;     /* 背景をダークグレーに */
+        background-color: #495057 !important; 
         padding: 25px !important;
     }
     section[data-testid="stFileUploaderDropzone"] > div[data-testid="stFileUploadDropzoneInstructions"] {
@@ -142,9 +142,22 @@ if st.session_state.pil_image_to_process is not None:
     st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""") 
     
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
-    min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1, key="min_area_sb_key") 
+    min_area_widget_val = st.sidebar.number_input( # value引数を追加
+        '最小面積',
+        min_value=1,max_value=10000,step=1, 
+        value=st.session_state.min_area_sb_key, 
+        key="min_area_sb_key"
+    ) 
+    min_area_to_use = st.session_state.min_area_sb_key
     st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。(画像リサイズ時注意)""") 
-    max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1, key="max_area_sb_key") 
+
+    max_area_widget_val = st.sidebar.number_input( # value引数を追加
+        '最大面積',
+        min_value=1,max_value=100000,step=1, 
+        value=st.session_state.max_area_sb_key, 
+        key="max_area_sb_key"
+    ) 
+    max_area_to_use = st.session_state.max_area_sb_key
     st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。(画像リサイズ時注意)""") 
 
     # --- メインエリアの画像処理と表示ロジック ---
