@@ -7,20 +7,26 @@ import io
 # ページ設定 (一番最初に呼び出す)
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
-# ★★★ ファイルアップローダーの枠線を点線にするCSSを試みる ★★★
-dotted_border_css = """
+# ★★★ ファイルアップローダーの枠線と背景、テキスト配置を調整するCSS ★★★
+file_uploader_css = """
 <style>
     section[data-testid="stFileUploaderDropzone"] {
-        border: 2px dashed #007bff !important; 
-        border-radius: 0.5rem !important;  
-        background-color: #f8f9fa !important; 
+        border: 2px dashed white !important;       /* 点線を白く */
+        border-radius: 0.5rem !important;
+        background-color: #e9ecef !important;     /* 中をグレーに (少し明るめのグレー) */
+        padding: 25px !important;                 /* パディングを少し調整 */
+        text-align: center !important;            /* 中のテキスト要素を中央揃え */
     }
-    section[data-testid="stFileUploaderDropzone"] p {
-        color: #007bff !important; 
+    section[data-testid="stFileUploaderDropzone"] p,
+    section[data-testid="stFileUploaderDropzone"] span {
+        color: #495057 !important; /* 少し濃いめのグレーで文字を見やすく */
+    }
+    section[data-testid="stFileUploaderDropzone"] button {
+        color: #007bff !important; /* ボタンの文字を青に (例) */
     }
 </style>
 """
-st.markdown(dotted_border_css, unsafe_allow_html=True)
+st.markdown(file_uploader_css, unsafe_allow_html=True)
 
 # --- サイドバーの上部に結果表示用のプレースホルダーを定義 ---
 result_placeholder_sidebar = st.sidebar.empty() 
@@ -147,8 +153,8 @@ if st.session_state.pil_image_to_process is not None:
         display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value)
         st.stop() 
     
-    # サイドバーから取得した値を処理に使う (変数名は _sb を付けない形に戻しました)
-    threshold_to_use = st.session_state.binary_threshold_value
+    # サイドバーから取得した値を処理に使う
+    threshold_value_to_use = st.session_state.binary_threshold_value
     morph_kernel_shape_to_use = morph_kernel_shape_options_display[st.session_state.morph_shape_sb_key]
     kernel_size_morph_to_use = st.session_state.morph_size_sb_key
     min_area_to_use = st.session_state.min_area_sb_key
@@ -161,7 +167,7 @@ if st.session_state.pil_image_to_process is not None:
         
     blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur,kernel_size_blur),0)
 
-    ret_thresh, binary_img_processed = cv2.threshold(blurred_img,threshold_to_use,255,cv2.THRESH_BINARY)
+    ret_thresh, binary_img_processed = cv2.threshold(blurred_img,threshold_value_to_use,255,cv2.THRESH_BINARY)
     if not ret_thresh: st.error("二値化失敗。"); binary_img_for_morph_processed=None
     else: binary_img_for_morph_processed=binary_img_processed.copy()
     
@@ -193,7 +199,7 @@ if st.session_state.pil_image_to_process is not None:
     st.markdown("---")
 
     st.subheader("1. 二値化処理後")
-    if binary_img_processed is not None: st.image(binary_img_processed,caption=f'閾値:{threshold_to_use}',use_container_width=True)
+    if binary_img_processed is not None: st.image(binary_img_processed,caption=f'閾値:{threshold_value_to_use}',use_container_width=True)
     else: st.info("二値化未実施/失敗")
     st.markdown("---")
 
@@ -215,4 +221,4 @@ if st.session_state.pil_image_to_process is not None:
 
 else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
-    # display_count_in_sidebar は初期表示済み
+    # display_count_in_sidebar は初期表示済みなのでここでは不要な場合も
