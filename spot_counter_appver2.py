@@ -7,15 +7,14 @@ import io
 # ページ設定 (一番最初に呼び出す)
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
-# ★★★ ファイルアップローダーのCSSをダークテーマ風＆中央配置試行に変更 ★★★
+# ★★★ ファイルアップローダーのCSSを調整 ★★★
 file_uploader_css = """
 <style>
     section[data-testid="stFileUploaderDropzone"] {
-        border: 2px dashed white !important;
+        border: 3px dashed white !important;       /* 枠線の太さを3pxに変更 */
         border-radius: 0.5rem !important;
-        background-color: #495057 !important; /* 背景をダークグレーに */
+        background-color: #495057 !important;     /* 背景をダークグレーに */
         padding: 25px !important;
-        /* text-align: center !important; /* flexで中央揃えするので不要な場合も */
     }
     section[data-testid="stFileUploaderDropzone"] > div[data-testid="stFileUploadDropzoneInstructions"] {
         display: flex;
@@ -39,7 +38,7 @@ file_uploader_css = """
         padding: 0.5em 1em !important;             
         border-radius: 0.375rem !important;        
         font-weight: 500 !important;
-        margin-top: 0.5rem !important; /* ボタンの上のマージン調整 */
+        margin-top: 0.5rem !important; 
     }
 </style>
 """
