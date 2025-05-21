@@ -5,62 +5,45 @@ import cv2
 import io
 
 # ページ設定 (一番最初に呼び出す)
-st.set_page_config(
-    page_title="輝点解析ツール", 
-    layout="wide", # ワイドレイアウトは維持
-    initial_sidebar_state="expanded" # サイドバーを最初から開いておく
-)
+st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
-# ★★★ カスタムCSSで全体の雰囲気を調整 ★★★
-# (config.tomlでのテーマ設定と合わせて使います)
-page_styling_css = """
+# ファイルアップローダーのCSS
+file_uploader_css = """
 <style>
-    /* Streamlitアプリ全体のコンテナに少しパディングを追加して余白感を出す */
-    .main .block-container { /* Streamlit 1.18.0以降では .main .block-container が主要なコンテナ */
-        padding-top: 2rem;
-        padding-bottom: 2rem;
-        padding-left: 3rem;
-        padding-right: 3rem;
+    section[data-testid="stFileUploaderDropzone"] {
+        border: 3px dashed white !important;
+        border-radius: 0.5rem !important;
+        background-color: #495057 !important; 
+        padding: 25px !important;
     }
-    /* メインエリアのh1タイトル (st.markdown("<h1>...</h1>")) のスタイル調整 */
-    .main h1 {
-        font-weight: 600; /* 少し太めに */
-        letter-spacing: -0.5px; /* 文字間を少し詰める */
-        padding-bottom: 0.5rem;
+    section[data-testid="stFileUploaderDropzone"] > div[data-testid="stFileUploadDropzoneInstructions"] {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
     }
-    /* メインエリアのh3見出し (st.markdown("### ...")) のスタイル調整 */
-    .main h3 {
-        font-weight: 500;
-        color: #00796b; /* テーマのプライマリカラーに合わせる */
-        margin-top: 2rem;
-        margin-bottom: 0.75rem;
+    section[data-testid="stFileUploaderDropzone"] p {
+        color: #f8f9fa !important; 
+        font-size: 0.9rem;      
+        margin-bottom: 0.75rem !important;
     }
-    /* サイドバーのヘッダー (st.sidebar.header) のスタイル調整 */
-    [data-testid="stSidebar"] [data-testid="stHeader"] {
-        font-size: 1.5em; /* 少し大きく */
-        font-weight: 600;
-        color: #00796b; /* テーマのプライマリカラー */
-        padding-top: 0.5rem; /* 上の余白 */
+    section[data-testid="stFileUploaderDropzone"] span {
+        color: #ced4da !important; 
+        font-size: 0.8rem;
     }
-    /* サイドバーのサブヘッダー (st.sidebar.subheader) */
-    [data-testid="stSidebar"] h3 { /* st.sidebar.subheader は h3 になることが多い */
-        font-size: 1.1em;
-        font-weight: 600;
-        color: #263238; /* テーマのテキストカラー */
-        margin-top: 1.5rem;
-    }
-    /* 区切り線 (st.markdown("---")) のスタイルを少し柔らかく */
-    hr {
-        border-top: 1px solid #e0e0e0; /* 薄いグレーの線 */
-        margin-top: 1.5rem;
-        margin-bottom: 1.5rem;
+    section[data-testid="stFileUploaderDropzone"] button {
+        color: #ffffff !important;                 
+        background-color: #007bff !important;      
+        border: 1px solid #007bff !important;      
+        padding: 0.5em 1em !important;             
+        border-radius: 0.375rem !important;        
+        font-weight: 500 !important;
+        margin-top: 0.5rem !important; 
     }
 </style>
 """
-st.markdown(page_styling_css, unsafe_allow_html=True)
+st.markdown(file_uploader_css, unsafe_allow_html=True)
 
-
-# (これ以降の関数定義、セッションステート初期化、UI要素、処理ロジックは前回と同じです)
 # --- サイドバーの上部に結果表示用のプレースホルダーを定義 ---
 result_placeholder_sidebar = st.sidebar.empty() 
 
@@ -68,7 +51,6 @@ result_placeholder_sidebar = st.sidebar.empty()
 def display_count_in_sidebar(placeholder, count_value):
     label_text = "【解析結果】輝点数" 
     value_text = str(count_value) 
-    # テーマ設定に合わせて背景色などを調整しても良いですが、現在のダークなボックスもアクセントになります
     background_color = "#495057"; label_font_color = "white"; value_font_color = "white"
     html_content = f"""
     <div style="border-radius:8px; padding:15px; text-align:center; background-color:{background_color}; margin-bottom:15px; color:{label_font_color};">
@@ -77,19 +59,6 @@ def display_count_in_sidebar(placeholder, count_value):
     </div>"""
     with placeholder.container():
         placeholder.markdown(html_content, unsafe_allow_html=True)
-
-# アプリのタイトル (メインエリア)
-st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_html=True)
-
-# 「使用方法」(メインエリア)
-st.markdown("""
-### 使用方法
-1. 画像を左にアップロードしてください。
-2. 画像をアップロードすると、左サイドバーに詳細な解析パラメータが表示されます。
-3. まず「1. 二値化」の閾値を動かし、「1. 二値化処理後」の画像が実物に近い見え方になるよう調整してください。
-4. 必要に応じて「2. 形態学的処理」や「3. 輝点フィルタリング」のパラメータも調整します。
-""")
-st.markdown("---") 
 
 # --- セッションステートの初期化 ---
 if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots_value = "---" 
@@ -114,15 +83,44 @@ def sync_threshold_from_number_input():
 
 # --- サイドバーの基本部分 (常に表示) ---
 display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value) 
-st.sidebar.header("解析パラメータ設定") # CSSでスタイル調整されます
+st.sidebar.header("解析パラメータ設定")
 UPLOAD_ICON = "📤" 
 uploaded_file_widget = st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアップロード", type=['tif', 'tiff', 'png', 'jpg', 'jpeg'], help="対応形式: TIF, TIFF, PNG, JPG, JPEG。")
+
+# --- アプリのメインタイトルと使用方法 (メインエリア) ---
+st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_html=True)
+st.markdown("""
+### 使用方法
+1. 画像を左にアップロードしてください。
+2. 画像をアップロードすると、左サイドバーに詳細な解析パラメータが表示されます。
+3. まず「1. 二値化」の閾値を動かし、「1. 二値化処理後」の画像が実物に近い見え方になるよう調整してください。
+4. 必要に応じて「2. 形態学的処理」や「3. 輝点フィルタリング」のパラメータも調整します。
+""")
+st.markdown("---") 
+
+# --- 画像読み込みロジック ---
+if uploaded_file_widget is not None:
+    try:
+        uploaded_file_bytes = uploaded_file_widget.getvalue()
+        pil_img = Image.open(io.BytesIO(uploaded_file_bytes))
+        st.session_state.pil_image_to_process = pil_img
+        st.session_state.image_source_caption = f"アップロード: {uploaded_file_widget.name}"
+    except Exception as e:
+        st.sidebar.error(f"アップロード画像の読み込みに失敗: {e}")
+        st.session_state.pil_image_to_process = None 
+        st.session_state.counted_spots_value = "読込エラー" 
+        # display_count_in_sidebar はメイン処理ブロックの最後で呼ばれるのでここでは不要
+        st.stop()
+else: 
+    if st.session_state.pil_image_to_process is not None: 
+        st.session_state.pil_image_to_process = None
+        st.session_state.counted_spots_value = "---" 
 
 
 # --- メイン処理と、条件付きでのサイドバーパラメータUI表示 ---
 if st.session_state.pil_image_to_process is not None:
-    # --- 画像がロードされた後に、サイドバーのパラメータUIを定義・表示 ---
-    st.sidebar.subheader("1. 二値化") # CSSでスタイル調整されます
+    # --- ★★★ 画像がロードされた後に、サイドバーのパラメータUIを定義・表示 ★★★ ---
+    st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
     st.sidebar.slider('閾値 (スライダーで調整)', min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
     st.sidebar.number_input('閾値 (直接入力)', min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
@@ -132,7 +130,7 @@ if st.session_state.pil_image_to_process is not None:
     st.sidebar.markdown("<br>", unsafe_allow_html=True) 
     st.sidebar.markdown("_二値化操作だけでうまくいかない場合は下記設定も変更してみてください。_") 
     
-    st.sidebar.subheader("2. 形態学的処理 (オープニング)") # CSSでスタイル調整されます
+    st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
     morph_kernel_shape_options_display = {"楕円":cv2.MORPH_ELLIPSE,"矩形":cv2.MORPH_RECT,"十字":cv2.MORPH_CROSS}
     selected_shape_name_sb = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options_display.keys()), key="morph_shape_sb_key") 
     morph_kernel_shape_to_use = morph_kernel_shape_options_display[selected_shape_name_sb]
@@ -141,7 +139,7 @@ if st.session_state.pil_image_to_process is not None:
     kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph, key="morph_size_sb_key")
     st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""") 
     
-    st.sidebar.subheader("3. 輝点フィルタリング (面積)") # CSSでスタイル調整されます
+    st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
     min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1, key="min_area_sb_key") 
     st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。(画像リサイズ時注意)""") 
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1, key="max_area_sb_key") 
@@ -153,7 +151,7 @@ if st.session_state.pil_image_to_process is not None:
     try:
         pil_image_rgb = st.session_state.pil_image_to_process.convert("RGB")
         temp_np_array = np.array(pil_image_rgb)
-        if temp_np_array.dtype != np.uint8: 
+        if temp_np_array.dtype != np.uint8: # uint8への変換処理
             if np.issubdtype(temp_np_array.dtype, np.floating):
                 if temp_np_array.min() >= 0.0 and temp_np_array.max() <= 1.0:
                     original_img_to_display_np_uint8 = (temp_np_array * 255).astype(np.uint8)
@@ -167,15 +165,15 @@ if st.session_state.pil_image_to_process is not None:
     except Exception as e:
         st.error(f"画像の基本変換に失敗しました: {e}"); 
         st.session_state.counted_spots_value = "変換エラー"
-        display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value)
+        # display_count_in_sidebar はメイン処理ブロックの最後で呼ばれる
         st.stop() 
     
-    st.header("処理ステップごとの画像") # CSSでスタイル調整されます
+    st.header("処理ステップごとの画像")
     kernel_size_blur = 1 
     if img_gray is None or img_gray.size == 0 : 
         st.error("グレースケール画像の準備に失敗しました。"); 
         st.session_state.counted_spots_value = "処理エラー"
-        display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value)
+        # display_count_in_sidebar はメイン処理ブロックの最後で呼ばれる
         st.stop()
         
     blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur,kernel_size_blur),0)
@@ -202,20 +200,20 @@ if st.session_state.pil_image_to_process is not None:
     else:
         st.warning("輪郭検出の元画像準備できず。"); st.session_state.counted_spots_value="エラー"
     
-    with st.expander("元の画像を見る", expanded=True):
-        if original_img_to_display_np_uint8 is not None:
-            st.image(original_img_to_display_np_uint8, caption=st.session_state.image_source_caption, use_container_width=True)
-    
-    with st.expander("1. 二値化処理後を見る", expanded=False): 
-        if binary_img_processed is not None: st.image(binary_img_processed,caption=f'閾値:{threshold_value_to_use}',use_container_width=True)
-        else: st.info("二値化未実施/失敗")
-
-    with st.expander("2. 形態学的処理後を見る", expanded=False): 
+    st.subheader("元の画像")
+    if original_img_to_display_np_uint8 is not None:
+        st.image(original_img_to_display_np_uint8, caption=st.session_state.image_source_caption, use_container_width=True)
+    st.markdown("---")
+    st.subheader("1. 二値化処理後")
+    if binary_img_processed is not None: st.image(binary_img_processed,caption=f'閾値:{threshold_value_to_use}',use_container_width=True)
+    else: st.info("二値化未実施/失敗")
+    st.markdown("---")
+    with st.expander("▼ 2. 形態学的処理後を見る", expanded=False): 
         if opened_img_processed is not None: 
             st.image(opened_img_processed,caption=f'カーネル:{st.session_state.morph_shape_sb_key} {st.session_state.morph_size_sb_key}x{st.session_state.morph_size_sb_key}',use_container_width=True)
         else: st.info("形態学的処理未実施/失敗")
-    
-    st.subheader("4. 輝点検出とマーキング") # ヘッダー番号を調整 (元の画像はステップ0扱い)
+    st.markdown("---") 
+    st.subheader("3. 輝点検出とマーキング")
     display_final_marked_image_rgb = cv2.cvtColor(output_image_contours_display, cv2.COLOR_BGR2RGB)
     if 'contours' in locals() and contours and binary_img_for_contours_processed is not None and current_counted_spots > 0 :
          st.image(display_final_marked_image_rgb,caption=f'検出輝点(青い輪郭,面積:{min_area_to_use}-{max_area_to_use})',use_container_width=True)
@@ -223,8 +221,11 @@ if st.session_state.pil_image_to_process is not None:
         st.image(display_final_marked_image_rgb,caption='輝点見つからず',use_container_width=True)
     else: st.info("輝点検出未実施")
 
-else: 
+else: # 画像がアップロードされていない、またはクリアされた場合
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
+    # st.session_state.counted_spots_value = "---" # 既にpil_image_to_processがNoneの時に設定済み
+    # display_count_in_sidebar はメイン処理ブロックの最後で呼ばれるのでここでは不要かも
 
 # サイドバー上部のプレースホルダーを常に最新のカウント数で更新
+# (画像処理があってもなくても、最後に必ず呼ばれるようにする)
 display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value)
