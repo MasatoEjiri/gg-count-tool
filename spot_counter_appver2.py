@@ -7,10 +7,6 @@ import io
 # ページ設定 (一番最初に呼び出す)
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
-# ★★★ ファイルアップローダーのカスタムCSSを削除 ★★★
-# file_uploader_css = """ ... """
-# st.markdown(file_uploader_css, unsafe_allow_html=True)
-
 # --- サイドバーの上部に結果表示用のプレースホルダーを定義 ---
 result_placeholder_sidebar = st.sidebar.empty() 
 
@@ -36,10 +32,8 @@ if "threshold_slider_for_binary" not in st.session_state:
     st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
 if "threshold_number_for_binary" not in st.session_state: 
     st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
-# 形態学的処理と面積フィルタのキーは、ウィジェット定義時にvalue/indexでデフォルトを指定するため、
-# ここでのセッションステートキーの明示的な初期化は必須ではありません（keyを使わない場合）。
-# ただし、もしkeyを使う場合は、対応するセッションステートキーを初期化するのが良いでしょう。
-# 今回はユーザー様が「調子が良かった」バージョンに合わせて、キーを使わないウィジェットは直接value/indexでデフォルトを設定します。
+# 形態学的処理と面積フィルタのキーは、ウィジェットのvalue/indexで直接デフォルトを指定するため、
+# セッションステートでの明示的な初期化は必須ではない (keyを使わないウィジェットの場合)
 if 'pil_image_to_process' not in st.session_state: 
     st.session_state.pil_image_to_process = None
 if 'image_source_caption' not in st.session_state: 
@@ -104,12 +98,12 @@ if st.session_state.pil_image_to_process is not None:
     
     st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
     morph_kernel_shape_options_display = {"楕円":cv2.MORPH_ELLIPSE,"矩形":cv2.MORPH_RECT,"十字":cv2.MORPH_CROSS}
-    selected_shape_name = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options_display.keys()),
+    selected_shape_name = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options_display.keys()), 
                                                   index=0) # デフォルトは "楕円" (keyなし)
     morph_kernel_shape_to_use = morph_kernel_shape_options_display[selected_shape_name]
     st.sidebar.caption("輝点の形状に合わせて。") 
     kernel_options_morph = [1,3,5,7,9]
-    kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,
+    kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph, 
                                                       value=3) # デフォルトは 3 (keyなし)
     st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""") 
     
@@ -144,6 +138,7 @@ if st.session_state.pil_image_to_process is not None:
     kernel_size_blur = 1 
     if img_gray is None or img_gray.size == 0 : 
         st.error("グレースケール画像準備失敗。"); st.session_state.counted_spots_value="処理エラー"; st.stop()
+        
     blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur,kernel_size_blur),0)
     ret_thresh, binary_img_processed = cv2.threshold(blurred_img,threshold_value_to_use,255,cv2.THRESH_BINARY)
     if not ret_thresh: st.error("二値化失敗。"); binary_img_for_morph_processed=None
