@@ -7,61 +7,60 @@ import io
 # ページ設定 (一番最初に呼び出す)
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
-# ファイルアップローダーのカスタムCSS
-file_uploader_css = """
-<style>
-    section[data-testid="stFileUploaderDropzone"] {
-        border: 3px dashed white !important; border-radius: 0.5rem !important;
-        background-color: #495057 !important; padding: 25px !important;
-    }
-    section[data-testid="stFileUploaderDropzone"] > div[data-testid="stFileUploadDropzoneInstructions"] {
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-    }
-    section[data-testid="stFileUploaderDropzone"] p { color: #f8f9fa !important; font-size: 0.9rem; margin-bottom: 0.75rem !important; }
-    section[data-testid="stFileUploaderDropzone"] span { color: #ced4da !important; font-size: 0.8rem; }
-    section[data-testid="stFileUploaderDropzone"] button {
-        color: #ffffff !important; background-color: #007bff !important; border: 1px solid #007bff !important;      
-        padding: 0.5em 1em !important; border-radius: 0.375rem !important; font-weight: 500 !important;
-        margin-top: 0.5rem !important; 
-    }
-</style>
-"""
-st.markdown(file_uploader_css, unsafe_allow_html=True)
+# ★★★ ファイルアップローダーのカスタムCSSを削除 ★★★
 
 # --- サイドバーの上部に結果表示用のプレースホルダーを定義 ---
 result_placeholder_sidebar = st.sidebar.empty() 
 
 # --- カスタマイズされた結果表示関数 (サイドバー表示用) ---
 def display_count_in_sidebar(placeholder, count_value):
-    label_text = "【解析結果】輝点数"; value_text = str(count_value) 
-    bg="#495057"; lf="white"; vf="white"
-    html=f"""<div style="border-radius:8px;padding:15px;text-align:center;background-color:{bg};margin-bottom:15px;color:{lf};"><p style="font-size:16px;margin-bottom:5px;font-weight:bold;">{label_text}</p><p style="font-size:48px;font-weight:bold;margin-top:0px;color:{vf};line-height:1.1;">{value_text}</p></div>"""
-    with placeholder.container(): placeholder.markdown(html, unsafe_allow_html=True)
+    label_text = "【解析結果】輝点数" 
+    value_text = str(count_value) 
+    background_color = "#495057"; label_font_color = "white"; value_font_color = "white"
+    html_content = f"""
+    <div style="border-radius:8px; padding:15px; text-align:center; background-color:{background_color}; margin-bottom:15px; color:{label_font_color};">
+        <p style="font-size:16px; margin-bottom:5px; font-weight:bold;">{label_text}</p>
+        <p style="font-size:48px; font-weight:bold; margin-top:0px; color:{value_font_color}; line-height:1.1;">{value_text}</p>
+    </div>"""
+    with placeholder.container():
+        placeholder.markdown(html_content, unsafe_allow_html=True)
 
 # --- セッションステートの初期化 ---
-if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots_value = "---" 
-if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 58
-# 以下のウィジェットキーの初期値は、それぞれのウィジェットが初回にvalue引数(なければ内部デフォルト)で設定する
-if "threshold_slider_for_binary" not in st.session_state: st.session_state.threshold_slider_for_binary = 58 # binary_threshold_value と同期
-if "threshold_number_for_binary" not in st.session_state: st.session_state.threshold_number_for_binary = 58 # binary_threshold_value と同期
-if "morph_shape_sb_key" not in st.session_state: st.session_state.morph_shape_sb_key = "楕円" 
-if "morph_size_sb_key" not in st.session_state: st.session_state.morph_size_sb_key = 3
-if "min_area_sb_key_v3" not in st.session_state: st.session_state.min_area_sb_key_v3 = 1 
-if "max_area_sb_key_v3" not in st.session_state: st.session_state.max_area_sb_key_v3 = 1000 
-if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
-if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
+if 'counted_spots_value' not in st.session_state: 
+    st.session_state.counted_spots_value = "---" 
+if "binary_threshold_value" not in st.session_state: 
+    st.session_state.binary_threshold_value = 58
+if "threshold_slider_for_binary" not in st.session_state: 
+    st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
+if "threshold_number_for_binary" not in st.session_state: 
+    st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
+if "morph_shape_sb_key" not in st.session_state:
+    st.session_state.morph_shape_sb_key = "楕円" 
+if "morph_size_sb_key" not in st.session_state:
+    st.session_state.morph_size_sb_key = 3
+# 面積フィルタのキー名を _v3 にし、デフォルト値を設定
+if "min_area_sb_key_v3" not in st.session_state: 
+    st.session_state.min_area_sb_key_v3 = 1 
+if "max_area_sb_key_v3" not in st.session_state: 
+    st.session_state.max_area_sb_key_v3 = 1000 
+if 'pil_image_to_process' not in st.session_state: 
+    st.session_state.pil_image_to_process = None
+if 'image_source_caption' not in st.session_state: 
+    st.session_state.image_source_caption = "アップロードされた画像"
+
 
 # --- コールバック関数の定義 ---
-def sync_threshold_from_slider(): # スライダー変更時に呼ばれる
+def sync_threshold_from_slider():
     st.session_state.binary_threshold_value = st.session_state.threshold_slider_for_binary
-    st.session_state.threshold_number_for_binary = st.session_state.threshold_slider_for_binary # 数値入力も同期
-def sync_threshold_from_number_input(): # 数値入力変更時に呼ばれる
+    st.session_state.threshold_number_for_binary = st.session_state.threshold_slider_for_binary
+def sync_threshold_from_number_input():
     st.session_state.binary_threshold_value = st.session_state.threshold_number_for_binary
-    st.session_state.threshold_slider_for_binary = st.session_state.threshold_number_for_binary # スライダーも同期
+    st.session_state.threshold_slider_for_binary = st.session_state.threshold_number_for_binary
 
 # --- サイドバーの基本部分 (常に表示) ---
 display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value) 
 st.sidebar.header("解析パラメータ設定")
+
 UPLOAD_ICON = "📤" 
 uploaded_file_widget = st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアップロード", type=['tif', 'tiff', 'png', 'jpg', 'jpeg'], help="対応形式: TIF, TIFF, PNG, JPG, JPEG。")
 
@@ -94,33 +93,36 @@ else:
 if st.session_state.pil_image_to_process is not None:
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
-    # ★★★ value引数を削除 (セッションステートの初期値とキーに依存) ★★★
-    st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
-    st.sidebar.number_input('閾値 (直接入力)',min_value=0,max_value=255,step=1,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
+    st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,
+                      value=st.session_state.binary_threshold_value, 
+                      key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
+    st.sidebar.number_input('閾値 (直接入力)',min_value=0,max_value=255,step=1,
+                            value=st.session_state.binary_threshold_value,
+                            key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
     threshold_value_to_use = st.session_state.binary_threshold_value 
     st.sidebar.caption("""- **大きくすると:** 明るい部分のみ白に。\n- **小さくすると:** 暗い部分も白に。""")
     st.sidebar.markdown("<br>", unsafe_allow_html=True); st.sidebar.markdown("_二値化だけでうまくいかない場合は下記も調整を_")
     
     st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
     morph_kernel_shape_options_display = {"楕円":cv2.MORPH_ELLIPSE,"矩形":cv2.MORPH_RECT,"十字":cv2.MORPH_CROSS}
-    # ★★★ value引数を削除 (indexで初期選択、キーでセッションステート管理) ★★★
     selected_shape_name_sb = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options_display.keys()), 
-                                                  index=list(morph_kernel_shape_options_display.keys()).index(st.session_state.morph_shape_sb_key), # 初期選択をセッションステートから
+                                                  value=st.session_state.morph_shape_sb_key, # value引数を追加
                                                   key="morph_shape_sb_key") 
-    morph_kernel_shape_to_use = morph_kernel_shape_options_display[selected_shape_name_sb] # selectboxは戻り値を直接使う
+    morph_kernel_shape_to_use = morph_kernel_shape_options_display[selected_shape_name_sb]
     st.sidebar.caption("輝点の形状に合わせて。") 
     kernel_options_morph = [1,3,5,7,9]
-    # ★★★ value引数を削除 (セッションステートの初期値とキーに依存) ★★★
     kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph, 
+                                                      value=st.session_state.morph_size_sb_key, # value引数を追加
                                                       key="morph_size_sb_key")
     st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""") 
     
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
-    # ★★★ value引数を削除 (セッションステートの初期値とキーに依存) ★★★
     min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1, 
+                                          value=st.session_state.min_area_sb_key_v3, 
                                           key="min_area_sb_key_v3") 
     st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。(画像リサイズ時注意)""") 
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1, 
+                                          value=st.session_state.max_area_sb_key_v3, 
                                           key="max_area_sb_key_v3") 
     st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。(画像リサイズ時注意)""") 
 
@@ -152,9 +154,7 @@ if st.session_state.pil_image_to_process is not None:
     else: binary_img_for_morph_processed=binary_img_processed.copy()
     opened_img_processed = None 
     if binary_img_for_morph_processed is not None:
-        # 処理にはセッションステートのキーから直接値を取得
-        kernel_morph_obj=cv2.getStructuringElement(morph_kernel_shape_options_display[st.session_state.morph_shape_sb_key],
-                                                 (st.session_state.morph_size_sb_key,st.session_state.morph_size_sb_key))
+        kernel_morph_obj=cv2.getStructuringElement(morph_kernel_shape_to_use,(kernel_size_morph_to_use,kernel_size_morph_to_use))
         opened_img_processed=cv2.morphologyEx(binary_img_for_morph_processed,cv2.MORPH_OPEN,kernel_morph_obj)
         binary_img_for_contours_processed = opened_img_processed.copy()
     else: binary_img_for_contours_processed = None
