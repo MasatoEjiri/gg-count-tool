@@ -7,49 +7,43 @@ import io
 # ページ設定 (一番最初に呼び出す)
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
-# ファイルアップローダーのカスタムCSS
-file_uploader_css = """
-<style>
-    section[data-testid="stFileUploaderDropzone"] {
-        border: 3px dashed white !important; border-radius: 0.5rem !important;
-        background-color: #495057 !important; padding: 25px !important;
-    }
-    section[data-testid="stFileUploaderDropzone"] > div[data-testid="stFileUploadDropzoneInstructions"] {
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-    }
-    section[data-testid="stFileUploaderDropzone"] p { color: #f8f9fa !important; font-size: 0.9rem; margin-bottom: 0.75rem !important; }
-    section[data-testid="stFileUploaderDropzone"] span { color: #ced4da !important; font-size: 0.8rem; }
-    section[data-testid="stFileUploaderDropzone"] button {
-        color: #ffffff !important; background-color: #007bff !important; border: 1px solid #007bff !important;      
-        padding: 0.5em 1em !important; border-radius: 0.375rem !important; font-weight: 500 !important;
-        margin-top: 0.5rem !important; 
-    }
-</style>
-"""
-st.markdown(file_uploader_css, unsafe_allow_html=True)
+# ★★★ ファイルアップローダーのカスタムCSSを削除 ★★★
+# file_uploader_css = """ ... """
+# st.markdown(file_uploader_css, unsafe_allow_html=True)
 
 # --- サイドバーの上部に結果表示用のプレースホルダーを定義 ---
 result_placeholder_sidebar = st.sidebar.empty() 
 
 # --- カスタマイズされた結果表示関数 (サイドバー表示用) ---
 def display_count_in_sidebar(placeholder, count_value):
-    label_text = "【解析結果】輝点数"; value_text = str(count_value) 
-    bg="#495057"; lf="white"; vf="white"
-    html=f"""<div style="border-radius:8px;padding:15px;text-align:center;background-color:{bg};margin-bottom:15px;color:{lf};"><p style="font-size:16px;margin-bottom:5px;font-weight:bold;">{label_text}</p><p style="font-size:48px;font-weight:bold;margin-top:0px;color:{vf};line-height:1.1;">{value_text}</p></div>"""
-    with placeholder.container(): placeholder.markdown(html, unsafe_allow_html=True)
+    label_text = "【解析結果】輝点数" 
+    value_text = str(count_value) 
+    background_color = "#495057"; label_font_color = "white"; value_font_color = "white"
+    html_content = f"""
+    <div style="border-radius:8px; padding:15px; text-align:center; background-color:{background_color}; margin-bottom:15px; color:{label_font_color};">
+        <p style="font-size:16px; margin-bottom:5px; font-weight:bold;">{label_text}</p>
+        <p style="font-size:48px; font-weight:bold; margin-top:0px; color:{value_font_color}; line-height:1.1;">{value_text}</p>
+    </div>"""
+    with placeholder.container():
+        placeholder.markdown(html_content, unsafe_allow_html=True)
 
 # --- セッションステートの初期化 ---
-if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots_value = "---" 
-if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 58 # 二値化の共通閾値
-if "threshold_slider_for_binary" not in st.session_state: st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
-if "threshold_number_for_binary" not in st.session_state: st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
-# ★★★ 形態学的処理と面積フィルタのキーはセッションステート初期化から削除 ★★★
-# if "morph_shape_sb_key" not in st.session_state: st.session_state.morph_shape_sb_key = "楕円" 
-# if "morph_size_sb_key" not in st.session_state: st.session_state.morph_size_sb_key = 3
-# if "min_area_sb_key_v3" not in st.session_state: st.session_state.min_area_sb_key_v3 = 1 
-# if "max_area_sb_key_v3" not in st.session_state: st.session_state.max_area_sb_key_v3 = 1000 
-if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
-if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
+if 'counted_spots_value' not in st.session_state: 
+    st.session_state.counted_spots_value = "---" 
+if "binary_threshold_value" not in st.session_state: 
+    st.session_state.binary_threshold_value = 58
+if "threshold_slider_for_binary" not in st.session_state: 
+    st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
+if "threshold_number_for_binary" not in st.session_state: 
+    st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
+# 形態学的処理と面積フィルタのキーは、ウィジェット定義時にvalue/indexでデフォルトを指定するため、
+# ここでのセッションステートキーの明示的な初期化は必須ではありません（keyを使わない場合）。
+# ただし、もしkeyを使う場合は、対応するセッションステートキーを初期化するのが良いでしょう。
+# 今回はユーザー様が「調子が良かった」バージョンに合わせて、キーを使わないウィジェットは直接value/indexでデフォルトを設定します。
+if 'pil_image_to_process' not in st.session_state: 
+    st.session_state.pil_image_to_process = None
+if 'image_source_caption' not in st.session_state: 
+    st.session_state.image_source_caption = "アップロードされた画像"
 
 
 # --- コールバック関数の定義 (二値化閾値同期用) ---
@@ -68,11 +62,13 @@ uploaded_file_widget = st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアッ�
 
 # アプリのメインタイトルと使用方法 (メインエリア)
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_html=True)
-st.markdown("""### 使用方法
+st.markdown("""
+### 使用方法
 1. 画像を左にアップロードしてください。
 2. 画像をアップロードすると、左サイドバーに詳細な解析パラメータが表示されます。
 3. まず「1. 二値化」の閾値を動かし、「1. 二値化処理後」の画像が実物に近い見え方になるよう調整してください。
-4. 必要に応じて「2. 形態学的処理」や「3. 輝点フィルタリング」のパラメータも調整します。""")
+4. 必要に応じて「2. 形態学的処理」や「3. 輝点フィルタリング」のパラメータも調整します。
+""")
 st.markdown("---") 
 
 # 画像読み込みロジック
@@ -108,23 +104,21 @@ if st.session_state.pil_image_to_process is not None:
     
     st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
     morph_kernel_shape_options_display = {"楕円":cv2.MORPH_ELLIPSE,"矩形":cv2.MORPH_RECT,"十字":cv2.MORPH_CROSS}
-    # ★★★ key を削除し、index/value でデフォルト指定、戻り値を直接使用 ★★★
-    selected_shape_name_sb = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options_display.keys()), 
-                                                  index=0) # デフォルトは "楕円"
-    morph_kernel_shape_to_use = morph_kernel_shape_options_display[selected_shape_name_sb]
+    selected_shape_name = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options_display.keys()),
+                                                  index=0) # デフォルトは "楕円" (keyなし)
+    morph_kernel_shape_to_use = morph_kernel_shape_options_display[selected_shape_name]
     st.sidebar.caption("輝点の形状に合わせて。") 
     kernel_options_morph = [1,3,5,7,9]
-    kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph, 
-                                                      value=3) # デフォルトは 3
+    kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,
+                                                      value=3) # デフォルトは 3 (keyなし)
     st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""") 
     
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
-    # ★★★ key を削除し、value でデフォルト指定、戻り値を直接使用 ★★★
     min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1, 
-                                          value=1) # デフォルト 1
+                                          value=1) # ★★★ デフォルトを1に ★★★ (keyなし)
     st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。(画像リサイズ時注意)""") 
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1, 
-                                          value=1000) # デフォルト 1000
+                                          value=1000) # デフォルト 1000 (keyなし)
     st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。(画像リサイズ時注意)""") 
 
     # --- メインエリアの画像処理と表示ロジック ---
@@ -145,6 +139,7 @@ if st.session_state.pil_image_to_process is not None:
         if img_gray.dtype != np.uint8: img_gray = img_gray.astype(np.uint8)
     except Exception as e:
         st.error(f"画像の基本変換に失敗: {e}"); st.session_state.counted_spots_value="変換エラー"; st.stop() 
+    
     st.header("処理ステップごとの画像")
     kernel_size_blur = 1 
     if img_gray is None or img_gray.size == 0 : 
@@ -166,7 +161,7 @@ if st.session_state.pil_image_to_process is not None:
         if 'contours' in locals() and contours: 
             for contour in contours:
                 area = cv2.contourArea(contour)
-                if min_area_to_use <= area <= max_area_to_use: # ★★★ 処理で使う変数を修正 ★★★
+                if min_area_to_use <= area <= max_area_to_use: 
                     current_counted_spots += 1
                     cv2.drawContours(output_image_contours_display, [contour], -1, (255,0,0), 2) 
         st.session_state.counted_spots_value = current_counted_spots 
@@ -183,14 +178,12 @@ if st.session_state.pil_image_to_process is not None:
     st.markdown("---")
     with st.expander("▼ 2. 形態学的処理後を見る", expanded=False): 
         if opened_img_processed is not None: 
-            # ★★★ キャプションで使う変数を修正 ★★★
-            st.image(opened_img_processed,caption=f'カーネル:{selected_shape_name_sb} {kernel_size_morph_to_use}x{kernel_size_morph_to_use}',use_container_width=True)
+            st.image(opened_img_processed,caption=f'カーネル:{selected_shape_name} {kernel_size_morph_to_use}x{kernel_size_morph_to_use}',use_container_width=True)
         else: st.info("形態学的処理未実施/失敗")
     st.markdown("---") 
     st.subheader("3. 輝点検出とマーキング")
     display_final_marked_image_rgb = cv2.cvtColor(output_image_contours_display, cv2.COLOR_BGR2RGB)
     if 'contours' in locals() and contours and binary_img_for_contours_processed is not None and current_counted_spots > 0 :
-         # ★★★ キャプションで使う変数を修正 ★★★
          st.image(display_final_marked_image_rgb,caption=f'検出輝点(青い輪郭,面積:{min_area_to_use}-{max_area_to_use})',use_container_width=True)
     elif binary_img_for_contours_processed is not None: 
         st.image(display_final_marked_image_rgb,caption='輝点見つからず',use_container_width=True)
