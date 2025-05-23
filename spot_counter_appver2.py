@@ -43,8 +43,8 @@ if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots
 if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 58
 if "threshold_slider_for_binary" not in st.session_state: st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
 if "threshold_number_for_binary" not in st.session_state: st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
-# if "morph_shape_sb_key" not in st.session_state: st.session_state.morph_shape_sb_key = "楕円" # ★★★ 削除 ★★★
-if "morph_size_sb_key" not in st.session_state: st.session_state.morph_size_sb_key = 3 # これはカーネルサイズようなので残す
+# morph_shape_sb_key はUIから削除したのでセッションステート初期化も不要
+if "morph_size_sb_key" not in st.session_state: st.session_state.morph_size_sb_key = 3
 if "min_area_sb_key_v3" not in st.session_state: st.session_state.min_area_sb_key_v3 = 1 
 if "max_area_sb_key_v3" not in st.session_state: st.session_state.max_area_sb_key_v3 = 1000 
 if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
@@ -103,23 +103,33 @@ if st.session_state.pil_image_to_process is not None:
                             key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
     threshold_value_to_use = st.session_state.binary_threshold_value 
     st.sidebar.caption("""- **大きくすると:** 明るい部分のみ白に。\n- **小さくすると:** 暗い部分も白に。""")
-    st.sidebar.markdown("<br>", unsafe_allow_html=True); st.sidebar.markdown("_二値化だけでうまくいかない場合は下記も調整を_")
+    st.sidebar.markdown("<br>", unsafe_allow_html=True); st.sidebar.markdown("_二値化操作だけでうまくいかない場合は下記設定も変更してみてください。_")
     
     st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
-    # ★★★ カーネル形状の選択UIを削除し、内部で楕円に固定 ★★★
-    # morph_kernel_shape_options_display = {"楕円":cv2.MORPH_ELLIPSE,"矩形":cv2.MORPH_RECT,"十字":cv2.MORPH_CROSS}
-    # selected_shape_name_sb = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options_display.keys()), 
-    #                                               value=st.session_state.morph_shape_sb_key, 
-    #                                               key="morph_shape_sb_key") 
-    # morph_kernel_shape_to_use = morph_kernel_shape_options_display[selected_shape_name_sb]
-    # st.sidebar.caption("輝点の形状に合わせて。") # このキャプションも削除
-    morph_kernel_shape_to_use = cv2.MORPH_ELLIPSE # ★★★ 内部で楕円に固定 ★★★
+    morph_kernel_shape_to_use = cv2.MORPH_ELLIPSE # 形状は楕円に固定
+    # selected_shape_name_sb は不要になった
+    # st.sidebar.caption("輝点の形状に合わせて。") # 形状選択がなくなったのでキャプションも削除
     
     kernel_options_morph = [1,3,5,7,9]
-    kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph, 
-                                                      value=st.session_state.morph_size_sb_key, 
-                                                      key="morph_size_sb_key")
-    st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""") 
+    kernel_size_morph_to_use =st.sidebar.select_slider(
+        'カーネルサイズ',
+        options=kernel_options_morph, 
+        value=st.session_state.morph_size_sb_key, # セッションステートから初期値を取得
+        key="morph_size_sb_key"
+    )
+    # ★★★ カーネルサイズの説明を詳細に ★★★
+    st.sidebar.markdown("""
+    オープニング処理は、画像中の小さな白いノイズ（ゴミなど）を除去したり、輝点同士を繋ぐ細い線や、輝点の細い突起部分を取り除く効果があります。これにより、個々の輝点がより明確に分離されることが期待できます。
+    カーネルサイズは、この処理を行う際の「範囲の広さ」を指定します（例: サイズ3は3x3ピクセルの範囲）。カーネル形状は「楕円」に固定されています。
+    * **カーネルサイズを大きくすると:**
+        * より大きなノイズや、輝点間のより太い繋がりも除去しやすくなります。
+        * ただし、処理が強くなるため、目的の輝点自体も縁から削られて小さくなったり、元々小さい輝点や細い輝点が消えてしまうことがあります。
+    * **カーネルサイズを小さくすると:**
+        * 非常に小さなノイズの除去に留まり、輝点自体の形状への影響は少なくなります。
+        * 輝点同士が太い線で繋がっている場合や、大きめのノイズには効果が薄いことがあります。
+
+    最適なサイズは、画像のノイズの状態や輝点の大きさ・形状によって異なります。「2. 形態学的処理後を見る」の画像を確認しながら調整してください。
+    """, unsafe_allow_html=True)
     
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
     min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1, 
@@ -161,7 +171,8 @@ if st.session_state.pil_image_to_process is not None:
     else: binary_img_for_morph_processed=binary_img_processed.copy()
     opened_img_processed = None 
     if binary_img_for_morph_processed is not None:
-        kernel_morph_obj=cv2.getStructuringElement(morph_kernel_shape_to_use,(kernel_size_morph_to_use,kernel_size_morph_to_use)) # morph_kernel_shape_to_use は固定された楕円
+        # morph_kernel_shape_to_use は cv2.MORPH_ELLIPSE に固定
+        kernel_morph_obj=cv2.getStructuringElement(morph_kernel_shape_to_use,(kernel_size_morph_to_use,kernel_size_morph_to_use))
         opened_img_processed=cv2.morphologyEx(binary_img_for_morph_processed,cv2.MORPH_OPEN,kernel_morph_obj)
         binary_img_for_contours_processed = opened_img_processed.copy()
     else: binary_img_for_contours_processed = None
