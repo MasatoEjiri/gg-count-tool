@@ -37,22 +37,22 @@ def display_count_in_sidebar(placeholder, count_value):
     with placeholder.container(): placeholder.markdown(html, unsafe_allow_html=True)
 
 # セッションステート初期化
-default_values = {
+default_session_values = {
     'counted_spots_value': "---",
     "binary_threshold_value": 58, "threshold_slider_for_binary": 58, "threshold_number_for_binary": 58,
     'pil_image_to_process': None, 'image_source_caption': "アップロードされた画像",
-    # トリミングパラメータ用のキーも初期化 (具体的な値は画像ロード後に設定)
-    "crop_x": 0, "crop_y": 0, "crop_w": 0, "crop_h": 0,
-    "image_width_for_crop_params": 100, "image_height_for_crop_params": 100 # 仮の初期値
+    "crop_x": 0, "crop_y": 0, "crop_w": 0, "crop_h": 0, # 初期値は画像ロード後に設定
+    "last_uploaded_filename_for_crop": None # 新しい画像か判定用
 }
-for key, value in default_values.items():
+for key, value in default_session_values.items():
     if key not in st.session_state: st.session_state[key] = value
 
-# 形態学的処理と面積フィルタのデフォルト値 (キーを使わないウィジェット用)
+# 形態学的処理と面積フィルタのデフォルト値 (キーを使わないウィジェット用、これらはUI定義時にvalueで指定)
 DEFAULT_MORPH_SHAPE = "楕円"
 DEFAULT_MORPH_SIZE = 3
 DEFAULT_MIN_AREA = 1
 DEFAULT_MAX_AREA = 1000
+
 
 # コールバック関数
 def sync_threshold_from_slider():
@@ -82,19 +82,21 @@ if uploaded_file_widget is not None:
     try:
         uploaded_file_bytes = uploaded_file_widget.getvalue()
         pil_img = Image.open(io.BytesIO(uploaded_file_bytes))
-        st.session_state.pil_image_to_process = pil_img # これが現在選択されている(トリミング前)のPillowイメージ
+        st.session_state.pil_image_to_process = pil_img
         st.session_state.image_source_caption = f"アップロード: {uploaded_file_widget.name}"
         
-        # 画像が新しくアップロードされたら、トリミングパラメータを画像全体にリセット
-        pil_rgb_for_dims = st.session_state.pil_image_to_process.convert("RGB")
-        np_for_dims = np.array(pil_rgb_for_dims)
-        h_orig, w_orig = np_for_dims.shape[:2]
-        st.session_state.image_width_for_crop_params = w_orig
-        st.session_state.image_height_for_crop_params = h_orig
-        st.session_state.crop_x = 0
-        st.session_state.crop_y = 0
-        st.session_state.crop_w = w_orig
-        st.session_state.crop_h = h_orig
+        # ★★★ 新しい画像がアップロードされた場合、トリミングパラメータを画像全体にリセット ★★★
+        if st.session_state.get("last_uploaded_filename_for_crop") != uploaded_file_widget.name:
+            pil_rgb_for_dims = st.session_state.pil_image_to_process.convert("RGB")
+            np_for_dims = np.array(pil_rgb_for_dims)
+            h_orig, w_orig = np_for_dims.shape[:2]
+            
+            st.session_state.crop_x = 0
+            st.session_state.crop_y = 0
+            st.session_state.crop_w = w_orig
+            st.session_state.crop_h = h_orig
+            st.session_state.last_uploaded_filename_for_crop = uploaded_file_widget.name
+            # st.experimental_rerun() # 必要ならリランしてウィジェットに即時反映
 
     except Exception as e:
         st.sidebar.error(f"アップロード画像の読み込みに失敗: {e}")
@@ -102,63 +104,92 @@ if uploaded_file_widget is not None:
         st.session_state.counted_spots_value = "読込エラー"; st.stop()
 else: 
     if st.session_state.pil_image_to_process is not None: 
-        st.session_state.pil_image_to_process = None # クリア
+        st.session_state.pil_image_to_process = None
         st.session_state.counted_spots_value = "---" 
+        st.session_state.last_uploaded_filename_for_crop = None # 画像がクリアされたらファイル名もリセット
 
 
 # --- メイン処理 (処理対象のPillowイメージがあれば実行) ---
 if st.session_state.pil_image_to_process is not None:
     # --- 1. 元の画像表示とトリミング設定 ---
     st.header("1. 元の画像 と トリミング設定")
-    
-    # 表示用およびOpenCV処理用にRGB uint8 NumPy配列を準備 (フルサイズ)
     try:
         pil_image_rgb_full = st.session_state.pil_image_to_process.convert("RGB")
-        full_img_np_rgb_uint8 = np.array(pil_image_rgb_full)
-        if full_img_np_rgb_uint8.dtype != np.uint8: # uint8への変換処理 (簡略版)
-            full_img_np_rgb_uint8 = np.clip(full_img_np_rgb_uint8, 0, 255).astype(np.uint8)
-        
+        full_img_np_rgb_uint8 = np.array(pil_image_rgb_full).astype(np.uint8) # uint8に変換
         full_img_h, full_img_w = full_img_np_rgb_uint8.shape[:2]
     except Exception as e:
         st.error(f"画像変換中にエラー (フル): {e}"); st.stop()
 
     # トリミングパラメータ入力UI
-    with st.expander("トリミング範囲を設定する (オプション)", expanded=False):
+    with st.expander("トリミング範囲を設定する (オプション)", expanded=True): # 最初から開いておく
         st.write(f"元画像サイズ: 幅={full_img_w}px, 高さ={full_img_h}px")
         col_crop1, col_crop2 = st.columns(2)
+        
         with col_crop1:
-            st.session_state.crop_x = st.number_input("切り抜き開始 X座標", 0, full_img_w - 1, st.session_state.crop_x, key="crop_x_input")
-            st.session_state.crop_w = st.number_input("切り抜き幅", 1, full_img_w - st.session_state.crop_x, st.session_state.crop_w, key="crop_w_input")
-        with col_crop2:
-            st.session_state.crop_y = st.number_input("切り抜き開始 Y座標", 0, full_img_h - 1, st.session_state.crop_y, key="crop_y_input")
-            st.session_state.crop_h = st.number_input("切り抜き高さ", 1, full_img_h - st.session_state.crop_y, st.session_state.crop_h, key="crop_h_input")
+            # X入力。変更時にWを調整するコールバックは複雑なので、今回はmax_valueで制御し、
+            # W入力時に session_state.crop_w をさらに調整する
+            new_crop_x = st.number_input("切り抜き開始 X座標", 0, full_img_w - 1, st.session_state.crop_x, key="crop_x_ui")
+            if new_crop_x != st.session_state.crop_x: # ユーザーがXを変更した場合
+                st.session_state.crop_x = new_crop_x
+                # Xが変わったらWの最大値も変わるので、Wを再評価・調整する必要がある
+                max_w_possible = full_img_w - st.session_state.crop_x
+                if st.session_state.crop_w > max_w_possible:
+                    st.session_state.crop_w = max_w_possible
+                if st.session_state.crop_w < 1: st.session_state.crop_w = 1
+                # st.experimental_rerun() # 即時反映のため
 
-    # トリミング範囲プレビュー
+            max_w_for_widget = full_img_w - st.session_state.crop_x
+            # W入力の前に、現在のセッションステートのWが新しいmax_wを超えていないか確認・調整
+            if st.session_state.crop_w > max_w_for_widget:
+                st.session_state.crop_w = max_w_for_widget
+            if st.session_state.crop_w < 1 and max_w_for_widget >=1 : st.session_state.crop_w = 1
+            elif max_w_for_widget < 1: st.session_state.crop_w = max_w_for_widget # 幅が0になることもありうる
+
+            st.number_input("切り抜き幅", 1, max_w_for_widget if max_w_for_widget >=1 else 1, key="crop_w") # valueはセッションステートから
+
+        with col_crop2:
+            new_crop_y = st.number_input("切り抜き開始 Y座標", 0, full_img_h - 1, st.session_state.crop_y, key="crop_y_ui")
+            if new_crop_y != st.session_state.crop_y:
+                st.session_state.crop_y = new_crop_y
+                max_h_possible = full_img_h - st.session_state.crop_y
+                if st.session_state.crop_h > max_h_possible:
+                    st.session_state.crop_h = max_h_possible
+                if st.session_state.crop_h < 1: st.session_state.crop_h = 1
+                # st.experimental_rerun()
+
+            max_h_for_widget = full_img_h - st.session_state.crop_y
+            if st.session_state.crop_h > max_h_for_widget:
+                st.session_state.crop_h = max_h_for_widget
+            if st.session_state.crop_h < 1 and max_h_for_widget >=1: st.session_state.crop_h = 1
+            elif max_h_for_widget < 1: st.session_state.crop_h = max_h_for_widget
+
+            st.number_input("切り抜き高さ", 1, max_h_for_widget if max_h_for_widget >=1 else 1, key="crop_h") # valueはセッションステートから
+
+    # プレビューと処理対象画像の決定
+    cx, cy = st.session_state.crop_x, st.session_state.crop_y
+    # cw, ch は、X,Yの変更によって調整された後の値をセッションステートから読む
+    cw = st.session_state.crop_w 
+    ch = st.session_state.crop_h
+
     preview_img_with_rect = full_img_np_rgb_uint8.copy()
-    cx, cy, cw, ch = st.session_state.crop_x, st.session_state.crop_y, st.session_state.crop_w, st.session_state.crop_h
-    # 枠線が画像範囲内になるように調整
-    cv2.rectangle(preview_img_with_rect, (cx, cy), 
-                  (min(cx + cw, full_img_w -1), min(cy + ch, full_img_h-1)), 
-                  (255,0,0), 2) # 赤枠
-    st.image(preview_img_with_rect, caption=f"トリミング範囲プレビュー (赤枠: X={cx}, Y={cy}, 幅={cw}, 高さ={ch})", use_container_width=True)
+    cv2.rectangle(preview_img_with_rect, (cx, cy), (min(cx + cw, full_img_w), min(cy + ch, full_img_h)), (255,0,0), 3) # 枠線太く
+    st.image(preview_img_with_rect, caption=f"トリミング範囲プレビュー (赤枠)", use_container_width=True)
     st.markdown("---")
 
-    # --- 処理対象画像の決定 (トリミングまたは全体) ---
-    if not (cx == 0 and cy == 0 and cw == full_img_w and ch == full_img_h) and (cw > 0 and ch > 0) : # デフォルト全体サイズではなく、かつ有効な幅高さ
-        img_for_analysis_rgb_np_uint8 = full_img_np_rgb_uint8[cy:cy+ch, cx:cx+cw].copy()
-        analysis_caption_suffix = f"(トリミング領域: {cw}x{ch}px)"
+    if not (cx == 0 and cy == 0 and cw == full_img_w and ch == full_img_h) and (cw > 0 and ch > 0) :
+        img_for_analysis_rgb_np_uint8 = full_img_np_rgb_uint8[cy:min(cy+ch, full_img_h), cx:min(cx+cw, full_img_w)].copy()
+        analysis_caption_suffix = f"(トリミング領域: {img_for_analysis_rgb_np_uint8.shape[1]}x{img_for_analysis_rgb_np_uint8.shape[0]}px)"
     else:
         img_for_analysis_rgb_np_uint8 = full_img_np_rgb_uint8.copy()
         analysis_caption_suffix = "(画像全体)"
     
-    # グレースケール化
     img_gray = cv2.cvtColor(img_for_analysis_rgb_np_uint8, cv2.COLOR_RGB2GRAY)
     if img_gray.dtype != np.uint8: img_gray = img_gray.astype(np.uint8)
 
 
     # --- サイドバーのパラメータ設定UI (画像ロード後に表示) ---
     st.sidebar.subheader("1. 二値化") 
-    st.sidebar.markdown("_この値を色々変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
+    st.sidebar.markdown("_この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
     st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
     st.sidebar.number_input('閾値 (直接入力)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
     threshold_value_to_use = st.session_state.binary_threshold_value 
@@ -166,23 +197,22 @@ if st.session_state.pil_image_to_process is not None:
     st.sidebar.markdown("<br>", unsafe_allow_html=True); st.sidebar.markdown("_二値化だけでうまくいかない場合は下記も調整を_")
     st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
     morph_kernel_shape_options_display = {"楕円":cv2.MORPH_ELLIPSE,"矩形":cv2.MORPH_RECT,"十字":cv2.MORPH_CROSS}
-    selected_shape_name_sb = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options_display.keys()), index=0)
+    selected_shape_name_sb = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options_display.keys()),index=0) 
     morph_kernel_shape_to_use = morph_kernel_shape_options_display[selected_shape_name_sb]
     st.sidebar.caption("輝点の形状に合わせて。") 
-    kernel_options_morph = [1,3,5,7,9]; kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph, value=3)
+    kernel_options_morph = [1,3,5,7,9]; kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,value=3)
     st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""") 
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
-    min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1, value=1) 
+    min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,value=1,step=1) 
     st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。""") 
-    max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1, value=1000) 
+    max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,value=1000,step=1) 
     st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。""") 
 
     # --- メインエリアの画像処理と表示ロジック ---
     st.header(f"処理ステップごとの画像 {analysis_caption_suffix}")
     kernel_size_blur = 1 
-    if img_gray is None or img_gray.size == 0 : 
-        st.error("グレースケール画像準備失敗。"); st.session_state.counted_spots_value="処理エラー"; st.stop()
-    blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur,kernel_size_blur),0) # img_gray はトリミング後または全体
+    if img_gray.size == 0 : st.error("処理対象のグレースケール画像が空です。トリミング範囲を確認してください。"); st.stop()
+    blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur,kernel_size_blur),0)
     ret_thresh, binary_img_processed = cv2.threshold(blurred_img,threshold_value_to_use,255,cv2.THRESH_BINARY)
     if not ret_thresh: st.error("二値化失敗。"); binary_img_for_morph_processed=None
     else: binary_img_for_morph_processed=binary_img_processed.copy()
@@ -207,15 +237,13 @@ if st.session_state.pil_image_to_process is not None:
     else:
         st.warning("輪郭検出元画像準備できず。"); st.session_state.counted_spots_value="エラー"
     
-    # メインエリアの画像表示 (1カラム)
-    # 「元の画像」はトリミング設定セクションで表示済みなので、ここでは処理後の画像のみ
     st.subheader(f"1. 二値化処理後 {analysis_caption_suffix}")
     if binary_img_processed is not None: st.image(binary_img_processed,caption=f'閾値:{threshold_value_to_use}',use_container_width=True)
     else: st.info("二値化未実施/失敗")
     st.markdown("---")
     with st.expander(f"▼ 2. 形態学的処理後を見る {analysis_caption_suffix}", expanded=False): 
         if opened_img_processed is not None: 
-            st.image(opened_img_processed,caption=f'カーネル:{selected_shape_name_sb} {kernel_size_morph_to_use}x{kernel_size_morph_to_use}',use_container_width=True)
+            st.image(opened_img_processed,caption=f'カーネル:{selected_shape_name} {kernel_size_morph_to_use}x{kernel_size_morph_to_use}',use_container_width=True)
         else: st.info("形態学的処理未実施/失敗")
     st.markdown("---") 
     st.subheader(f"3. 輝点検出とマーキング {analysis_caption_suffix}")
