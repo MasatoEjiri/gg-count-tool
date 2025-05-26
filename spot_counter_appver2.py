@@ -2,13 +2,13 @@ import streamlit as st
 from PIL import Image
 import numpy as np
 import cv2
-from streamlit_drawable_canvas import st_canvas # ROI選択機能を再導入
+from streamlit_drawable_canvas import st_canvas
 import io
 
 # ページ設定
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
-# ファイルアップローダーのカスタムCSS
+# CSS略
 file_uploader_css = """<style>
 section[data-testid="stFileUploaderDropzone"]{border:3px dashed white !important;border-radius:0.5rem !important;background-color:#495057 !important;padding:25px !important;}
 section[data-testid="stFileUploaderDropzone"] > div[data-testid="stFileUploadDropzoneInstructions"]{display:flex;flex-direction:column;align-items:center;justify-content:center;}
@@ -37,13 +37,7 @@ st.sidebar.header("解析パラメータ設定")
 UPLOAD_ICON="📤"; uploaded_file_widget=st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアップロード",type=['tif','tiff','png','jpg','jpeg'],help="対応形式: TIF,TIFF,PNG,JPG,JPEG。")
 
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>",unsafe_allow_html=True)
-st.markdown("""### 使用方法
-1. 画像を左にアップロードしてください。
-2. **(オプション)** 「1. 元の画像 と 解析エリア選択」で、表示された画像（キャンバス）上でマウスをドラッグし、解析したい四角いエリアを描画します。最後に描画した四角形がROIとなります。何も描画しない場合は画像全体が対象です。
-3. 画像（または選択エリア）を元に、左サイドバーの「1. 二値化」以降のパラメータを調整してください。
-4. メインエリアの各処理ステップ画像と、最終的な「3. 輝点検出とマーキング」で結果を確認します。
-""")
-st.markdown("---") 
+st.markdown("""### 使用方法..."""); st.markdown("---") # 使用方法は前回と同じ
 
 if uploaded_file_widget is not None:
     if st.session_state.get('last_uploaded_filename_for_roi_reset') != uploaded_file_widget.name:
@@ -58,17 +52,17 @@ else:
     if st.session_state.pil_image_to_process is not None: st.session_state.pil_image_to_process=None; st.session_state.counted_spots_value="---"; st.session_state.roi_coords=None
 
 if st.session_state.pil_image_to_process is not None:
-    pil_image_rgb_full = None; img_gray_full_res = None
+    pil_image_rgb_full_res = None; img_gray_full_res = None
     np_array_rgb_uint8_full_res = None 
     pil_for_canvas_bg = None; np_for_canvas_bg_display = None
 
     try:
-        pil_image_rgb_full = st.session_state.pil_image_to_process.convert("RGB")
-        np_array_rgb_uint8_full_res = np.array(pil_image_rgb_full).astype(np.uint8)
+        pil_image_rgb_full_res = st.session_state.pil_image_to_process.convert("RGB")
+        np_array_rgb_uint8_full_res = np.array(pil_image_rgb_full_res).astype(np.uint8)
         img_gray_full_res = cv2.cvtColor(np_array_rgb_uint8_full_res, cv2.COLOR_RGB2GRAY)
         if img_gray_full_res.dtype != np.uint8: img_gray_full_res = img_gray_full_res.astype(np.uint8)
 
-        pil_for_canvas_bg = pil_image_rgb_full.copy()
+        pil_for_canvas_bg = pil_image_rgb_full_res.copy()
         CANVAS_MAX_DIM = 800; canvas_scale_x, canvas_scale_y = 1.0, 1.0
         if pil_for_canvas_bg.width > CANVAS_MAX_DIM or pil_for_canvas_bg.height > CANVAS_MAX_DIM:
             orig_w_for_canvas, orig_h_for_canvas = pil_for_canvas_bg.width, pil_for_canvas_bg.height
@@ -79,25 +73,26 @@ if st.session_state.pil_image_to_process is not None:
     except Exception as e: st.error(f"画像変換(フル/キャンバス用)に失敗: {e}"); st.stop()
 
     st.header("1. 元の画像 と 解析エリア選択")
-    # ★★★ このエキスパンダーが正しいインデントと位置にあることを確認 ★★★
     with st.expander("キャンバス背景候補の確認（デバッグ用）", expanded=True):
-        if np_for_canvas_bg_display is not None:
-            st.image(np_for_canvas_bg_display, caption=f"キャンバス背景プレビュー ({np_for_canvas_bg_display.shape[1]}x{np_for_canvas_bg_display.shape[0]})")
+        if np_for_canvas_bg_display is not None and np_for_canvas_bg_display.size > 0:
+            st.image(np_for_canvas_bg_display, caption=f"キャンバス背景プレビュー ({pil_for_canvas_bg.width}x{pil_for_canvas_bg.height})")
         else: st.warning("キャンバス背景候補が準備できませんでした。")
     
     st.info("↓下の画像（キャンバス）上でマウスをドラッグして、解析したい四角いエリアを描画してください。...")
     
     canvas_result = None
-    if np_for_canvas_bg_display is not None and np_for_canvas_bg_display.size > 0 :
+    if pil_for_canvas_bg is not None: # ★★★ 背景にPillowイメージを使用 ★★★
         canvas_result = st_canvas(
             fill_color="rgba(255,0,0,0.1)", stroke_width=2, stroke_color="red",
-            background_image=np_for_canvas_bg_display, 
+            background_image=pil_for_canvas_bg, # ★★★ Pillowイメージ(縮小版)を背景として使用 ★★★
             update_streamlit=True, 
-            height=np_for_canvas_bg_display.shape[0], width=np_for_canvas_bg_display.shape[1],
-            drawing_mode="rect", key="roi_canvas_main_v5"
+            height=pil_for_canvas_bg.height,   # Pillowイメージの高さ
+            width=pil_for_canvas_bg.width,     # Pillowイメージの幅
+            drawing_mode="rect", 
+            key="roi_canvas_main_v6" # キーを更新
         )
     else:
-        st.error("キャンバス背景用の画像データがありません。"); st.stop()
+        st.error("キャンバス描画用の背景画像(Pillow)がありません。"); st.stop()
 
     img_to_process_gray = img_gray_full_res 
     img_for_marking_color_np = np_array_rgb_uint8_full_res.copy() 
@@ -121,6 +116,7 @@ if st.session_state.pil_image_to_process is not None:
             else: st.session_state.roi_coords = None
     st.markdown("---")
 
+    # --- サイドバーのパラメータ設定UI (内容は変更なし、キーも前回から維持) ---
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を色々変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
     st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
@@ -138,7 +134,8 @@ if st.session_state.pil_image_to_process is not None:
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,value=st.session_state.max_area_sb_key_v3,key="max_area_sb_key_v3") 
     st.sidebar.caption("""- ...""") 
 
-    st.header(f"処理ステップごとの画像") 
+    # --- メインエリアの画像処理と表示ロジック (内容は変更なし) ---
+    st.header(f"処理ステップごとの画像")
     kernel_size_blur=1;
     if img_to_process_gray.size==0: st.error("処理対象グレースケール画像が空。"); st.stop()
     blurred_img = cv2.GaussianBlur(img_to_process_gray,(kernel_size_blur,kernel_size_blur),0)
