@@ -2,7 +2,7 @@ import streamlit as st
 from PIL import Image
 import numpy as np
 import cv2
-from streamlit_drawable_canvas import st_canvas # streamlit-drawable-canvasをインポート
+from streamlit_drawable_canvas import st_canvas
 import io
 
 # ページ設定 (一番最初に呼び出す)
@@ -44,7 +44,11 @@ if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots
 if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 58
 if "threshold_slider_for_binary" not in st.session_state: st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
 if "threshold_number_for_binary" not in st.session_state: st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
-if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
+if "morph_shape_sb_key" not in st.session_state: st.session_state.morph_shape_sb_key = "楕円" 
+if "morph_size_sb_key" not in st.session_state: st.session_state.morph_size_sb_key = 3
+if "min_area_sb_key_v3" not in st.session_state: st.session_state.min_area_sb_key_v3 = 1 
+if "max_area_sb_key_v3" not in st.session_state: st.session_state.max_area_sb_key_v3 = 1000 
+if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None # アップロードされた生のPillowイメージ
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
 if 'roi_coords' not in st.session_state: st.session_state.roi_coords = None
 if 'last_uploaded_filename_for_roi' not in st.session_state: st.session_state.last_uploaded_filename_for_roi = None
@@ -69,10 +73,10 @@ st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_ht
 st.markdown("""
 ### 使用方法
 1. 画像を左にアップロードしてください。
-2. **(オプション)** 「1. 元の画像 と 解析エリア選択」で、画像上にマウスドラッグして解析したい四角いエリアを描画します。最後に描画した四角形が解析対象になります。何も描画しない場合は画像全体が対象です。
+2. **(オプション)** 「1. 元の画像 と 解析エリア選択」で、画像上にマウスドラッグして解析したい四角いエリアを描画します。最後に描画した四角形がROIとなります。何も描画しない場合は画像全体が対象です。
 3. 画像（または選択エリア）を元に、左サイドバーの「1. 二値化」以降のパラメータを調整してください。
 4. メインエリアの各処理ステップ画像と、最終的な「3. 輝点検出とマーキング」で結果を確認します。
-""") # 使用方法をROI選択に合わせて修正
+""")
 st.markdown("---") 
 
 # 画像読み込みロジック
@@ -97,25 +101,36 @@ else:
 
 # メイン処理と、条件付きでのサイドバーパラメータUI表示
 if st.session_state.pil_image_to_process is not None:
-    pil_image_rgb_full = None
-    img_gray_full = None
+    pil_image_rgb_full = None # ROI選択キャンバスの背景用
+    img_gray_full = None      # ROI選択前の全体のグレースケール画像
+    np_array_rgb_uint8_for_initial_display = None # 初期表示用
+
     try:
         pil_image_rgb_full = st.session_state.pil_image_to_process.convert("RGB")
-        img_array_rgb_for_opencv = np.array(pil_image_rgb_full) 
-        img_gray_full = cv2.cvtColor(img_array_rgb_for_opencv, cv2.COLOR_RGB2GRAY)
-        if img_gray_full.dtype != np.uint8:
-            img_gray_full = cv2.normalize(img_gray_full, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        
+        temp_np_array = np.array(pil_image_rgb_full)
+        if temp_np_array.dtype != np.uint8:
+            if np.issubdtype(temp_np_array.dtype, np.floating):
+                if temp_np_array.min() >= 0.0 and temp_np_array.max() <= 1.0:
+                    np_array_rgb_uint8_for_initial_display = (temp_np_array * 255).astype(np.uint8)
+                else: np_array_rgb_uint8_for_initial_display = np.clip(temp_np_array, 0, 255).astype(np.uint8)
+            elif np.issubdtype(temp_np_array.dtype, np.integer): 
+                np_array_rgb_uint8_for_initial_display = np.clip(temp_np_array, 0, 255).astype(np.uint8)
+            else: np_array_rgb_uint8_for_initial_display = temp_np_array.astype(np.uint8)
+        else: np_array_rgb_uint8_for_initial_display = temp_np_array
+        
+        img_gray_full = cv2.cvtColor(np_array_rgb_uint8_for_initial_display, cv2.COLOR_RGB2GRAY)
+        if img_gray_full.dtype != np.uint8: 
+            img_gray_full = img_gray_full.astype(np.uint8)
     except Exception as e:
         st.error(f"画像変換(フル)に失敗: {e}"); st.stop()
 
     st.header("1. 元の画像 と 解析エリア選択")
-    
-    # ★★★ デバッグ用：st_canvasに渡す前のPillowイメージをst.imageで表示してみる ★★★
-    with st.expander("背景画像候補の確認（デバッグ用）", expanded=True): # 最初から開いておく
-        if pil_image_rgb_full:
-            st.image(pil_image_rgb_full, caption="この画像がキャンバスの背景になるはずです (Pillow RGB)", use_container_width=True)
+    with st.expander("背景画像候補の確認（デバッグ用）", expanded=True): # 最初から開く
+        if np_array_rgb_uint8_for_initial_display is not None:
+            st.image(np_array_rgb_uint8_for_initial_display, caption="この画像がキャンバスの背景になるはずです (NumPy uint8)", use_container_width=True)
         else:
-            st.warning("背景画像候補 (pil_image_rgb_full) がありません。")
+            st.warning("背景画像候補 (NumPy uint8 配列) が準備できませんでした。")
     
     st.info("↓下の画像（または上の画像と同じもの）上でマウスをドラッグして、解析したい四角いエリアを描画してください。最後に描画した四角形がROIとなります。")
 
@@ -125,16 +140,14 @@ if st.session_state.pil_image_to_process is not None:
 
     canvas_result = st_canvas(
         fill_color="rgba(255,0,0,0.1)", stroke_width=2, stroke_color=stroke_color,
-        background_image=pil_image_rgb_full if pil_image_rgb_full else None, 
+        background_image=pil_image_rgb_full, 
         update_streamlit=True, height=canvas_height, width=canvas_width,
         drawing_mode=drawing_mode, key="roi_selector_canvas"
     )
 
     img_to_process = img_gray_full 
-    roi_display_img = None       
-    # base_for_marking_bgr は img_array_rgb_for_opencv を BGR にしたもの (全体)
-    base_for_marking_bgr_full = cv2.cvtColor(np.array(pil_image_rgb_full), cv2.COLOR_RGB2BGR)
-    img_for_analysis_rgb_np_uint8 = np.array(pil_image_rgb_full).astype(np.uint8) # 初期値は全体
+    img_for_analysis_rgb_np_uint8 = np_array_rgb_uint8_for_initial_display.copy() # 初期値は全体
+    analysis_caption_suffix = "(画像全体)"
 
     if canvas_result.json_data is not None and canvas_result.json_data.get("objects", []):
         if canvas_result.json_data["objects"][-1]["type"] == "rect":
@@ -147,43 +160,48 @@ if st.session_state.pil_image_to_process is not None:
                 if (x2_roi-x1_roi > 0) and (y2_roi-y1_roi > 0):
                     st.session_state.roi_coords = (x1_roi,y1_roi,x2_roi-x1_roi,y2_roi-y1_roi)
                     img_to_process = img_gray_full[y1_roi:y2_roi, x1_roi:x2_roi].copy()
-                    # 表示用の切り出し済みカラー画像 (st.imageはRGBを期待)
-                    roi_display_img = np.array(pil_image_rgb_full)[y1_roi:y2_roi, x1_roi:x2_roi].copy() 
-                    img_for_analysis_rgb_np_uint8 = roi_display_img.copy() # 解析対象も更新
-                    st.subheader("選択されたROI（処理対象）")
-                    st.image(roi_display_img, caption=f"ROI: x={x1_roi},y={y1_roi},w={x2_roi-x1_roi},h={y2_roi-y1_roi}", use_container_width=True)
+                    img_for_analysis_rgb_np_uint8 = np_array_rgb_uint8_for_initial_display[y1_roi:y2_roi, x1_roi:x2_roi].copy()
+                    analysis_caption_suffix = f"(選択エリア: {img_to_process.shape[1]}x{img_to_process.shape[0]}px)"
+                    # st.subheader("選択されたROI（グレースケール処理対象）") # 表示重複なのでコメントアウト
+                    # st.image(img_to_process, caption=f"処理対象ROI: x={x1_roi},y={y1_roi},w={x2_roi-x1_roi},h={y2_roi-y1_roi}", use_container_width=True)
                 else:
                     st.warning("描画ROIサイズ無効。全体処理。"); img_to_process=img_gray_full; st.session_state.roi_coords = None
-            else: st.session_state.roi_coords = None # 無効な描画ならROIなし
-    # else: st.session_state.roi_coords = None # 何も描かれていない場合は st.session_state.roi_coords はそのまま
-
-    analysis_caption_suffix = f"(選択エリア: {st.session_state.roi_coords[2]}x{st.session_state.roi_coords[3]}px)" if st.session_state.roi_coords else "(画像全体)"
+            else: st.session_state.roi_coords = None
     
     # --- サイドバーのパラメータ設定UI ---
+    # (内容は変更なし、ただし処理で使う変数は下のロジックでセッションステートから取得する)
     st.sidebar.subheader("1. 二値化") 
-    st.sidebar.markdown("_この値を色々変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
+    st.sidebar.markdown("_この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
     st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
     st.sidebar.number_input('閾値 (直接入力)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
-    threshold_value_to_use = st.session_state.binary_threshold_value 
     st.sidebar.caption("""- **大きくすると:** 明るい部分のみ白に。\n- **小さくすると:** 暗い部分も白に。""")
     st.sidebar.markdown("<br>", unsafe_allow_html=True); st.sidebar.markdown("_二値化だけでうまくいかない場合は下記も調整を_")
     st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
-    morph_kernel_shape_to_use = cv2.MORPH_ELLIPSE
-    st.sidebar.markdown("カーネル形状: **楕円 (固定)**")
-    kernel_options_morph = [1,3,5,7,9]
-    kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,value=st.session_state.morph_size_sb_key,key="morph_size_sb_key")
-    st.sidebar.markdown("""オープニング処理は、画像中の小さな白いノイズ（ゴミなど）を除去したり、輝点同士を繋ぐ細い線や、輝点の細い突起部分を取り除く効果があります。これにより、個々の輝点がより明確に分離されることが期待できます。\nカーネルサイズは、この処理を行う際の「範囲の広さ」を指定します（例: サイズ3は3x3ピクセルの範囲）。カーネル形状は「楕円」に固定されています。\n* **カーネルサイズを大きくすると:**\n    * より大きなノイズや、輝点間のより太い繋がりも除去しやすくなります。\n    * ただし、処理が強くなるため、目的の輝点自体も縁から削られて小さくなったり、元々小さい輝点や細い輝点が消えてしまうことがあります。\n* **カーネルサイズを小さくすると:**\n    * 非常に小さなノイズの除去に留まり、輝点自体の形状への影響は少なくなります。\n    * 輝点同士が太い線で繋がっている場合や、大きめのノイズには効果が薄いことがあります。\n\n最適なサイズは、画像のノイズの状態や輝点の大きさ・形状によって異なります。「2. 形態学的処理後を見る」の画像を確認しながら調整してください。""", unsafe_allow_html=True)
+    morph_kernel_shape_options_display = {"楕円":cv2.MORPH_ELLIPSE,"矩形":cv2.MORPH_RECT,"十字":cv2.MORPH_CROSS}
+    selected_shape_name_sb = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options_display.keys()), value=st.session_state.morph_shape_sb_key, key="morph_shape_sb_key") 
+    st.sidebar.caption("輝点の形状に合わせて。") 
+    kernel_options_morph = [1,3,5,7,9]; 
+    kernel_size_morph_sb =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph, value=st.session_state.morph_size_sb_key, key="morph_size_sb_key")
+    st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""") 
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
-    min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1,value=st.session_state.min_area_sb_key_v3,key="min_area_sb_key_v3") 
+    min_area_sb = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1, value=st.session_state.min_area_sb_key_v3, key="min_area_sb_key_v3") 
     st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。(画像リサイズ時注意)""") 
-    max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1,value=st.session_state.max_area_sb_key_v3,key="max_area_sb_key_v3") 
+    max_area_sb = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1, value=st.session_state.max_area_sb_key_v3, key="max_area_sb_key_v3") 
     st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。(画像リサイズ時注意)""") 
 
     # --- メインエリアの画像処理と表示ロジック ---
-    st.header(f"処理ステップごとの画像 {analysis_caption_suffix}")
+    st.header(f"処理ステップごとの画像") # analysis_caption_suffix は各画像キャプションへ
+    
+    # サイドバーから最新のパラメータ値を取得して処理に使う
+    threshold_value_to_use = st.session_state.binary_threshold_value
+    morph_kernel_shape_to_use = morph_kernel_shape_options_display[st.session_state.morph_shape_sb_key]
+    kernel_size_morph_to_use = st.session_state.morph_size_sb_key
+    min_area_to_use = st.session_state.min_area_sb_key_v3 # v3キーを使用
+    max_area_to_use = st.session_state.max_area_sb_key_v3 # v3キーを使用
+
     kernel_size_blur = 1 
-    if img_gray.size == 0 : st.error("処理対象のグレースケール画像が空です。"); st.stop()
-    blurred_img = cv2.GaussianBlur(img_to_process, (kernel_size_blur,kernel_size_blur),0) # img_to_process を使用
+    if img_to_process.size == 0 : st.error("処理対象の画像領域が空です。"); st.stop()
+    blurred_img = cv2.GaussianBlur(img_to_process, (kernel_size_blur,kernel_size_blur),0)
     ret_thresh, binary_img_processed = cv2.threshold(blurred_img,threshold_value_to_use,255,cv2.THRESH_BINARY)
     if not ret_thresh: st.error("二値化失敗。"); binary_img_for_morph_processed=None
     else: binary_img_for_morph_processed=binary_img_processed.copy()
@@ -194,8 +212,6 @@ if st.session_state.pil_image_to_process is not None:
         binary_img_for_contours_processed = opened_img_processed.copy()
     else: binary_img_for_contours_processed = None
     current_counted_spots = 0 
-    
-    # マーキング用ベース画像 (トリミングされていればトリミング後のカラー、されていなければ全体のカラー)
     output_image_contours_display_bgr = cv2.cvtColor(img_for_analysis_rgb_np_uint8, cv2.COLOR_RGB2BGR)
 
     if binary_img_for_contours_processed is not None:
