@@ -9,13 +9,7 @@ import io
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
 # CSS略
-file_uploader_css = """<style>
-section[data-testid="stFileUploaderDropzone"]{border:3px dashed white !important;border-radius:0.5rem !important;background-color:#495057 !important;padding:25px !important;}
-section[data-testid="stFileUploaderDropzone"] > div[data-testid="stFileUploadDropzoneInstructions"]{display:flex;flex-direction:column;align-items:center;justify-content:center;}
-section[data-testid="stFileUploaderDropzone"] p{color:#f8f9fa !important;font-size:0.9rem;margin-bottom:0.75rem !important;}
-section[data-testid="stFileUploaderDropzone"] span{color:#ced4da !important;font-size:0.8rem;}
-section[data-testid="stFileUploaderDropzone"] button{color:#fff !important;background-color:#007bff !important;border:1px solid #007bff !important;padding:0.5em 1em !important;border-radius:0.375rem !important;font-weight:500 !important;margin-top:0.5rem !important;}
-</style>"""
+file_uploader_css = """<style>...</style>""" # 前回と同じCSS
 st.markdown(file_uploader_css, unsafe_allow_html=True)
 
 result_placeholder_sidebar = st.sidebar.empty()
@@ -54,7 +48,7 @@ else:
 if st.session_state.pil_image_to_process is not None:
     pil_image_rgb_full_res = None; img_gray_full_res = None
     np_array_rgb_uint8_full_res = None 
-    pil_for_canvas_bg = None; np_for_canvas_bg_display = None
+    pil_for_canvas_bg = None; np_for_canvas_bg_display = None # デバッグ表示用
 
     try:
         pil_image_rgb_full_res = st.session_state.pil_image_to_process.convert("RGB")
@@ -69,35 +63,44 @@ if st.session_state.pil_image_to_process is not None:
             pil_for_canvas_bg.thumbnail((CANVAS_MAX_DIM, CANVAS_MAX_DIM))
             if pil_for_canvas_bg.width > 0 : canvas_scale_x = orig_w_for_canvas / pil_for_canvas_bg.width
             if pil_for_canvas_bg.height > 0 : canvas_scale_y = orig_h_for_canvas / pil_for_canvas_bg.height
+        
+        # デバッグ表示用のNumPy配列
         np_for_canvas_bg_display = np.array(pil_for_canvas_bg).astype(np.uint8)
+
     except Exception as e: st.error(f"画像変換(フル/キャンバス用)に失敗: {e}"); st.stop()
 
     st.header("1. 元の画像 と 解析エリア選択")
-    with st.expander("キャンバス背景候補の確認（デバッグ用）", expanded=True):
+    with st.expander("キャンバス背景候補の確認（デバッグ用）", expanded=True): # 最初から開いておく
         if np_for_canvas_bg_display is not None and np_for_canvas_bg_display.size > 0:
-            st.image(np_for_canvas_bg_display, caption=f"キャンバス背景プレビュー ({pil_for_canvas_bg.width}x{pil_for_canvas_bg.height})")
-        else: st.warning("キャンバス背景候補が準備できませんでした。")
+            st.image(np_for_canvas_bg_display, caption=f"この画像が表示されるはず (縮小版NumPy): {pil_for_canvas_bg.width}x{pil_for_canvas_bg.height}")
+        else: st.warning("キャンバス背景候補(NumPy)が準備できませんでした。")
     
     st.info("↓下の画像（キャンバス）上でマウスをドラッグして、解析したい四角いエリアを描画してください。...")
     
     canvas_result = None
-    if pil_for_canvas_bg is not None: # ★★★ 背景にPillowイメージを使用 ★★★
+    # ★★★ st_canvasに渡す背景画像を Pillow オブジェクトに戻す ★★★
+    if pil_for_canvas_bg is not None: 
         canvas_result = st_canvas(
             fill_color="rgba(255,0,0,0.1)", stroke_width=2, stroke_color="red",
-            background_image=pil_for_canvas_bg, # ★★★ Pillowイメージ(縮小版)を背景として使用 ★★★
+            background_image=pil_for_canvas_bg, # Pillowイメージ(縮小版)を背景として使用
             update_streamlit=True, 
-            height=pil_for_canvas_bg.height,   # Pillowイメージの高さ
-            width=pil_for_canvas_bg.width,     # Pillowイメージの幅
+            height=pil_for_canvas_bg.height,   
+            width=pil_for_canvas_bg.width,    
             drawing_mode="rect", 
-            key="roi_canvas_main_v6" # キーを更新
+            key="roi_canvas_main_v7" # キーを念のため更新
         )
     else:
         st.error("キャンバス描画用の背景画像(Pillow)がありません。"); st.stop()
 
+    # (以降のROI処理、サイドバーUI、メインの画像処理・表示ロジックは変更なし)
+    # ... (img_to_process_gray, img_for_marking_color_np, analysis_caption_suffix の決定)
+    # ... (サイドバーのパラメータUI定義)
+    # ... (メインエリアの画像処理と表示)
+
+    # --- ROI処理と解析対象画像の決定 --- (前回からの変更なし)
     img_to_process_gray = img_gray_full_res 
     img_for_marking_color_np = np_array_rgb_uint8_full_res.copy() 
     analysis_caption_suffix = "(画像全体)"
-
     if canvas_result and canvas_result.json_data is not None and canvas_result.json_data.get("objects", []):
         if canvas_result.json_data["objects"][-1]["type"] == "rect":
             rect = canvas_result.json_data["objects"][-1]
@@ -116,7 +119,7 @@ if st.session_state.pil_image_to_process is not None:
             else: st.session_state.roi_coords = None
     st.markdown("---")
 
-    # --- サイドバーのパラメータ設定UI (内容は変更なし、キーも前回から維持) ---
+    # --- サイドバーのパラメータ設定UI (内容は変更なし) ---
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を色々変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
     st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
