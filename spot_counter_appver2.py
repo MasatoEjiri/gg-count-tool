@@ -1,5 +1,5 @@
 import streamlit as st
-from PIL import Image, ImageDraw # ImageDraw をインポート
+from PIL import Image, ImageDraw 
 import numpy as np
 import cv2
 from streamlit_drawable_canvas import st_canvas
@@ -59,7 +59,7 @@ else:
 
 if st.session_state.pil_image_to_process is not None:
     pil_image_rgb_full_res = None; img_gray_full_res = None
-    np_array_rgb_uint8_full_res = None
+    np_array_rgb_uint8_full_res = None 
     
     try:
         pil_image_rgb_full_res = st.session_state.pil_image_to_process.convert("RGB")
@@ -68,9 +68,8 @@ if st.session_state.pil_image_to_process is not None:
         if img_gray_full_res.dtype != np.uint8: img_gray_full_res = img_gray_full_res.astype(np.uint8)
     except Exception as e: st.error(f"画像変換(フル解像度)に失敗: {e}"); st.stop()
 
-    st.header("1. 解析エリア選択") # ヘッダー変更
+    st.header("1. 解析エリア選択") 
     
-    # ★★★ 元画像はst.imageで別途表示（参照用）★★★
     if pil_image_rgb_full_res:
         st.markdown("##### 元の画像（参照用）")
         display_pil_img_ref = pil_image_rgb_full_res.copy()
@@ -79,14 +78,12 @@ if st.session_state.pil_image_to_process is not None:
             display_pil_img_ref.thumbnail((CANVAS_MAX_DIM_REF, CANVAS_MAX_DIM_REF))
         st.image(display_pil_img_ref, caption="この画像を参照して、下のキャンバスにROIを描画してください。")
     
-    st.info("↓下の薄いグレーのキャンバス上でマウスをドラッグして、解析したい四角いエリアを描画してください。")
+    st.info("↓下のキャンバス上でマウスをドラッグして、解析したい四角いエリアを描画してください。")
     
-    # キャンバス設定 (背景画像なし、背景色を指定)
     drawing_mode = "rect"; stroke_color = "red"; stroke_width_canvas = 2
-    canvas_height_for_drawing = 400 # 固定の高さ
-    canvas_width_for_drawing = 600  # 固定の幅 
+    canvas_height_for_drawing = 400 
+    canvas_width_for_drawing = 600  
     
-    # アスペクト比を保ってキャンバスサイズを調整 (オプション)
     if pil_image_rgb_full_res:
         pil_temp_for_canvas_size = pil_image_rgb_full_res.copy()
         if pil_temp_for_canvas_size.width / pil_temp_for_canvas_size.height > canvas_width_for_drawing / canvas_height_for_drawing :
@@ -95,8 +92,8 @@ if st.session_state.pil_image_to_process is not None:
         else: 
             final_canvas_height = canvas_height_for_drawing
             final_canvas_width = int(canvas_height_for_drawing * pil_temp_for_canvas_size.width / pil_temp_for_canvas_size.height)
-        if final_canvas_width <=0: final_canvas_width = 100 # 最小幅保証
-        if final_canvas_height <=0: final_canvas_height = 100 # 最小高さ保証
+        if final_canvas_width <=0: final_canvas_width = 100 
+        if final_canvas_height <=0: final_canvas_height = 100 
     else:
         final_canvas_width = canvas_width_for_drawing
         final_canvas_height = canvas_height_for_drawing
@@ -105,21 +102,18 @@ if st.session_state.pil_image_to_process is not None:
         fill_color="rgba(255,0,0,0.1)", 
         stroke_width=stroke_width_canvas, 
         stroke_color=stroke_color,
-        background_color="#eeeeee",  # ★★★ 背景色を薄いグレーに設定 ★★★
-        # background_image=None,     # ★★★ 背景画像は指定しない ★★★
+        background_color="lightcoral",  # ★★★ 背景色をテスト用に 'lightcoral' に変更 ★★★
         update_streamlit=True, 
         height=final_canvas_height,   
         width=final_canvas_width,    
         drawing_mode=drawing_mode, 
-        key="roi_canvas_plain_background_test" # キーを再度更新
+        key="roi_canvas_bg_color_test" 
     )
 
-    # ROI処理と解析対象画像の決定
     img_to_process_gray = img_gray_full_res 
     img_for_marking_color_np = np_array_rgb_uint8_full_res.copy() 
     analysis_caption_suffix = "(画像全体)"
     
-    # スケーリングファクターの計算 (キャンバスサイズとフル解像度画像サイズの間)
     scale_x = pil_image_rgb_full_res.width / final_canvas_width if final_canvas_width > 0 else 1.0
     scale_y = pil_image_rgb_full_res.height / final_canvas_height if final_canvas_height > 0 else 1.0
 
@@ -135,13 +129,14 @@ if st.session_state.pil_image_to_process is not None:
                     img_to_process_gray = img_gray_full_res[y1:y2, x1:x2].copy()
                     img_for_marking_color_np = np_array_rgb_uint8_full_res[y1:y2, x1:x2].copy()
                     analysis_caption_suffix = f"(選択エリア: {img_to_process_gray.shape[1]}x{img_to_process_gray.shape[0]}px @フル解像度)"
-                    # with st.expander("選択されたROI（処理対象のグレースケール）", expanded=True): # 表示重複のため削除
+                    # with st.expander("選択されたROI（処理対象のグレースケール）", expanded=True): # この表示はメイン処理ステップへ移動
                     #     st.image(img_to_process_gray, caption=f"ROI: x={x1},y={y1},w={x2-x1},h={y2-y1} (フル解像度座標)")
                 else: st.warning("描画ROI無効。全体処理。"); img_to_process_gray=img_gray_full_res; st.session_state.roi_coords=None
             else: st.session_state.roi_coords = None
     st.markdown("---")
 
     # --- サイドバーのパラメータ設定UI (内容は変更なし) ---
+    # (省略、前回と同じ)
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を色々変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
     st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
@@ -159,8 +154,21 @@ if st.session_state.pil_image_to_process is not None:
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,value=st.session_state.max_area_sb_key_v3,key="max_area_sb_key_v3") 
     st.sidebar.caption("""- ...""") 
 
-    # --- メインエリアの画像処理と表示ロジック (内容は変更なし) ---
+
+    # --- メインエリアの画像処理と表示ロジック ---
     st.header(f"処理ステップごとの画像") 
+    # (「元の画像」の表示はROI選択セクションに移動したので、ここでは削除)
+    # st.subheader(f"元の画像 {analysis_caption_suffix}") # または処理対象画像を表示
+    # if img_for_analysis_rgb_np_uint8 is not None:
+    #     st.image(img_for_analysis_rgb_np_uint8, caption=f"処理対象 {analysis_caption_suffix}")
+    # st.markdown("---")
+
+    if st.session_state.roi_coords: # ROIが選択されていれば、切り出したグレースケール画像を表示
+        with st.expander(f"▼ ROI処理対象グレースケール画像を見る {analysis_caption_suffix}", expanded=False):
+            st.image(img_to_process_gray, caption="ROIグレースケール")
+        st.markdown("---")
+
+
     kernel_size_blur=1;
     if img_to_process_gray.size==0: st.error("処理対象グレースケール画像が空。"); st.stop()
     blurred_img = cv2.GaussianBlur(img_to_process_gray,(kernel_size_blur,kernel_size_blur),0)
