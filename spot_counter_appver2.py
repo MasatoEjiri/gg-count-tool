@@ -1,8 +1,7 @@
 import streamlit as st
-from PIL import Image, ImageDraw 
+from PIL import Image
 import numpy as np
 import cv2
-from streamlit_drawable_canvas import st_canvas
 import io
 
 # ページ設定
@@ -25,121 +24,141 @@ def display_count_in_sidebar(placeholder, count_value):
     html=f"""<div style="border-radius:8px;padding:15px;text-align:center;background-color:{bg};margin-bottom:15px;color:{lf};"><p style="font-size:16px;margin-bottom:5px;font-weight:bold;">{label_text}</p><p style="font-size:48px;font-weight:bold;margin-top:0px;color:{vf};line-height:1.1;">{value_text}</p></div>"""
     with placeholder.container(): placeholder.markdown(html, unsafe_allow_html=True)
 
-default_ss = {'counted_spots_value':"---","binary_threshold_value":58,"threshold_slider_for_binary":58,"threshold_number_for_binary":58,"morph_shape_sb_key":"楕円","morph_size_sb_key":3,"min_area_sb_key_v3":1,"max_area_sb_key_v3":1000,'pil_image_to_process':None,'image_source_caption':"アップロードされた画像",'roi_coords':None,'last_uploaded_filename_for_roi_reset':None}
+# セッションステート初期化
+default_ss = {
+    'counted_spots_value':"---",
+    "binary_threshold_value":58, 
+    "threshold_slider_for_binary":58, 
+    "threshold_number_for_binary":58,
+    'pil_image_to_process':None, 
+    'image_source_caption':"アップロードされた画像",
+    'roi_x': 0, 'roi_y': 0, 'roi_w': 0, 'roi_h': 0, # ROIパラメータ
+    'image_for_roi_w': 100, 'image_for_roi_h': 100, # ROI設定用画像の寸法
+    'last_uploaded_filename_for_roi_reset':None
+}
 for k,v in default_ss.items():
     if k not in st.session_state: st.session_state[k]=v
 
+# コールバック
 def sync_threshold_from_slider(): st.session_state.binary_threshold_value=st.session_state.threshold_slider_for_binary; st.session_state.threshold_number_for_binary=st.session_state.threshold_slider_for_binary
 def sync_threshold_from_number_input(): st.session_state.binary_threshold_value=st.session_state.threshold_number_for_binary; st.session_state.threshold_slider_for_binary=st.session_state.threshold_number_for_binary
 
+# --- サイドバー基本UI ---
 display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value) 
 st.sidebar.header("解析パラメータ設定")
 UPLOAD_ICON="📤"; uploaded_file_widget=st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアップロード",type=['tif','tiff','png','jpg','jpeg'],help="対応形式: TIF,TIFF,PNG,JPG,JPEG。")
 
+# --- メインエリア ---
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>",unsafe_allow_html=True)
 st.markdown("""### 使用方法
 1. 画像を左にアップロードしてください。
-2. 「1. 解析エリア選択」の画像（キャンバス）上でマウスをドラッグし、解析したい四角いエリアを描画します。最後に描画した四角形がROIとなります。何も描画しない場合は画像全体が対象です。
-3. 画像（または選択エリア）を元に、左サイドバーの「1. 二値化」以降のパラメータを調整してください。
+2. 「1. 解析エリア選択（ROI）」で、表示された画像の下のスライダーを操作し、解析したい四角いエリアを調整します。画像上の赤い枠が選択範囲です。
+3. 設定した解析エリア（または画像全体）を元に、左サイドバーの「1. 二値化」以降のパラメータを調整してください。
 4. メインエリアの各処理ステップ画像と、最終的な「3. 輝点検出とマーキング」で結果を確認します。
-""") # 使用方法を修正
+""")
 st.markdown("---") 
 
+# 画像読み込みとROIパラメータ初期化
 if uploaded_file_widget is not None:
     if st.session_state.get('last_uploaded_filename_for_roi_reset') != uploaded_file_widget.name:
-        st.session_state.roi_coords = None; st.session_state.last_uploaded_filename_for_roi_reset = uploaded_file_widget.name
-    try:
-        uploaded_file_bytes = uploaded_file_widget.getvalue()
-        pil_img_original_full_res = Image.open(io.BytesIO(uploaded_file_bytes))
-        st.session_state.pil_image_to_process = pil_img_original_full_res
-        st.session_state.image_source_caption = f"アップロード: {uploaded_file_widget.name}"
-    except Exception as e: st.sidebar.error(f"アップロード画像の読み込みに失敗: {e}"); st.session_state.pil_image_to_process=None; st.session_state.counted_spots_value="読込エラー"; st.stop()
-else: 
-    if st.session_state.pil_image_to_process is not None: st.session_state.pil_image_to_process=None; st.session_state.counted_spots_value="---"; st.session_state.roi_coords=None
+        st.session_state.last_uploaded_filename_for_roi_reset = uploaded_file_widget.name
+        # 新しい画像がアップロードされたらROIパラメータをリセット
+        try:
+            temp_bytes = uploaded_file_widget.getvalue() # 一時的にバイトデータを取得
+            temp_pil = Image.open(io.BytesIO(temp_bytes)).convert("RGB")
+            temp_np = np.array(temp_pil).astype(np.uint8)
+            h_orig, w_orig = temp_np.shape[:2]
+            st.session_state.roi_x = 0
+            st.session_state.roi_y = 0
+            st.session_state.roi_w = w_orig
+            st.session_state.roi_h = h_orig
+            st.session_state.image_for_roi_w = w_orig
+            st.session_state.image_for_roi_h = h_orig
+            uploaded_file_widget.seek(0) # ポインタを戻す (getvalue()の後必要)
+        except Exception: # 画像が開けない場合は何もしない（次のブロックでエラー処理）
+            pass
 
+
+    try:
+        uploaded_file_bytes = uploaded_file_widget.getvalue() # 再度取得（またはキャッシュされたものを使う）
+        pil_img_original_full_res = Image.open(io.BytesIO(uploaded_file_bytes))
+        st.session_state.pil_image_to_process = pil_img_original_full_res # フル解像度を保持
+        st.session_state.image_source_caption = f"アップロード: {uploaded_file_widget.name}"
+    except Exception as e: 
+        st.sidebar.error(f"アップロード画像の読み込みに失敗: {e}"); 
+        st.session_state.pil_image_to_process=None; st.session_state.counted_spots_value="読込エラー"; st.stop()
+else: 
+    if st.session_state.pil_image_to_process is not None: 
+        st.session_state.pil_image_to_process=None; st.session_state.counted_spots_value="---"
+
+# メイン処理
 if st.session_state.pil_image_to_process is not None:
     pil_image_rgb_full_res = None; img_gray_full_res = None
-    np_array_rgb_uint8_full_res = None 
-    pil_for_canvas_bg_final = None # ★★★ キャンバス背景用の最終Pillowイメージ ★★★
+    np_array_rgb_uint8_full_res = None
     
     try:
         pil_image_rgb_full_res = st.session_state.pil_image_to_process.convert("RGB")
         np_array_rgb_uint8_full_res = np.array(pil_image_rgb_full_res).astype(np.uint8)
         img_gray_full_res = cv2.cvtColor(np_array_rgb_uint8_full_res, cv2.COLOR_RGB2GRAY)
         if img_gray_full_res.dtype != np.uint8: img_gray_full_res = img_gray_full_res.astype(np.uint8)
+    except Exception as e: st.error(f"画像変換(フル解像度)に失敗: {e}"); st.stop()
 
-        # キャンバス背景用に画像を準備 (縮小し、「洗濯」処理も施す)
-        temp_pil_for_canvas = pil_image_rgb_full_res.copy()
-        CANVAS_MAX_DIM = 800 # 必要に応じて調整
-        
-        original_width_for_scaling = temp_pil_for_canvas.width
-        original_height_for_scaling = temp_pil_for_canvas.height
-
-        if temp_pil_for_canvas.width > CANVAS_MAX_DIM or temp_pil_for_canvas.height > CANVAS_MAX_DIM:
-            temp_pil_for_canvas.thumbnail((CANVAS_MAX_DIM, CANVAS_MAX_DIM))
-        
-        # 「洗濯」処理
-        img_byte_arr = io.BytesIO()
-        temp_pil_for_canvas.save(img_byte_arr, format='PNG') # PNG形式でバイトデータに保存
-        img_byte_arr.seek(0) 
-        pil_for_canvas_bg_final = Image.open(img_byte_arr) # バイトデータから再読み込み
-        # pil_for_canvas_bg_final をRGBに再変換（PNG保存でモードが変わる可能性を考慮）
-        pil_for_canvas_bg_final = pil_for_canvas_bg_final.convert("RGB")
-
-
-    except Exception as e: st.error(f"画像変換・準備中にエラー: {e}"); st.stop()
-
-    st.header("1. 解析エリア選択") 
-    st.info("↓下の画像（キャンバス）上でマウスをドラッグして、解析したい四角いエリアを描画してください。最後に描画した四角形がROIとなります。")
+    st.header("1. 解析エリア選択（ROI）") 
     
-    canvas_result = None
-    if pil_for_canvas_bg_final is not None: 
-        canvas_height = pil_for_canvas_bg_final.height
-        canvas_width = pil_for_canvas_bg_final.width
-        
-        # スケーリングファクターの計算 (フル解像度画像と、実際にキャンバス背景に使われる画像の間)
-        scale_x = pil_image_rgb_full_res.width / canvas_width if canvas_width > 0 else 1.0
-        scale_y = pil_image_rgb_full_res.height / canvas_height if canvas_height > 0 else 1.0
+    # --- ROI設定用UI ---
+    # 表示用の画像を準備 (st.imageはNumPyを期待)
+    roi_display_img_base = np_array_rgb_uint8_full_res.copy()
+    img_h, img_w = roi_display_img_base.shape[:2]
 
-        canvas_result = st_canvas(
-            fill_color="rgba(255,0,0,0.1)", 
-            stroke_width=2, 
-            stroke_color="red",
-            background_image=pil_for_canvas_bg_final, # ★★★ 「洗濯・縮小された」Pillowイメージを使用 ★★★
-            update_streamlit=True, 
-            height=canvas_height,   
-            width=canvas_width,    
-            drawing_mode="rect", 
-            key="roi_canvas_with_laundered_pil_bg" 
-        )
-    else:
-        st.error("キャンバス背景用の画像が準備できませんでした。"); st.stop()
+    # 新しい画像がアップロードされたか、またはROIの幅・高さが画像サイズと異なる場合にリセット
+    if st.session_state.image_for_roi_w != img_w or st.session_state.image_for_roi_h != img_h:
+        st.session_state.roi_x = 0
+        st.session_state.roi_y = 0
+        st.session_state.roi_w = img_w
+        st.session_state.roi_h = img_h
+        st.session_state.image_for_roi_w = img_w
+        st.session_state.image_for_roi_h = img_h
+        # st.experimental_rerun() # 値の即時反映のため
 
-    # (以降のROI処理、サイドバーUI、メインの画像処理・表示ロジックは変更なし)
-    # ... (img_to_process_gray, img_for_marking_color_np, analysis_caption_suffix の決定)
-    # ... (サイドバーのパラメータUI定義)
-    # ... (メインエリアの画像処理と表示)
-    img_to_process_gray = img_gray_full_res 
-    img_for_marking_color_np = np_array_rgb_uint8_full_res.copy() 
-    analysis_caption_suffix = "(画像全体)"
-    if canvas_result and canvas_result.json_data is not None and canvas_result.json_data.get("objects", []):
-        if canvas_result.json_data["objects"][-1]["type"] == "rect":
-            rect = canvas_result.json_data["objects"][-1]
-            x_cvs,y_cvs,w_cvs,h_cvs = int(rect["left"]),int(rect["top"]),int(rect["width"]),int(rect["height"])
-            if w_cvs > 0 and h_cvs > 0:
-                x_orig,y_orig,w_orig,h_orig = int(x_cvs*scale_x),int(y_cvs*scale_y),int(w_cvs*scale_x),int(h_cvs*scale_y)
-                x1,y1=max(0,x_orig),max(0,y_orig); x2,y2=min(img_gray_full_res.shape[1],x_orig+w_orig),min(img_gray_full_res.shape[0],y_orig+h_orig)
-                if (x2-x1 > 0) and (y2-y1 > 0):
-                    st.session_state.roi_coords=(x1,y1,x2-x1,y2-y1)
-                    img_to_process_gray = img_gray_full_res[y1:y2, x1:x2].copy()
-                    img_for_marking_color_np = np_array_rgb_uint8_full_res[y1:y2, x1:x2].copy()
-                    analysis_caption_suffix = f"(選択エリア: {img_to_process_gray.shape[1]}x{img_to_process_gray.shape[0]}px @フル解像度)"
-                    with st.expander("選択されたROI（処理対象のグレースケール）", expanded=True):
-                        st.image(img_to_process_gray, caption=f"ROI: x={x1},y={y1},w={x2-x1},h={y2-y1} (フル解像度座標)")
-                else: st.warning("描画ROI無効。全体処理。"); img_to_process_gray=img_gray_full_res; st.session_state.roi_coords=None
-            else: st.session_state.roi_coords = None
+    st.write(f"元画像サイズ: 幅={img_w}px, 高さ={img_h}px。スライダーで赤い枠（ROI）を調整してください。")
+    
+    cols_roi1 = st.columns(2)
+    st.session_state.roi_x = cols_roi1[0].slider("ROI 左上 X", 0, img_w - 1, st.session_state.roi_x, key="roi_x_slider")
+    st.session_state.roi_y = cols_roi1[1].slider("ROI 左上 Y", 0, img_h - 1, st.session_state.roi_y, key="roi_y_slider")
+    
+    cols_roi2 = st.columns(2)
+    max_w = img_w - st.session_state.roi_x
+    if st.session_state.roi_w > max_w : st.session_state.roi_w = max_w
+    if st.session_state.roi_w < 1 and max_w >=1 : st.session_state.roi_w = 1
+    elif max_w < 1: st.session_state.roi_w = max_w
+    st.session_state.roi_w = cols_roi2[0].slider("ROI 幅", 1, max_w if max_w >=1 else 1, st.session_state.roi_w, key="roi_w_slider")
+    
+    max_h = img_h - st.session_state.roi_y
+    if st.session_state.roi_h > max_h : st.session_state.roi_h = max_h
+    if st.session_state.roi_h < 1 and max_h >=1 : st.session_state.roi_h = 1
+    elif max_h < 1: st.session_state.roi_h = max_h
+    st.session_state.roi_h = cols_roi2[1].slider("ROI 高さ", 1, max_h if max_h >=1 else 1, st.session_state.roi_h, key="roi_h_slider")
+
+    # ROIプレビュー描画
+    preview_img_with_roi = roi_display_img_base.copy()
+    rx, ry, rw, rh = st.session_state.roi_x, st.session_state.roi_y, st.session_state.roi_w, st.session_state.roi_h
+    if rw > 0 and rh > 0:
+        cv2.rectangle(preview_img_with_roi, (rx, ry), (rx + rw, ry + rh), (255, 0, 0), 3) # 赤枠、太さ3
+    st.image(preview_img_with_roi, caption=f"ROIプレビュー (X:{rx}, Y:{ry}, 幅:{rw}, 高さ:{rh})")
     st.markdown("---")
 
+    # --- 処理対象画像の決定 ---
+    if rw > 0 and rh > 0 and not (rx == 0 and ry == 0 and rw == img_w and rh == img_h):
+        img_to_process_gray = img_gray_full_res[ry:ry+rh, rx:rx+rw].copy()
+        img_for_marking_color_np = np_array_rgb_uint8_full_res[ry:ry+rh, rx:rx+rw].copy()
+        analysis_caption_suffix = f"(選択エリア: {rw}x{rh}px)"
+    else:
+        img_to_process_gray = img_gray_full_res.copy()
+        img_for_marking_color_np = np_array_rgb_uint8_full_res.copy()
+        analysis_caption_suffix = "(画像全体)"
+
+    # --- サイドバーのパラメータ設定UI (画像ロード後に表示) ---
+    # (内容は変更なし)
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を色々変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
     st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
@@ -149,14 +168,15 @@ if st.session_state.pil_image_to_process is not None:
     st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
     morph_kernel_shape_to_use = cv2.MORPH_ELLIPSE 
     st.sidebar.markdown("カーネル形状: **楕円 (固定)**")
-    kernel_options_morph = [1,3,5,7,9]; kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,value=st.session_state.morph_size_sb_key,key="morph_size_sb_key")
+    kernel_options_morph = [1,3,5,7,9]; kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,value=3) # Keyなし
     st.sidebar.markdown("""オープニング処理は...""", unsafe_allow_html=True)
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
-    min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,value=st.session_state.min_area_sb_key_v3,key="min_area_sb_key_v3") 
+    min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,value=1,step=1) # Keyなし
     st.sidebar.caption("""- ...""") 
-    max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,value=st.session_state.max_area_sb_key_v3,key="max_area_sb_key_v3") 
+    max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,value=1000,step=1) # Keyなし
     st.sidebar.caption("""- ...""") 
 
+    # --- メインエリアの画像処理と表示ロジック ---
     st.header(f"処理ステップごとの画像") 
     kernel_size_blur=1;
     if img_to_process_gray.size==0: st.error("処理対象グレースケール画像が空。"); st.stop()
