@@ -1,5 +1,5 @@
 import streamlit as st
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw # ImageDraw をインポート
 import numpy as np
 import cv2
 from streamlit_drawable_canvas import st_canvas
@@ -8,8 +8,14 @@ import io
 # ページ設定
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
-# CSS略
-file_uploader_css = """<style>...</style>""" # 前回と同じCSSをここに記述 (ここでは省略)
+# ファイルアップローダーのカスタムCSS
+file_uploader_css = """<style>
+section[data-testid="stFileUploaderDropzone"]{border:3px dashed white !important;border-radius:0.5rem !important;background-color:#495057 !important;padding:25px !important;}
+section[data-testid="stFileUploaderDropzone"] > div[data-testid="stFileUploadDropzoneInstructions"]{display:flex;flex-direction:column;align-items:center;justify-content:center;}
+section[data-testid="stFileUploaderDropzone"] p{color:#f8f9fa !important;font-size:0.9rem;margin-bottom:0.75rem !important;}
+section[data-testid="stFileUploaderDropzone"] span{color:#ced4da !important;font-size:0.8rem;}
+section[data-testid="stFileUploaderDropzone"] button{color:#fff !important;background-color:#007bff !important;border:1px solid #007bff !important;padding:0.5em 1em !important;border-radius:0.375rem !important;font-weight:500 !important;margin-top:0.5rem !important;}
+</style>"""
 st.markdown(file_uploader_css, unsafe_allow_html=True)
 
 result_placeholder_sidebar = st.sidebar.empty()
@@ -31,7 +37,13 @@ st.sidebar.header("解析パラメータ設定")
 UPLOAD_ICON="📤"; uploaded_file_widget=st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアップロード",type=['tif','tiff','png','jpg','jpeg'],help="対応形式: TIF,TIFF,PNG,JPG,JPEG。")
 
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>",unsafe_allow_html=True)
-st.markdown("""### 使用方法..."""); st.markdown("---") # 使用方法は前回と同じ
+st.markdown("""### 使用方法
+1. 画像を左にアップロードしてください。
+2. **(オプション)** 「1. 元の画像 と 解析エリア選択」で、表示された画像（キャンバス）上でマウスをドラッグし、解析したい四角いエリアを描画します。最後に描画した四角形がROIとなります。何も描画しない場合は画像全体が対象です。
+3. 画像（または選択エリア）を元に、左サイドバーの「1. 二値化」以降のパラメータを調整してください。
+4. メインエリアの各処理ステップ画像と、最終的な「3. 輝点検出とマーキング」で結果を確認します。
+""")
+st.markdown("---") 
 
 if uploaded_file_widget is not None:
     if st.session_state.get('last_uploaded_filename_for_roi_reset') != uploaded_file_widget.name:
@@ -49,7 +61,7 @@ if st.session_state.pil_image_to_process is not None:
     pil_image_rgb_full_res = None; img_gray_full_res = None
     np_array_rgb_uint8_full_res = None 
     pil_for_canvas_bg_intermediate = None; np_for_debug_display = None
-    laundered_pil_for_canvas_bg = None
+    laundered_pil_for_canvas_bg = None # 「洗濯後」のPillowイメージ
 
     try:
         pil_image_rgb_full_res = st.session_state.pil_image_to_process.convert("RGB")
@@ -57,8 +69,9 @@ if st.session_state.pil_image_to_process is not None:
         img_gray_full_res = cv2.cvtColor(np_array_rgb_uint8_full_res, cv2.COLOR_RGB2GRAY)
         if img_gray_full_res.dtype != np.uint8: img_gray_full_res = img_gray_full_res.astype(np.uint8)
 
+        # キャンバス背景用に縮小したPillowイメージを準備
         pil_for_canvas_bg_intermediate = pil_image_rgb_full_res.copy()
-        CANVAS_MAX_DIM = 800
+        CANVAS_MAX_DIM = 800 
         if pil_for_canvas_bg_intermediate.width > CANVAS_MAX_DIM or pil_for_canvas_bg_intermediate.height > CANVAS_MAX_DIM:
             pil_for_canvas_bg_intermediate.thumbnail((CANVAS_MAX_DIM, CANVAS_MAX_DIM))
         
@@ -74,7 +87,8 @@ if st.session_state.pil_image_to_process is not None:
     except Exception as e: st.error(f"画像変換または洗濯処理に失敗: {e}"); st.stop()
 
     st.header("1. 解析エリア選択") 
-    with st.expander("元の画像（キャンバス背景候補）の確認", expanded=False): # 最初は閉じておく
+    
+    with st.expander("元の画像（キャンバス背景候補）の確認", expanded=False): 
         if np_for_debug_display is not None and np_for_debug_display.size > 0:
             st.image(np_for_debug_display, caption=f"洗濯前Pillowから作成したNumPy表示 ({pil_for_canvas_bg_intermediate.width}x{pil_for_canvas_bg_intermediate.height})")
         else: st.warning("表示用NumPy配列準備失敗。")
@@ -83,24 +97,24 @@ if st.session_state.pil_image_to_process is not None:
     
     canvas_result = None
     if laundered_pil_for_canvas_bg is not None: 
-        canvas_height = laundered_pil_for_canvas_bg.height
-        canvas_width = laundered_pil_for_canvas_bg.width
-        scale_x = pil_image_rgb_full_res.width / canvas_width if canvas_width > 0 else 1.0
-        scale_y = pil_image_rgb_full_res.height / canvas_height if canvas_height > 0 else 1.0
+        canvas_height_final = laundered_pil_for_canvas_bg.height
+        canvas_width_final = laundered_pil_for_canvas_bg.width
+        scale_x = pil_image_rgb_full_res.width / canvas_width_final if canvas_width_final > 0 else 1.0
+        scale_y = pil_image_rgb_full_res.height / canvas_height_final if canvas_height_final > 0 else 1.0
 
         canvas_result = st_canvas(
             fill_color="rgba(255,0,0,0.1)", stroke_width=2, stroke_color="red",
             background_image=laundered_pil_for_canvas_bg, # ★★★ 「洗濯された」Pillowイメージを使用 ★★★
-            update_streamlit=True, height=canvas_height, width=canvas_width,
-            drawing_mode="rect", key="roi_canvas_laundered_v1" 
+            update_streamlit=True, 
+            height=canvas_height_final,   
+            width=canvas_width_final,    
+            drawing_mode="rect", 
+            key="roi_canvas_laundered_v2" 
         )
     else:
         st.error("キャンバス背景用の画像(洗濯後)がありません。"); st.stop()
 
-    # (以降のROI処理、サイドバーUI、メインの画像処理・表示ロジックは前回とほぼ同じ)
-    # ... (img_to_process_gray, img_for_marking_color_np, analysis_caption_suffix の決定)
-    # ... (サイドバーのパラメータUI定義)
-    # ... (メインエリアの画像処理と表示)
+    # (以降のROI処理、サイドバーUI、メインの画像処理・表示ロジックは変更なし)
     img_to_process_gray = img_gray_full_res 
     img_for_marking_color_np = np_array_rgb_uint8_full_res.copy() 
     analysis_caption_suffix = "(画像全体)"
