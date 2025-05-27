@@ -2,9 +2,8 @@ import streamlit as st
 from PIL import Image, ImageDraw 
 import numpy as np
 import cv2
-from streamlit_drawable_canvas import st_canvas
+from streamlit_drawable_canvas import st_canvas # streamlit-drawable-canvasをインポート
 import io
-import time # 完全にユニークなキーを作るために使用（今回は固定キーで試します）
 
 # ページ設定
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
@@ -38,7 +37,13 @@ st.sidebar.header("解析パラメータ設定")
 UPLOAD_ICON="📤"; uploaded_file_widget=st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアップロード",type=['tif','tiff','png','jpg','jpeg'],help="対応形式: TIF,TIFF,PNG,JPG,JPEG。")
 
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>",unsafe_allow_html=True)
-st.markdown("""### 使用方法..."""); st.markdown("---") 
+st.markdown("""### 使用方法
+1. 画像を左にアップロードしてください。
+2. 「1. 解析エリア選択」で、表示された画像（キャンバス）上でマウスをドラッグし、解析したい四角いエリアを描画します。最後に描画した四角形がROIとなります。何も描画しない場合は画像全体が対象です。
+3. 画像（または選択エリア）を元に、左サイドバーの「1. 二値化」以降のパラメータを調整してください。
+4. メインエリアの各処理ステップ画像と、最終的な「3. 輝点検出とマーキング」で結果を確認します。
+""") # 使用方法を修正
+st.markdown("---") 
 
 if uploaded_file_widget is not None:
     if st.session_state.get('last_uploaded_filename_for_roi_reset') != uploaded_file_widget.name:
@@ -55,58 +60,62 @@ else:
 if st.session_state.pil_image_to_process is not None:
     pil_image_rgb_full_res = None; img_gray_full_res = None
     np_array_rgb_uint8_full_res = None 
-    
+    np_for_canvas_bg_display = None # キャンバス背景およびデバッグ表示用 (縮小版NumPy uint8)
+
     try:
         pil_image_rgb_full_res = st.session_state.pil_image_to_process.convert("RGB")
         np_array_rgb_uint8_full_res = np.array(pil_image_rgb_full_res).astype(np.uint8)
         img_gray_full_res = cv2.cvtColor(np_array_rgb_uint8_full_res, cv2.COLOR_RGB2GRAY)
         if img_gray_full_res.dtype != np.uint8: img_gray_full_res = img_gray_full_res.astype(np.uint8)
-    except Exception as e: st.error(f"画像変換(フル解像度)に失敗: {e}"); st.stop()
+
+        # キャンバス背景用に画像を準備 (縮小し、NumPy uint8配列にする)
+        pil_temp_for_resize = pil_image_rgb_full_res.copy()
+        CANVAS_MAX_DIM = 800 
+        canvas_scale_x, canvas_scale_y = 1.0, 1.0
+        if pil_temp_for_resize.width > CANVAS_MAX_DIM or pil_temp_for_resize.height > CANVAS_MAX_DIM:
+            original_width_for_scaling = pil_temp_for_resize.width
+            original_height_for_scaling = pil_temp_for_resize.height
+            pil_temp_for_resize.thumbnail((CANVAS_MAX_DIM, CANVAS_MAX_DIM)) # 破壊的変更
+            if pil_temp_for_resize.width > 0 : canvas_scale_x = original_width_for_scaling / pil_temp_for_resize.width
+            if pil_temp_for_resize.height > 0 : canvas_scale_y = original_height_for_scaling / pil_temp_for_resize.height
+        
+        np_for_canvas_bg_display = np.array(pil_temp_for_resize).astype(np.uint8)
+
+    except Exception as e: st.error(f"画像変換(フル/キャンバス用)に失敗: {e}"); st.stop()
 
     st.header("1. 解析エリア選択") 
+    # ★★★ 参照用の元画像表示は削除（キャンバス自体に表示するため）★★★
+    # if np_for_canvas_bg_display is not None:
+    #     st.markdown("##### 元の画像（参照用）")
+    #     st.image(np_for_canvas_bg_display, caption="この画像を参照して、下のキャンバスにROIを描画してください。")
     
-    if pil_image_rgb_full_res:
-        st.markdown("##### 元の画像（参照用）")
-        display_pil_img_ref = pil_image_rgb_full_res.copy()
-        CANVAS_MAX_DIM_REF = 600 
-        if display_pil_img_ref.width > CANVAS_MAX_DIM_REF or display_pil_img_ref.height > CANVAS_MAX_DIM_REF:
-            display_pil_img_ref.thumbnail((CANVAS_MAX_DIM_REF, CANVAS_MAX_DIM_REF))
-        st.image(display_pil_img_ref, caption="この画像を参照して、下のキャンバスにROIを描画してください。")
+    st.info("↓下の画像（キャンバス）上でマウスをドラッグして、解析したい四角いエリアを描画してください。")
     
-    st.info("↓下のキャンバス上でマウスをドラッグして、解析したい四角いエリアを描画してください。")
-    
-    drawing_mode = "rect"; stroke_color = "red"; stroke_width_canvas = 2
-    final_canvas_width = 600; final_canvas_height = 400
-    if pil_image_rgb_full_res:
-        pil_temp_for_canvas_size = pil_image_rgb_full_res.copy()
-        if pil_temp_for_canvas_size.width / pil_temp_for_canvas_size.height > final_canvas_width / final_canvas_height :
-            final_canvas_height = int(final_canvas_width * pil_temp_for_canvas_size.height / pil_temp_for_canvas_size.width)
-        else: final_canvas_width = int(final_canvas_height * pil_temp_for_canvas_size.width / pil_temp_for_canvas_size.height)
-        if final_canvas_width <=0: final_canvas_width = 100 
-        if final_canvas_height <=0: final_canvas_height = 100 
-    
-    # ★★★ st_canvas のパラメータを最小限にし、キーを新しい固定値にする ★★★
-    canvas_result = st_canvas(
-        stroke_width=stroke_width_canvas, 
-        stroke_color=stroke_color,
-        background_color="#D3D3D3",  # LightGrayを明示的に指定、ダメなら #000000 (黒)なども試す価値あり
-        # background_image=None, # 背景画像は一旦完全に削除
-        update_streamlit=True, 
-        height=final_canvas_height,   
-        width=final_canvas_width,    
-        drawing_mode=drawing_mode, 
-        key="roi_canvas_minimal_test_v8" # キーを新しい固定値に
-    )
+    canvas_result = None
+    if np_for_canvas_bg_display is not None and np_for_canvas_bg_display.size > 0 :
+        canvas_height_for_widget = np_for_canvas_bg_display.shape[0]
+        canvas_width_for_widget = np_for_canvas_bg_display.shape[1]
+        
+        canvas_result = st_canvas(
+            fill_color="rgba(255,0,0,0.1)", 
+            stroke_width=2, 
+            stroke_color="red",
+            background_image=np_for_canvas_bg_display, # ★★★ NumPy配列を背景画像として使用 ★★★
+            update_streamlit=True, 
+            height=canvas_height_for_widget,   
+            width=canvas_width_for_widget,    
+            drawing_mode="rect", 
+            key="roi_canvas_numpy_bg_v1" # キーを更新
+        )
+    else:
+        st.error("キャンバス背景用の画像データがありません。"); st.stop()
 
+    # (以降のROI処理、サイドバーUI、メインの画像処理・表示ロジックは前回とほぼ同じ)
+    # ...
     img_to_process_gray = img_gray_full_res 
     img_for_marking_color_np = np_array_rgb_uint8_full_res.copy() 
     analysis_caption_suffix = "(画像全体)"
-    
-    scale_x = pil_image_rgb_full_res.width / final_canvas_width if final_canvas_width > 0 else 1.0
-    scale_y = pil_image_rgb_full_res.height / final_canvas_height if final_canvas_height > 0 else 1.0
-
     if canvas_result and canvas_result.json_data is not None and canvas_result.json_data.get("objects", []):
-        # (ROI処理ロジックは変更なし)
         if canvas_result.json_data["objects"][-1]["type"] == "rect":
             rect = canvas_result.json_data["objects"][-1]
             x_cvs,y_cvs,w_cvs,h_cvs = int(rect["left"]),int(rect["top"]),int(rect["width"]),int(rect["height"])
@@ -118,14 +127,12 @@ if st.session_state.pil_image_to_process is not None:
                     img_to_process_gray = img_gray_full_res[y1:y2, x1:x2].copy()
                     img_for_marking_color_np = np_array_rgb_uint8_full_res[y1:y2, x1:x2].copy()
                     analysis_caption_suffix = f"(選択エリア: {img_to_process_gray.shape[1]}x{img_to_process_gray.shape[0]}px @フル解像度)"
-                    with st.expander("選択されたROI（処理対象のグレースケール）", expanded=True):
-                        st.image(img_to_process_gray, caption=f"ROI: x={x1},y={y1},w={x2-x1},h={y2-y1} (フル解像度座標)")
+                    # with st.expander("選択されたROI（処理対象のグレースケール）", expanded=True): # 表示重複のため削除
+                    #     st.image(img_to_process_gray, caption=f"ROI: x={x1},y={y1},w={x2-x1},h={y2-y1} (フル解像度座標)")
                 else: st.warning("描画ROI無効。全体処理。"); img_to_process_gray=img_gray_full_res; st.session_state.roi_coords=None
             else: st.session_state.roi_coords = None
     st.markdown("---")
 
-    # --- サイドバーのパラメータ設定UI (内容は変更なし) ---
-    # (省略、前回と同じ)
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を色々変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
     st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
@@ -143,9 +150,6 @@ if st.session_state.pil_image_to_process is not None:
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,value=st.session_state.max_area_sb_key_v3,key="max_area_sb_key_v3") 
     st.sidebar.caption("""- ...""") 
 
-
-    # --- メインエリアの画像処理と表示ロジック ---
-    # (内容は変更なし)
     st.header(f"処理ステップごとの画像") 
     kernel_size_blur=1;
     if img_to_process_gray.size==0: st.error("処理対象グレースケール画像が空。"); st.stop()
@@ -184,7 +188,6 @@ if st.session_state.pil_image_to_process is not None:
          st.image(display_final_marked_image_rgb,caption=f'検出輝点(青い輪郭,面積:{min_area_to_use}-{max_area_to_use})')
     elif binary_img_for_contours_processed is not None: st.image(display_final_marked_image_rgb,caption='輝点見つからず')
     else: st.info("輝点検出未実施")
-
 else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
 
