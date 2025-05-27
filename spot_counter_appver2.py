@@ -1,5 +1,5 @@
 import streamlit as st
-from PIL import Image, ImageDraw # ★★★ ImageDraw を追加インポート ★★★
+from PIL import Image, ImageDraw # ImageDraw をインポート
 import numpy as np
 import cv2
 from streamlit_drawable_canvas import st_canvas
@@ -68,52 +68,62 @@ if st.session_state.pil_image_to_process is not None:
         if img_gray_full_res.dtype != np.uint8: img_gray_full_res = img_gray_full_res.astype(np.uint8)
     except Exception as e: st.error(f"画像変換(フル解像度)に失敗: {e}"); st.stop()
 
-    st.header("1. 元の画像 と 解析エリア選択")
+    st.header("1. 解析エリア選択") # ヘッダーを簡潔に
     
-    # --- ★★★ テスト用 シンプルPillowイメージ生成と表示 ★★★ ---
-    test_pil_img = None
-    try:
-        test_pil_img = Image.new("RGB", (300, 200), "cornflowerblue") # 明るい青色の背景
-        draw = ImageDraw.Draw(test_pil_img)
-        draw.text((10, 10), "テスト用背景画像\nCanvas Background Test", fill="white", font_size=20)
-        with st.expander("テスト用背景画像の確認", expanded=True):
-            st.image(test_pil_img, caption="この青い画像がキャンバス背景に表示されますか？")
-    except Exception as e_test_img:
-        st.warning(f"テスト用画像の生成に失敗: {e_test_img}")
-        test_pil_img = None # 失敗したらNoneのまま
-    # --- ここまでテスト用イメージ ---
-
-    st.info("↓下のキャンバス上でマウスをドラッグして、解析したい四角いエリアを描画してください。")
+    # ★★★ 元画像はst.imageで別途表示（参照用）★★★
+    if pil_image_rgb_full_res:
+        st.markdown("##### 元の画像（参照用）")
+        # 元画像の表示サイズをキャンバスの最大サイズ程度に合わせる
+        display_pil_img = pil_image_rgb_full_res.copy()
+        CANVAS_MAX_DIM_REF = 600 # 参照用画像の最大表示サイズ
+        if display_pil_img.width > CANVAS_MAX_DIM_REF or display_pil_img.height > CANVAS_MAX_DIM_REF:
+            display_pil_img.thumbnail((CANVAS_MAX_DIM_REF, CANVAS_MAX_DIM_REF))
+        st.image(display_pil_img, caption="この画像を参照して、下のキャンバスにROIを描画してください。")
     
-    # キャンバス設定 (背景はまずテスト用イメージで試す)
-    drawing_mode = "rect"; stroke_color = "red"
-    bg_for_canvas = test_pil_img # ★★★ まずテスト用イメージを背景に ★★★
-    if bg_for_canvas is None: # テスト画像生成失敗時は、元の画像(縮小版)をフォールバック
-        st.warning("テスト背景生成失敗。元の画像でキャンバス背景を試みます。")
-        pil_for_canvas_bg_original = pil_image_rgb_full_res.copy()
-        CANVAS_MAX_DIM = 800
-        if pil_for_canvas_bg_original.width > CANVAS_MAX_DIM or pil_for_canvas_bg_original.height > CANVAS_MAX_DIM:
-            pil_for_canvas_bg_original.thumbnail((CANVAS_MAX_DIM, CANVAS_MAX_DIM))
-        bg_for_canvas = pil_for_canvas_bg_original
+    st.info("↓下の薄いグレーのキャンバス上でマウスをドラッグして、解析したい四角いエリアを描画してください。")
+    
+    # キャンバス設定 (背景画像なし、背景色を指定)
+    drawing_mode = "rect"; stroke_color = "red"; stroke_width_canvas = 2
+    canvas_height_test = 400 # 固定の高さ
+    canvas_width_test = 600  # 固定の幅 (またはpil_temp_for_canvas_sizeから取得)
 
-    canvas_height = bg_for_canvas.height
-    canvas_width = bg_for_canvas.width
-    # スケーリングファクターは、フル解像度画像と実際にキャンバス背景に使われる画像 (bg_for_canvas) の間で計算
-    scale_x = pil_image_rgb_full_res.width / bg_for_canvas.width if bg_for_canvas.width > 0 else 1.0
-    scale_y = pil_image_rgb_full_res.height / bg_for_canvas.height if bg_for_canvas.height > 0 else 1.0
+    # アスペクト比を保ってキャンバスサイズを調整 (オプション)
+    if pil_image_rgb_full_res:
+        pil_temp_for_canvas_size = pil_image_rgb_full_res.copy()
+        # 縦横比を保ちつつ、幅600pxを基準に高さを調整、または高さ400pxを基準に幅を調整
+        if pil_temp_for_canvas_size.width / pil_temp_for_canvas_size.height > canvas_width_test / canvas_height_test : # 横長の場合
+            final_canvas_width = canvas_width_test
+            final_canvas_height = int(canvas_width_test * pil_temp_for_canvas_size.height / pil_temp_for_canvas_size.width)
+        else: # 縦長または正方形の場合
+            final_canvas_height = canvas_height_test
+            final_canvas_width = int(canvas_height_test * pil_temp_for_canvas_size.width / pil_temp_for_canvas_size.height)
+    else:
+        final_canvas_width = canvas_width_test
+        final_canvas_height = canvas_height_test
+
 
     canvas_result = st_canvas(
-        fill_color="rgba(255,0,0,0.1)", stroke_width=2, stroke_color=stroke_color,
-        background_image=bg_for_canvas, 
-        update_streamlit=True, height=canvas_height, width=canvas_width,
-        drawing_mode=drawing_mode, key="roi_canvas_main_v7" # キーを更新
+        fill_color="rgba(255,0,0,0.1)", 
+        stroke_width=stroke_width_canvas, 
+        stroke_color=stroke_color,
+        background_color="#f0f0f0",  # ★★★ 背景色を薄いグレーに設定 ★★★
+        # background_image=None,     # ★★★ 背景画像は指定しない ★★★
+        update_streamlit=True, 
+        height=final_canvas_height,   
+        width=final_canvas_width,    
+        drawing_mode=drawing_mode, 
+        key="roi_canvas_plain_test_v2" 
     )
 
     # ROI処理と解析対象画像の決定
     img_to_process_gray = img_gray_full_res 
     img_for_marking_color_np = np_array_rgb_uint8_full_res.copy() 
     analysis_caption_suffix = "(画像全体)"
-    # st.session_state.roi_coords はこのブロック内で設定される
+    
+    # スケーリングファクターの計算 (キャンバスサイズとフル解像度画像サイズの間)
+    scale_x = pil_image_rgb_full_res.width / final_canvas_width if final_canvas_width > 0 else 1.0
+    scale_y = pil_image_rgb_full_res.height / final_canvas_height if final_canvas_height > 0 else 1.0
+
 
     if canvas_result and canvas_result.json_data is not None and canvas_result.json_data.get("objects", []):
         if canvas_result.json_data["objects"][-1]["type"] == "rect":
@@ -127,8 +137,8 @@ if st.session_state.pil_image_to_process is not None:
                     img_to_process_gray = img_gray_full_res[y1:y2, x1:x2].copy()
                     img_for_marking_color_np = np_array_rgb_uint8_full_res[y1:y2, x1:x2].copy()
                     analysis_caption_suffix = f"(選択エリア: {img_to_process_gray.shape[1]}x{img_to_process_gray.shape[0]}px @フル解像度)"
-                    with st.expander("選択されたROI（処理対象のグレースケール）", expanded=True):
-                        st.image(img_to_process_gray, caption=f"ROI: x={x1},y={y1},w={x2-x1},h={y2-y1} (フル解像度座標)")
+                    # with st.expander("選択されたROI（処理対象のグレースケール）", expanded=True): # この表示は重複するので一旦削除
+                    #     st.image(img_to_process_gray, caption=f"ROI: x={x1},y={y1},w={x2-x1},h={y2-y1} (フル解像度座標)")
                 else: st.warning("描画ROI無効。全体処理。"); img_to_process_gray=img_gray_full_res; st.session_state.roi_coords=None
             else: st.session_state.roi_coords = None
     st.markdown("---")
@@ -144,7 +154,7 @@ if st.session_state.pil_image_to_process is not None:
     morph_kernel_shape_to_use = cv2.MORPH_ELLIPSE 
     st.sidebar.markdown("カーネル形状: **楕円 (固定)**")
     kernel_options_morph = [1,3,5,7,9]; kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,value=st.session_state.morph_size_sb_key,key="morph_size_sb_key")
-    st.sidebar.markdown("""オープニング処理は...""", unsafe_allow_html=True) # 説明文省略のため簡略化
+    st.sidebar.markdown("""オープニング処理は...""", unsafe_allow_html=True)
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
     min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,value=st.session_state.min_area_sb_key_v3,key="min_area_sb_key_v3") 
     st.sidebar.caption("""- ...""") 
