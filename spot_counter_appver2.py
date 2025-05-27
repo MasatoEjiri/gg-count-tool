@@ -39,11 +39,10 @@ UPLOAD_ICON="📤"; uploaded_file_widget=st.sidebar.file_uploader(f"{UPLOAD_ICON
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>",unsafe_allow_html=True)
 st.markdown("""### 使用方法
 1. 画像を左にアップロードしてください。
-2. 「1. 解析エリア選択」で、まず上に表示される「元の画像（参照用）」を見て、解析したいおおよその範囲を把握します。
-3. 次に、その下にある描画エリア（キャンバス）上で、マウスをドラッグして解析したい四角いエリアを描画してください。最後に描画した四角形がROIとなります。何も描画しない場合は画像全体が対象です。
-4. 画像（または選択エリア）を元に、左サイドバーの「1. 二値化」以降のパラメータを調整してください。
-5. メインエリアの各処理ステップ画像と、最終的な「3. 輝点検出とマーキング」で結果を確認します。
-""")
+2. 「1. 解析エリア選択」の画像（キャンバス）上でマウスをドラッグし、解析したい四角いエリアを描画します。最後に描画した四角形がROIとなります。何も描画しない場合は画像全体が対象です。
+3. 画像（または選択エリア）を元に、左サイドバーの「1. 二値化」以降のパラメータを調整してください。
+4. メインエリアの各処理ステップ画像と、最終的な「3. 輝点検出とマーキング」で結果を確認します。
+""") # 使用方法を修正
 st.markdown("---") 
 
 if uploaded_file_widget is not None:
@@ -61,62 +60,68 @@ else:
 if st.session_state.pil_image_to_process is not None:
     pil_image_rgb_full_res = None; img_gray_full_res = None
     np_array_rgb_uint8_full_res = None 
+    pil_for_canvas_bg_final = None # ★★★ キャンバス背景用の最終Pillowイメージ ★★★
     
     try:
         pil_image_rgb_full_res = st.session_state.pil_image_to_process.convert("RGB")
         np_array_rgb_uint8_full_res = np.array(pil_image_rgb_full_res).astype(np.uint8)
         img_gray_full_res = cv2.cvtColor(np_array_rgb_uint8_full_res, cv2.COLOR_RGB2GRAY)
         if img_gray_full_res.dtype != np.uint8: img_gray_full_res = img_gray_full_res.astype(np.uint8)
-    except Exception as e: st.error(f"画像変換(フル解像度)に失敗: {e}"); st.stop()
+
+        # キャンバス背景用に画像を準備 (縮小し、「洗濯」処理も施す)
+        temp_pil_for_canvas = pil_image_rgb_full_res.copy()
+        CANVAS_MAX_DIM = 800 # 必要に応じて調整
+        
+        original_width_for_scaling = temp_pil_for_canvas.width
+        original_height_for_scaling = temp_pil_for_canvas.height
+
+        if temp_pil_for_canvas.width > CANVAS_MAX_DIM or temp_pil_for_canvas.height > CANVAS_MAX_DIM:
+            temp_pil_for_canvas.thumbnail((CANVAS_MAX_DIM, CANVAS_MAX_DIM))
+        
+        # 「洗濯」処理
+        img_byte_arr = io.BytesIO()
+        temp_pil_for_canvas.save(img_byte_arr, format='PNG') # PNG形式でバイトデータに保存
+        img_byte_arr.seek(0) 
+        pil_for_canvas_bg_final = Image.open(img_byte_arr) # バイトデータから再読み込み
+        # pil_for_canvas_bg_final をRGBに再変換（PNG保存でモードが変わる可能性を考慮）
+        pil_for_canvas_bg_final = pil_for_canvas_bg_final.convert("RGB")
+
+
+    except Exception as e: st.error(f"画像変換・準備中にエラー: {e}"); st.stop()
 
     st.header("1. 解析エリア選択") 
+    st.info("↓下の画像（キャンバス）上でマウスをドラッグして、解析したい四角いエリアを描画してください。最後に描画した四角形がROIとなります。")
     
-    if pil_image_rgb_full_res:
-        st.markdown("##### 元の画像（参照用）")
-        display_pil_img_ref = pil_image_rgb_full_res.copy()
-        CANVAS_MAX_DIM_REF = 600 
-        if display_pil_img_ref.width > CANVAS_MAX_DIM_REF or display_pil_img_ref.height > CANVAS_MAX_DIM_REF:
-            display_pil_img_ref.thumbnail((CANVAS_MAX_DIM_REF, CANVAS_MAX_DIM_REF))
-        # ★★★ st.image から key 引数を削除 ★★★
-        st.image(display_pil_img_ref, caption="この画像を参照して、下のキャンバスにROIを描画してください。") 
-    
-    st.info("↓下のキャンバス上でマウスをドラッグして、解析したい四角いエリアを描画してください。")
-    
-    drawing_mode = "rect"; stroke_color = "red"; stroke_width_canvas = 2
-    final_canvas_width = 600  
-    final_canvas_height = 400 
-    
-    if pil_image_rgb_full_res:
-        pil_temp_for_canvas_size = pil_image_rgb_full_res.copy()
-        # アスペクト比を保ってキャンバスサイズを調整
-        # (このロジックは前回と同じなので省略)
-        if pil_temp_for_canvas_size.width > 0 and pil_temp_for_canvas_size.height > 0 and final_canvas_height > 0 : # ゼロ除算を避ける
-            if pil_temp_for_canvas_size.width / pil_temp_for_canvas_size.height > final_canvas_width / final_canvas_height :
-                final_canvas_height = int(final_canvas_width * pil_temp_for_canvas_size.height / pil_temp_for_canvas_size.width)
-            else: 
-                final_canvas_width = int(final_canvas_height * pil_temp_for_canvas_size.width / pil_temp_for_canvas_size.height)
-        if final_canvas_width <=0: final_canvas_width = 100 
-        if final_canvas_height <=0: final_canvas_height = 100 
+    canvas_result = None
+    if pil_for_canvas_bg_final is not None: 
+        canvas_height = pil_for_canvas_bg_final.height
+        canvas_width = pil_for_canvas_bg_final.width
+        
+        # スケーリングファクターの計算 (フル解像度画像と、実際にキャンバス背景に使われる画像の間)
+        scale_x = pil_image_rgb_full_res.width / canvas_width if canvas_width > 0 else 1.0
+        scale_y = pil_image_rgb_full_res.height / canvas_height if canvas_height > 0 else 1.0
 
-    canvas_result = st_canvas(
-        fill_color="rgba(255,0,0,0.1)", 
-        stroke_width=stroke_width_canvas, 
-        stroke_color=stroke_color,
-        background_color="skyblue",  
-        update_streamlit=True, 
-        height=final_canvas_height,   
-        width=final_canvas_width,    
-        drawing_mode=drawing_mode, 
-        key="roi_canvas_skyblue_bg_test" 
-    )
+        canvas_result = st_canvas(
+            fill_color="rgba(255,0,0,0.1)", 
+            stroke_width=2, 
+            stroke_color="red",
+            background_image=pil_for_canvas_bg_final, # ★★★ 「洗濯・縮小された」Pillowイメージを使用 ★★★
+            update_streamlit=True, 
+            height=canvas_height,   
+            width=canvas_width,    
+            drawing_mode="rect", 
+            key="roi_canvas_with_laundered_pil_bg" 
+        )
+    else:
+        st.error("キャンバス背景用の画像が準備できませんでした。"); st.stop()
 
+    # (以降のROI処理、サイドバーUI、メインの画像処理・表示ロジックは変更なし)
+    # ... (img_to_process_gray, img_for_marking_color_np, analysis_caption_suffix の決定)
+    # ... (サイドバーのパラメータUI定義)
+    # ... (メインエリアの画像処理と表示)
     img_to_process_gray = img_gray_full_res 
     img_for_marking_color_np = np_array_rgb_uint8_full_res.copy() 
     analysis_caption_suffix = "(画像全体)"
-    
-    scale_x = pil_image_rgb_full_res.width / final_canvas_width if final_canvas_width > 0 else 1.0
-    scale_y = pil_image_rgb_full_res.height / final_canvas_height if final_canvas_height > 0 else 1.0
-
     if canvas_result and canvas_result.json_data is not None and canvas_result.json_data.get("objects", []):
         if canvas_result.json_data["objects"][-1]["type"] == "rect":
             rect = canvas_result.json_data["objects"][-1]
@@ -135,7 +140,6 @@ if st.session_state.pil_image_to_process is not None:
             else: st.session_state.roi_coords = None
     st.markdown("---")
 
-    # --- サイドバーのパラメータ設定UI (内容は変更なし) ---
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を色々変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
     st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
@@ -153,7 +157,6 @@ if st.session_state.pil_image_to_process is not None:
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,value=st.session_state.max_area_sb_key_v3,key="max_area_sb_key_v3") 
     st.sidebar.caption("""- ...""") 
 
-    # --- メインエリアの画像処理と表示ロジック ---
     st.header(f"処理ステップごとの画像") 
     kernel_size_blur=1;
     if img_to_process_gray.size==0: st.error("処理対象グレースケール画像が空。"); st.stop()
