@@ -40,7 +40,7 @@ st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>",unsafe_allow_htm
 st.markdown("""### 使用方法
 1. 画像を左にアップロードしてください。
 2. 「1. 解析エリア選択」で、まず上に表示される「元の画像（参照用）」を見て、解析したいおおよその範囲を把握します。
-3. 次に、その下にある透明な描画エリア（キャンバス）上で、参照用画像に重ねるようにマウスをドラッグして解析したい四角いエリアを描画してください（重ね合わせは今後の課題です）。最後に描画した四角形がROIとなります。何も描画しない場合は画像全体が対象です。
+3. 次に、その下にある描画エリア（キャンバス）上で、マウスをドラッグして解析したい四角いエリアを描画してください。最後に描画した四角形がROIとなります。何も描画しない場合は画像全体が対象です。
 4. 画像（または選択エリア）を元に、左サイドバーの「1. 二値化」以降のパラメータを調整してください。
 5. メインエリアの各処理ステップ画像と、最終的な「3. 輝点検出とマーキング」で結果を確認します。
 """)
@@ -71,47 +71,51 @@ if st.session_state.pil_image_to_process is not None:
 
     st.header("1. 解析エリア選択") 
     
-    # --- 参照用画像の準備と表示 ---
-    pil_for_reference_display = pil_image_rgb_full_res.copy()
-    REFERENCE_MAX_DIM = 600 
-    if pil_for_reference_display.width > REFERENCE_MAX_DIM or pil_for_reference_display.height > REFERENCE_MAX_DIM:
-        pil_for_reference_display.thumbnail((REFERENCE_MAX_DIM, REFERENCE_MAX_DIM))
+    if pil_image_rgb_full_res:
+        st.markdown("##### 元の画像（参照用）")
+        display_pil_img_ref = pil_image_rgb_full_res.copy()
+        CANVAS_MAX_DIM_REF = 600 
+        if display_pil_img_ref.width > CANVAS_MAX_DIM_REF or display_pil_img_ref.height > CANVAS_MAX_DIM_REF:
+            display_pil_img_ref.thumbnail((CANVAS_MAX_DIM_REF, CANVAS_MAX_DIM_REF))
+        # ★★★ st.image から key 引数を削除 ★★★
+        st.image(display_pil_img_ref, caption="この画像を参照して、下のキャンバスにROIを描画してください。") 
     
-    st.markdown("##### 元の画像（参照用）")
-    # ★★★ 参照用画像を表示する st.image のキーを固定 ★★★
-    # この st.image の実際の表示サイズを st_canvas のサイズと一致させるのが理想
-    st.image(pil_for_reference_display, caption="この画像を参照して、下のキャンバスにROIを描画してください。", key="reference_image_for_roi")
+    st.info("↓下のキャンバス上でマウスをドラッグして、解析したい四角いエリアを描画してください。")
     
-    # 参照用画像の表示後の実際の幅と高さを取得したいが、Streamlitでは直接取得は難しい
-    # ここでは、thumbnailで縮小した後のpil_for_reference_displayのサイズをキャンバスサイズとする
-    canvas_width = pil_for_reference_display.width
-    canvas_height = pil_for_reference_display.height
-    
-    st.info(f"↓下の透明なキャンバス（{canvas_width}x{canvas_height}）上で、上の参照画像に合わせてROIを描画してください。")
-    
-    # --- 透明な描画キャンバス ---
     drawing_mode = "rect"; stroke_color = "red"; stroke_width_canvas = 2
+    final_canvas_width = 600  
+    final_canvas_height = 400 
     
+    if pil_image_rgb_full_res:
+        pil_temp_for_canvas_size = pil_image_rgb_full_res.copy()
+        # アスペクト比を保ってキャンバスサイズを調整
+        # (このロジックは前回と同じなので省略)
+        if pil_temp_for_canvas_size.width > 0 and pil_temp_for_canvas_size.height > 0 and final_canvas_height > 0 : # ゼロ除算を避ける
+            if pil_temp_for_canvas_size.width / pil_temp_for_canvas_size.height > final_canvas_width / final_canvas_height :
+                final_canvas_height = int(final_canvas_width * pil_temp_for_canvas_size.height / pil_temp_for_canvas_size.width)
+            else: 
+                final_canvas_width = int(final_canvas_height * pil_temp_for_canvas_size.width / pil_temp_for_canvas_size.height)
+        if final_canvas_width <=0: final_canvas_width = 100 
+        if final_canvas_height <=0: final_canvas_height = 100 
+
     canvas_result = st_canvas(
-        fill_color="rgba(255,0,0,0.1)", # 描画中の塗りつぶし色
+        fill_color="rgba(255,0,0,0.1)", 
         stroke_width=stroke_width_canvas, 
         stroke_color=stroke_color,
-        background_color="rgba(0,0,0,0)",  # ★★★ 背景を完全に透明に ★★★
-        # background_image=None,          # 背景画像は使用しない
+        background_color="skyblue",  
         update_streamlit=True, 
-        height=canvas_height,   
-        width=canvas_width,    
+        height=final_canvas_height,   
+        width=final_canvas_width,    
         drawing_mode=drawing_mode, 
-        key="roi_canvas_transparent_v1" 
+        key="roi_canvas_skyblue_bg_test" 
     )
 
-    # ROI処理と解析対象画像の決定
     img_to_process_gray = img_gray_full_res 
     img_for_marking_color_np = np_array_rgb_uint8_full_res.copy() 
     analysis_caption_suffix = "(画像全体)"
     
-    scale_x = pil_image_rgb_full_res.width / canvas_width if canvas_width > 0 else 1.0
-    scale_y = pil_image_rgb_full_res.height / canvas_height if canvas_height > 0 else 1.0
+    scale_x = pil_image_rgb_full_res.width / final_canvas_width if final_canvas_width > 0 else 1.0
+    scale_y = pil_image_rgb_full_res.height / final_canvas_height if final_canvas_height > 0 else 1.0
 
     if canvas_result and canvas_result.json_data is not None and canvas_result.json_data.get("objects", []):
         if canvas_result.json_data["objects"][-1]["type"] == "rect":
@@ -131,8 +135,7 @@ if st.session_state.pil_image_to_process is not None:
             else: st.session_state.roi_coords = None
     st.markdown("---")
 
-    # --- サイドバーのパラメータ設定UI (変更なし) ---
-    # (省略、内容は前回と同じ)
+    # --- サイドバーのパラメータ設定UI (内容は変更なし) ---
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を色々変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
     st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
@@ -150,8 +153,7 @@ if st.session_state.pil_image_to_process is not None:
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,value=st.session_state.max_area_sb_key_v3,key="max_area_sb_key_v3") 
     st.sidebar.caption("""- ...""") 
 
-
-    # --- メインエリアの画像処理と表示ロジック (変更なし) ---
+    # --- メインエリアの画像処理と表示ロジック ---
     st.header(f"処理ステップごとの画像") 
     kernel_size_blur=1;
     if img_to_process_gray.size==0: st.error("処理対象グレースケール画像が空。"); st.stop()
