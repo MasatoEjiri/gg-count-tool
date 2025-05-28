@@ -121,7 +121,7 @@ if st.session_state.pil_image_to_process is not None:
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
     # ★★★ key を削除し、value でデフォルト指定、戻り値を直接使用 (ユーザー提供版の通り) ★★★
     min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1, 
-                                          value=1) # デフォルト 1 (ユーザー提供版では1でした)
+                                          value=1) # デフォルト 1
     st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。(画像リサイズ時注意)""") 
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1, 
                                           value=1000) # デフォルト 1000
