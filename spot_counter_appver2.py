@@ -4,7 +4,6 @@ import numpy as np
 import cv2
 from streamlit_drawable_canvas import st_canvas
 import io
-import time 
 
 # ページ設定
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
@@ -63,107 +62,72 @@ if st.session_state.pil_image_to_process is not None:
     np_array_rgb_uint8_full_res = None 
     
     try:
+        # ★★★ Pillowで開き、RGBに変換するのみ (リサイズや他の処理は一旦行わない) ★★★
         pil_image_rgb_full_res = st.session_state.pil_image_to_process.convert("RGB")
+        
         np_array_rgb_uint8_full_res = np.array(pil_image_rgb_full_res).astype(np.uint8)
         img_gray_full_res = cv2.cvtColor(np_array_rgb_uint8_full_res, cv2.COLOR_RGB2GRAY)
         if img_gray_full_res.dtype != np.uint8: img_gray_full_res = img_gray_full_res.astype(np.uint8)
+
     except Exception as e: st.error(f"画像変換(フル解像度)に失敗: {e}"); st.stop()
 
     st.header("1. 解析エリア選択") 
     
-    pil_for_display_and_canvas_bg = pil_image_rgb_full_res.copy()
-    DISPLAY_MAX_DIM = 600 
-    original_width_for_scaling = pil_for_display_and_canvas_bg.width
-    original_height_for_scaling = pil_for_display_and_canvas_bg.height
-    if pil_for_display_and_canvas_bg.width > DISPLAY_MAX_DIM or pil_for_display_and_canvas_bg.height > DISPLAY_MAX_DIM:
-        pil_for_display_and_canvas_bg.thumbnail((DISPLAY_MAX_DIM, DISPLAY_MAX_DIM))
+    st.info("↓下のキャンバス上でマウスをドラッグして、解析したい四角いエリアを描画してください。")
     
-    canvas_width = pil_for_display_and_canvas_bg.width
-    canvas_height = pil_for_display_and_canvas_bg.height
+    canvas_result = None
+    if pil_image_rgb_full_res is not None: 
+        canvas_height = pil_image_rgb_full_res.height
+        canvas_width = pil_image_rgb_full_res.width
+        
+        # スケーリングファクターは、この時点では1.0 (キャンバスはフル解像度画像と同じサイズのため)
+        scale_x = 1.0
+        scale_y = 1.0
 
-    scale_x = original_width_for_scaling / canvas_width if canvas_width > 0 else 1.0
-    scale_y = original_height_for_scaling / canvas_height if canvas_height > 0 else 1.0
+        # デバッグ表示: st_canvasに渡す直前のPillowイメージを表示
+        with st.expander("キャンバス背景候補の確認（デバッグ用）", expanded=True):
+            st.image(pil_image_rgb_full_res, caption=f"キャンバス背景用Pillow画像 ({canvas_width}x{canvas_height}, モード: {pil_image_rgb_full_res.mode})")
 
-    st.info(f"↓下の画像の上でマウスをドラッグして、解析したい四角いエリアを描画してください。（表示サイズ: {canvas_width}x{canvas_height}）")
-    
-    # ★★★ 重ね合わせのためのCSSとHTML構造 (前回の試み) ★★★
-    # このCSSは Streamlit の内部構造に依存するため、注意が必要です。
-    # セレクタが Streamlit のバージョンアップで変更される可能性があります。
-    overlay_css = f"""
-    <style>
-        .roi-overlay-container {{
-            position: relative; /* 子要素のabsoluteの基準点 */
-            width: {canvas_width}px;
-            height: {canvas_height}px;
-            margin: auto; /* 中央寄せの試み */
-            border: 1px dashed lightgray; /* デバッグ用にコンテナの範囲を可視化 */
-        }}
-        /* st.image が生成するimgタグの親のdivをターゲットにする (より具体的だが不安定) */
-        .roi-overlay-container div[data-testid="stImage"] {{
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important; /* 親コンテナに合わせる */
-            height: 100% !important; /* 親コンテナに合わせる */
-            z-index: 1 !important; /* 画像を下に */
-        }}
-         /* st_canvas を囲むdivをターゲット (keyで特定) */
-        .roi-overlay-container div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"] div[data-testid="stDrawableCanvas"][key="roi_canvas_overlay_final_attempt"] {{
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: {canvas_width}px !important;
-            height: {canvas_height}px !important;
-            z-index: 2 !important; /* キャンバスを画像の上に */
-            pointer-events: auto !important; /* キャンバスでの描画を可能に */
-        }}
-    </style>
-    <div class="roi-overlay-container">
-    """ # keyはst_canvasのkeyと一致させる
-    st.markdown(overlay_css, unsafe_allow_html=True)
+        canvas_result = st_canvas(
+            fill_color="rgba(255,0,0,0.1)", 
+            stroke_width=2, 
+            stroke_color="red",
+            background_image=pil_image_rgb_full_res, # ★★★ フル解像度のPillow RGBイメージを使用 ★★★
+            update_streamlit=True, 
+            height=canvas_height,   
+            width=canvas_width,    
+            drawing_mode="rect", 
+            key="roi_canvas_full_res_pil_test" # 新しい固定キー
+        )
+    else:
+        st.error("キャンバス背景用の画像が準備できませんでした。"); st.stop()
 
-    # 1. ベースとなる画像を表示 (CSSでキャンバスの下になるようにする)
-    # ★★★ key 引数を削除 ★★★
-    st.image(pil_for_display_and_canvas_bg, width=canvas_width, use_column_width=False, 
-             caption="この画像に重ねてROIを描画してください。") 
-
-    # 2. 透明なst_canvasを重ねる
-    canvas_result = st_canvas(
-        fill_color="rgba(255, 0, 0, 0.2)", 
-        stroke_width=2, 
-        stroke_color="red",
-        background_color="rgba(0,0,0,0)",  
-        update_streamlit=True, 
-        height=canvas_height,   
-        width=canvas_width,    
-        drawing_mode="rect", 
-        key="roi_canvas_overlay_final_attempt" 
-    )
-    st.markdown("</div>", unsafe_allow_html=True) # roi-overlay-containerの閉じタグ
-
-    # (以降のROI処理、サイドバーUI、メインの画像処理・表示ロジックは変更なし)
+    # (以降のROI処理、サイドバーUI、メインの画像処理・表示ロジックは前回とほぼ同じ)
+    # ... (img_to_process_gray, img_for_marking_color_np, analysis_caption_suffix の決定)
+    # ... (サイドバーのパラメータUI定義)
+    # ... (メインエリアの画像処理と表示)
     img_to_process_gray = img_gray_full_res 
     img_for_marking_color_np = np_array_rgb_uint8_full_res.copy() 
     analysis_caption_suffix = "(画像全体)"
     if canvas_result and canvas_result.json_data is not None and canvas_result.json_data.get("objects", []):
         if canvas_result.json_data["objects"][-1]["type"] == "rect":
             rect = canvas_result.json_data["objects"][-1]
+            # キャンバス上の座標は、フル解像度画像上の座標と（この場合）一致するはず
             x_cvs,y_cvs,w_cvs,h_cvs = int(rect["left"]),int(rect["top"]),int(rect["width"]),int(rect["height"])
             if w_cvs > 0 and h_cvs > 0:
-                x_orig,y_orig,w_orig,h_orig = int(x_cvs*scale_x),int(y_cvs*scale_y),int(w_cvs*scale_x),int(h_cvs*scale_y)
-                x1,y1=max(0,x_orig),max(0,y_orig); x2,y2=min(img_gray_full_res.shape[1],x_orig+w_orig),min(img_gray_full_res.shape[0],y_orig+h_orig)
+                x1,y1=max(0,x_cvs),max(0,y_cvs); 
+                x2,y2=min(img_gray_full_res.shape[1],x_cvs+w_cvs),min(img_gray_full_res.shape[0],y_cvs+h_cvs)
                 if (x2-x1 > 0) and (y2-y1 > 0):
                     st.session_state.roi_coords=(x1,y1,x2-x1,y2-y1)
                     img_to_process_gray = img_gray_full_res[y1:y2, x1:x2].copy()
                     img_for_marking_color_np = np_array_rgb_uint8_full_res[y1:y2, x1:x2].copy()
-                    analysis_caption_suffix = f"(選択エリア: {img_to_process_gray.shape[1]}x{img_to_process_gray.shape[0]}px @フル解像度)"
+                    analysis_caption_suffix = f"(選択エリア: {img_to_process_gray.shape[1]}x{img_to_process_gray.shape[0]}px)"
                     with st.expander("選択されたROI（処理対象のグレースケール）", expanded=True):
-                        st.image(img_to_process_gray, caption=f"ROI: x={x1},y={y1},w={x2-x1},h={y2-y1} (フル解像度座標)")
+                        st.image(img_to_process_gray, caption=f"ROI: x={x1},y={y1},w={x2-x1},h={y2-y1}")
                 else: st.warning("描画ROI無効。全体処理。"); img_to_process_gray=img_gray_full_res; st.session_state.roi_coords=None
             else: st.session_state.roi_coords = None
     st.markdown("---")
 
-    # --- サイドバーのパラメータ設定UI (変更なし) ---
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を色々変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
     st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
@@ -181,7 +145,6 @@ if st.session_state.pil_image_to_process is not None:
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,value=st.session_state.max_area_sb_key_v3,key="max_area_sb_key_v3") 
     st.sidebar.caption("""- ...""") 
 
-    # --- メインエリアの画像処理と表示ロジック (変更なし) ---
     st.header(f"処理ステップごとの画像") 
     kernel_size_blur=1;
     if img_to_process_gray.size==0: st.error("処理対象グレースケール画像が空。"); st.stop()
