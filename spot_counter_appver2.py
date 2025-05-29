@@ -4,7 +4,7 @@ import numpy as np
 import cv2
 from streamlit_drawable_canvas import st_canvas
 import io
-import time 
+# import time # timeモジュールは今回のキー戦略では一旦不要とします
 
 # ページ設定
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
@@ -40,10 +40,9 @@ UPLOAD_ICON="📤"; uploaded_file_widget=st.sidebar.file_uploader(f"{UPLOAD_ICON
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>",unsafe_allow_html=True)
 st.markdown("""### 使用方法
 1. 画像を左にアップロードしてください。
-2. 「1. 解析エリア選択」で、まず上に表示される「元の画像（参照用）」を見て、解析したいおおよその範囲を把握します。
-3. 次に、その下にある透明な描画エリア（キャンバス）上で、参照用画像に合わせてマウスをドラッグし、解析したい四角いエリアを描画してください。最後に描画した四角形がROIとなります。何も描画しない場合は画像全体が対象です。
-4. 画像（または選択エリア）を元に、左サイドバーの「1. 二値化」以降のパラメータを調整してください。
-5. メインエリアの各処理ステップ画像と、最終的な「3. 輝点検出とマーキング」で結果を確認します。
+2. 「1. 解析エリア選択」で、表示された画像の上で直接マウスをドラッグし、解析したい四角いエリアを描画します。最後に描画した四角形がROIとなります。何も描画しない場合は画像全体が対象です。
+3. 画像（または選択エリア）を元に、左サイドバーの「1. 二値化」以降のパラメータを調整してください。
+4. メインエリアの各処理ステップ画像と、最終的な「3. 輝点検出とマーキング」で結果を確認します。
 """)
 st.markdown("---") 
 
@@ -64,7 +63,7 @@ if st.session_state.pil_image_to_process is not None:
     np_array_rgb_uint8_full_res = None 
     
     try:
-        pil_image_rgb_full_res = st.session_state.pil_image_to_process.convert("RGB") # まずRGBに
+        pil_image_rgb_full_res = st.session_state.pil_image_to_process.convert("RGB")
         np_array_rgb_uint8_full_res = np.array(pil_image_rgb_full_res).astype(np.uint8)
         img_gray_full_res = cv2.cvtColor(np_array_rgb_uint8_full_res, cv2.COLOR_RGB2GRAY)
         if img_gray_full_res.dtype != np.uint8: img_gray_full_res = img_gray_full_res.astype(np.uint8)
@@ -72,53 +71,111 @@ if st.session_state.pil_image_to_process is not None:
 
     st.header("1. 解析エリア選択") 
     
-    pil_for_display_reference = pil_image_rgb_full_res.copy() # 表示・キャンバスサイズ基準用にRGB Pillowをコピー
+    pil_for_display_and_canvas = pil_image_rgb_full_res.copy()
     DISPLAY_MAX_DIM = 600 
     
-    original_width_for_scaling = pil_for_display_reference.width
-    original_height_for_scaling = pil_for_display_reference.height
+    original_width_for_scaling = pil_for_display_and_canvas.width
+    original_height_for_scaling = pil_for_display_and_canvas.height
 
-    if pil_for_display_reference.width > DISPLAY_MAX_DIM or pil_for_display_reference.height > DISPLAY_MAX_DIM:
-        pil_for_display_reference.thumbnail((DISPLAY_MAX_DIM, DISPLAY_MAX_DIM))
+    if pil_for_display_and_canvas.width > DISPLAY_MAX_DIM or pil_for_display_and_canvas.height > DISPLAY_MAX_DIM:
+        pil_for_display_and_canvas.thumbnail((DISPLAY_MAX_DIM, DISPLAY_MAX_DIM))
     
-    canvas_width = pil_for_display_reference.width
-    canvas_height = pil_for_display_reference.height
+    canvas_width = pil_for_display_and_canvas.width
+    canvas_height = pil_for_display_and_canvas.height
 
     scale_x = original_width_for_scaling / canvas_width if canvas_width > 0 else 1.0
     scale_y = original_height_for_scaling / canvas_height if canvas_height > 0 else 1.0
 
-    st.info(f"↓下の透明なキャンバス（{canvas_width}x{canvas_height}）上で、上の参照画像に合わせてROIを描画してください。")
-    
-    # --- 参照用画像の表示 (NumPy配列に変換してから) ---
-    if pil_for_display_reference:
-        st.markdown("##### 元の画像（参照用）")
-        try:
-            # Pillow RGBイメージを表示用にNumPy uint8配列に変換
-            np_reference_display = np.array(pil_for_display_reference).astype(np.uint8)
-            st.image(np_reference_display, width=canvas_width, use_column_width=False, # keyを削除
-                     caption="この画像を参照して、下のキャンバスにROIを描画してください。") 
-        except Exception as e_ref_img:
-            st.error(f"参照用画像の表示に失敗: {e_ref_img}")
+    st.info(f"↓下の画像の上でマウスをドラッグして、解析したい四角いエリアを描画してください。（表示サイズ: {canvas_width}x{canvas_height}）")
 
-    # --- 透明な描画キャンバス ---
-    drawing_mode = "rect"; stroke_color = "red"; stroke_width_canvas = 2
+    # ★★★ 重ね合わせのためのCSSとHTMLコンテナ ★★★
+    # このコンテナのクラス名 (roi-overlay-container-class) をCSSで使います。
+    # st.image と st_canvas は、このコンテナの直接の子として配置されることを期待します。
+    # Streamlitでは要素は通常divでラップされるため、CSSセレクタの調整が必要になることが多いです。
     
+    # CSSを定義 (st.image と st_canvas のラッパーdivを特定し、重ねる試み)
+    # このセレクタはStreamlitのバージョンによって変わる可能性が高いです。
+    # 正確なセレクタはブラウザの開発者ツールで確認する必要があります。
+    # ここでは、st.imageとst_canvasを配置する親要素にクラス名をつけ、
+    # その子要素としてst.imageとst_canvasが特定の構造で配置されることを仮定します。
+    
+    # このキーは、CSSでst_canvasの特定のインスタンスをターゲットにするために使います。
+    canvas_unique_key = "unique_roi_canvas_for_css"
+
+    # 非常に実験的なCSSです。
+    # Streamlitが生成するHTML構造をブラウザの開発ツールで確認し、
+    # '.stImage' や '.stDrawableCanvas' などのクラス名や、より具体的な
+    # data-testid を使ったセレクタに調整する必要があるかもしれません。
+    overlay_css = f"""
+    <style>
+        /* このコンテナがst.imageとst_canvasを直接の子として持つとは限らないため、
+           より深い階層を狙う必要がある場合が多い */
+        .roi-overlay-container {{
+            position: relative;
+            width: {canvas_width}px;
+            height: {canvas_height}px;
+            margin: auto; /* 中央寄せ */
+            /* border: 1px dashed red; /* デバッグ用にコンテナの範囲を可視化 */
+        }}
+        /* st.imageが生成するimg要素は通常、div[data-testid="stImage"]の中にあります */
+        /* div[data-testid="stImage"] をコンテナ内の最初の要素と仮定 */
+        .roi-overlay-container > div:nth-child(1) {{ /* st.imageを包むdivを想定 */
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            z-index: 1 !important; /* 画像を下に */
+        }}
+        /* st_canvasを包むdivを、そのキーを使って特定する試み */
+        /* data-testid="stVerticalBlock" のネストは環境や要素の追加で変わります */
+        .roi-overlay-container div[data-testid="stVerticalBlock"] div[data-testid="stDrawableCanvas"][key="{canvas_unique_key}"] {{
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: {canvas_width}px !important;
+            height: {canvas_height}px !important;
+            z-index: 2 !important; /* キャンバスを画像の上に */
+            pointer-events: auto !important; /* キャンバス上で描画操作を可能に */
+        }}
+    </style>
+    """
+    st.markdown(overlay_css, unsafe_allow_html=True)
+    
+    # HTMLとst_image, st_canvasを配置 (st.markdownで親divを生成)
+    # st.markdown("<div class='roi-overlay-container'>", unsafe_allow_html=True) # この方法はstウィジェットを内部に置けない
+
+    # st.container() を使って、それにクラス名をつけることはできないので、
+    # Streamlitが生成する構造に頼るしかありません。
+    # ここでは、st.imageとst_canvasを連続して配置し、CSSでst_canvasが
+    # 先行するst.imageの上に重なるように調整することを試みます。
+
+    # 1. ベースとなる画像を表示
+    st.image(pil_for_display_and_canvas, width=canvas_width, use_column_width=False, 
+             caption="この画像に重ねてROIを描画してください。") # keyは削除
+
+    # 2. 透明なst_canvasを重ねる (CSSでの調整を期待)
+    # 上のst.imageの高さ分だけネガティブマージンで引き上げることで重ねる試み
+    # ただし、この方法はst.imageの実際のレンダリング高さに依存し、非常に不安定です。
+    st.markdown(f"""
+        <div style="margin-top: -{canvas_height + 8}px; position: relative; z-index: 2;"> 
+        """, unsafe_allow_html=True) # +8px はst.imageのキャプションや余白を考慮した微調整値（要調整）
+
     canvas_result = st_canvas(
         fill_color="rgba(255, 0, 0, 0.2)", 
-        stroke_width=stroke_width_canvas, 
-        stroke_color=stroke_color,
-        background_color="rgba(0,0,0,0)",  # 背景を完全に透明に
+        stroke_width=2, 
+        stroke_color="red",
+        background_color="rgba(0,0,0,0)",  # 背景は完全に透明
         update_streamlit=True, 
         height=canvas_height,   
         width=canvas_width,    
-        drawing_mode=drawing_mode, 
-        key="roi_canvas_transparent_overlay_v2" # キーを更新
+        drawing_mode="rect", 
+        key=canvas_unique_key 
     )
-    
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
     # (以降のROI処理、サイドバーUI、メインの画像処理・表示ロジックは変更なし)
-    # ... (img_to_process_gray, img_for_marking_color_np, analysis_caption_suffix の決定)
-    # ... (サイドバーのパラメータUI定義)
-    # ... (メインエリアの画像処理と表示)
     img_to_process_gray = img_gray_full_res 
     img_for_marking_color_np = np_array_rgb_uint8_full_res.copy() 
     analysis_caption_suffix = "(画像全体)"
@@ -141,6 +198,7 @@ if st.session_state.pil_image_to_process is not None:
             else: st.session_state.roi_coords = None
     st.markdown("---")
 
+    # --- サイドバーのパラメータ設定UI (変更なし) ---
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を色々変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
     st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
