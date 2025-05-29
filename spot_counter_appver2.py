@@ -107,8 +107,7 @@ if st.session_state.pil_image_to_process is not None:
     kernel_options_morph = [1,3,5,7,9]
     kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph, 
                                                       value=3) 
-    # ★★★ カーネルサイズの説明を簡潔に ★★★
-    st.sidebar.caption("""
+    st.sidebar.markdown("""
     オープニング処理（収縮後に膨張）で、小さなノイズ除去や輝点分離を行います。
     - **大きくすると:** 効果が強くなり、より大きなノイズや繋がりも除去できますが、輝点自体も小さくなるか消えることがあります。
     - **小さくすると (例: 1):** 効果は弱く、微細なノイズのみに作用し、輝点への影響は少ないです。
@@ -120,7 +119,7 @@ if st.session_state.pil_image_to_process is not None:
                                           value=1) 
     st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。(画像リサイズ時注意)""") 
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1, 
-                                          value=1000) 
+                                          value=10000) # ★★★ デフォルト値を10000に変更 ★★★
     st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。(画像リサイズ時注意)""") 
 
     # --- メインエリアの画像処理と表示ロジック ---
