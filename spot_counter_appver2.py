@@ -102,21 +102,33 @@ if st.session_state.pil_image_to_process is not None:
     st.sidebar.markdown("<br>", unsafe_allow_html=True); st.sidebar.markdown("_二値化だけでうまくいかない場合は下記も調整を_")
     
     st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
-    # ★★★ カーネル形状の選択UIを削除し、内部で楕円に固定 ★★★
     morph_kernel_shape_to_use = cv2.MORPH_ELLIPSE 
-    st.sidebar.markdown("カーネル形状: **楕円 (固定)**") # 固定であることを表示
+    # st.sidebar.markdown("カーネル形状: **楕円 (固定)**") # 削除済み
     
     kernel_options_morph = [1,3,5,7,9]
     kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph, 
                                                       value=3) # デフォルトは 3 (keyなし)
-    st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""") 
+    st.sidebar.markdown("""
+    「オープニング処理」は、画像中の小さな白いノイズ（例えば、背景の小さなゴミや、輝点から細く突き出た部分）を除去したり、輝点同士を繋ぐ非常に細いブリッジを切断して分離しやすくする効果があります。これは、画像を一度「収縮」させて細い部分を取り除き、その後ほぼ同じだけ「膨張」させて元の輝点のサイズを復元する、という2段階の処理です（使用するカーネル形状は「楕円」に固定されています）。
+
+    **カーネルサイズ**は、この収縮・膨張処理を行う際の「範囲の広さ」や「処理の強さ」を決定します（例: サイズ3は3x3ピクセルの範囲を考慮）。
+
+    * **カーネルサイズを大きくすると (例: 5, 7, 9):**
+        * より大きなサイズのノイズや、輝点間のより太い繋がりも除去・分離しやすくなります。
+        * 処理の影響が強くなるため、目的の輝点自体も縁から大きく削られて全体的に小さくなったり、元々小さい輝点や細長い輝点が完全に消えてしまう可能性が高まります。結果として、検出される輝点数が少なくなることがあります。
+    * **カーネルサイズを小さくすると (例: 1, 3):**
+        * 非常に微細なノイズの除去に留まり、輝点自体の形状への影響は最小限に抑えられます。
+        * 輝点同士が少し太めに繋がっている場合や、ある程度の大きさを持つノイズには効果が薄く、それらは残ってしまうことがあります。サイズ1ではほとんど変化が見られない場合もあります。
+
+    画像のノイズの状態、輝点の大きさや形状、輝点同士の密集度合いなどに応じて、メインエリアの「2. 形態学的処理後を見る」の画像を確認しながら、最適なサイズを見つけてください。一般的には、まず小さめのサイズから試していくのが良いでしょう。
+    """, unsafe_allow_html=True)
     
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
     min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1, 
-                                          value=1) # デフォルト 1 (keyなし)
+                                          value=1) 
     st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。(画像リサイズ時注意)""") 
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1, 
-                                          value=1000) # デフォルト 1000 (keyなし)
+                                          value=1000) 
     st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。(画像リサイズ時注意)""") 
 
     # --- メインエリアの画像処理と表示ロジック ---
@@ -177,7 +189,6 @@ if st.session_state.pil_image_to_process is not None:
     st.markdown("---")
     with st.expander("▼ 2. 形態学的処理後を見る", expanded=False): 
         if opened_img_processed is not None: 
-            # ★★★ キャプションの形状名を「楕円」に固定 ★★★
             st.image(opened_img_processed,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{kernel_size_morph_to_use}',use_container_width=True)
         else: st.info("形態学的処理未実施/失敗")
     st.markdown("---") 
