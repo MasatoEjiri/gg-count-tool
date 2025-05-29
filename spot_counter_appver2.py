@@ -26,7 +26,7 @@ def display_count_in_sidebar(placeholder, count_value):
     html=f"""<div style="border-radius:8px;padding:15px;text-align:center;background-color:{bg};margin-bottom:15px;color:{lf};"><p style="font-size:16px;margin-bottom:5px;font-weight:bold;">{label_text}</p><p style="font-size:48px;font-weight:bold;margin-top:0px;color:{vf};line-height:1.1;">{value_text}</p></div>"""
     with placeholder.container(): placeholder.markdown(html, unsafe_allow_html=True)
 
-default_ss = {'counted_spots_value':"---","binary_threshold_value":58,"threshold_slider_for_binary":58,"threshold_number_for_binary":58,'pil_image_to_process':None,'image_source_caption':"アップロードされた画像",'roi_coords':None,'last_uploaded_filename_for_roi_reset':None}
+default_ss = {'counted_spots_value':"---","binary_threshold_value":58,"threshold_slider_for_binary":58,"threshold_number_for_binary":58,"morph_shape_sb_key":"楕円","morph_size_sb_key":3,"min_area_sb_key_v3":1,"max_area_sb_key_v3":1000,'pil_image_to_process':None,'image_source_caption':"アップロードされた画像",'roi_coords':None,'last_uploaded_filename_for_roi_reset':None}
 for k,v in default_ss.items():
     if k not in st.session_state: st.session_state[k]=v
 
@@ -71,48 +71,44 @@ if st.session_state.pil_image_to_process is not None:
 
     st.header("1. 解析エリア選択") 
     
-    # --- 参照用画像と透明なキャンバスの重ね合わせ ---
-    pil_for_display = pil_image_rgb_full_res.copy()
+    pil_for_display_and_canvas_bg = pil_image_rgb_full_res.copy()
     DISPLAY_MAX_DIM = 600 
+    original_width_for_scaling = pil_for_display_and_canvas_bg.width
+    original_height_for_scaling = pil_for_display_and_canvas_bg.height
+    if pil_for_display_and_canvas_bg.width > DISPLAY_MAX_DIM or pil_for_display_and_canvas_bg.height > DISPLAY_MAX_DIM:
+        pil_for_display_and_canvas_bg.thumbnail((DISPLAY_MAX_DIM, DISPLAY_MAX_DIM))
     
-    original_width_for_scaling = pil_for_display.width
-    original_height_for_scaling = pil_for_display.height
+    canvas_width = pil_for_display_and_canvas_bg.width
+    canvas_height = pil_for_display_and_canvas_bg.height
 
-    if pil_for_display.width > DISPLAY_MAX_DIM or pil_for_display.height > DISPLAY_MAX_DIM:
-        pil_for_display.thumbnail((DISPLAY_MAX_DIM, DISPLAY_MAX_DIM))
-    
-    canvas_width = pil_for_display.width
-    canvas_height = pil_for_display.height
-
-    # スケーリングファクター
     scale_x = original_width_for_scaling / canvas_width if canvas_width > 0 else 1.0
     scale_y = original_height_for_scaling / canvas_height if canvas_height > 0 else 1.0
 
     st.info(f"↓下の画像の上でマウスをドラッグして、解析したい四角いエリアを描画してください。（表示サイズ: {canvas_width}x{canvas_height}）")
-
-    # ★★★ 重ね合わせのためのCSSとHTML構造 ★★★
-    # このCSSセレクタはStreamlitの内部構造に依存するため、非常に不安定です。
-    # data-testid属性は比較的安定していますが、それでも変更の可能性があります。
+    
+    # ★★★ 重ね合わせのためのCSSとHTML構造 (前回の試み) ★★★
+    # このCSSは Streamlit の内部構造に依存するため、注意が必要です。
+    # セレクタが Streamlit のバージョンアップで変更される可能性があります。
     overlay_css = f"""
     <style>
         .roi-overlay-container {{
-            position: relative;
+            position: relative; /* 子要素のabsoluteの基準点 */
             width: {canvas_width}px;
             height: {canvas_height}px;
-            margin: auto; /* 中央寄せ */
+            margin: auto; /* 中央寄せの試み */
+            border: 1px dashed lightgray; /* デバッグ用にコンテナの範囲を可視化 */
         }}
-        /* st.image によって生成される img タグを直接ターゲットにするのは難しいので、
-           st.image を含むコンテナをターゲットにする */
+        /* st.image が生成するimgタグの親のdivをターゲットにする (より具体的だが不安定) */
         .roi-overlay-container div[data-testid="stImage"] {{
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 1; /* 画像を下に */
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important; /* 親コンテナに合わせる */
+            height: 100% !important; /* 親コンテナに合わせる */
+            z-index: 1 !important; /* 画像を下に */
         }}
-        /* st_canvas を囲むdivをターゲット (keyで特定) */
-        .roi-overlay-container div[data-testid="stDrawableCanvas"][key="roi_canvas_overlay_final_attempt"] {{
+         /* st_canvas を囲むdivをターゲット (keyで特定) */
+        .roi-overlay-container div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"] div[data-testid="stDrawableCanvas"][key="roi_canvas_overlay_final_attempt"] {{
             position: absolute !important;
             top: 0 !important;
             left: 0 !important;
@@ -123,19 +119,20 @@ if st.session_state.pil_image_to_process is not None:
         }}
     </style>
     <div class="roi-overlay-container">
-    """
+    """ # keyはst_canvasのkeyと一致させる
     st.markdown(overlay_css, unsafe_allow_html=True)
 
     # 1. ベースとなる画像を表示 (CSSでキャンバスの下になるようにする)
-    # このst.imageは、上記のCSSの .roi-overlay-container div[data-testid="stImage"] にマッチすることを期待
-    st.image(pil_for_display, width=canvas_width, use_column_width=False, key="base_image_for_roi_overlay")
+    # ★★★ key 引数を削除 ★★★
+    st.image(pil_for_display_and_canvas_bg, width=canvas_width, use_column_width=False, 
+             caption="この画像に重ねてROIを描画してください。") 
 
     # 2. 透明なst_canvasを重ねる
     canvas_result = st_canvas(
-        fill_color="rgba(255, 0, 0, 0.2)", # 描画中の塗りつぶし色を少し濃く
+        fill_color="rgba(255, 0, 0, 0.2)", 
         stroke_width=2, 
         stroke_color="red",
-        background_color="rgba(0,0,0,0)",  # 背景を完全に透明に
+        background_color="rgba(0,0,0,0)",  
         update_streamlit=True, 
         height=canvas_height,   
         width=canvas_width,    
@@ -144,15 +141,10 @@ if st.session_state.pil_image_to_process is not None:
     )
     st.markdown("</div>", unsafe_allow_html=True) # roi-overlay-containerの閉じタグ
 
-
     # (以降のROI処理、サイドバーUI、メインの画像処理・表示ロジックは変更なし)
-    # ... (img_to_process_gray, img_for_marking_color_np, analysis_caption_suffix の決定)
-    # ... (サイドバーのパラメータUI定義)
-    # ... (メインエリアの画像処理と表示)
     img_to_process_gray = img_gray_full_res 
     img_for_marking_color_np = np_array_rgb_uint8_full_res.copy() 
     analysis_caption_suffix = "(画像全体)"
-    
     if canvas_result and canvas_result.json_data is not None and canvas_result.json_data.get("objects", []):
         if canvas_result.json_data["objects"][-1]["type"] == "rect":
             rect = canvas_result.json_data["objects"][-1]
@@ -171,6 +163,7 @@ if st.session_state.pil_image_to_process is not None:
             else: st.session_state.roi_coords = None
     st.markdown("---")
 
+    # --- サイドバーのパラメータ設定UI (変更なし) ---
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を色々変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
     st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
@@ -188,6 +181,7 @@ if st.session_state.pil_image_to_process is not None:
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,value=st.session_state.max_area_sb_key_v3,key="max_area_sb_key_v3") 
     st.sidebar.caption("""- ...""") 
 
+    # --- メインエリアの画像処理と表示ロジック (変更なし) ---
     st.header(f"処理ステップごとの画像") 
     kernel_size_blur=1;
     if img_to_process_gray.size==0: st.error("処理対象グレースケール画像が空。"); st.stop()
