@@ -40,14 +40,9 @@ def display_count_in_sidebar(placeholder, count_value):
 
 # --- セッションステートの初期化 ---
 if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots_value = "---" 
-if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 58 # 二値化の共通閾値
+if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 58 
 if "threshold_slider_for_binary" not in st.session_state: st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
 if "threshold_number_for_binary" not in st.session_state: st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
-# ★★★ 形態学的処理と面積フィルタのキーはセッションステート初期化から削除 ★★★ (ユーザー提供版のコメントに従う)
-# if "morph_shape_sb_key" not in st.session_state: st.session_state.morph_shape_sb_key = "楕円" 
-# if "morph_size_sb_key" not in st.session_state: st.session_state.morph_size_sb_key = 3
-# if "min_area_sb_key_v3" not in st.session_state: st.session_state.min_area_sb_key_v3 = 1 
-# if "max_area_sb_key_v3" not in st.session_state: st.session_state.max_area_sb_key_v3 = 1000 
 if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
 
@@ -107,22 +102,26 @@ if st.session_state.pil_image_to_process is not None:
     st.sidebar.markdown("<br>", unsafe_allow_html=True); st.sidebar.markdown("_二値化だけでうまくいかない場合は下記も調整を_")
     
     st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
-    morph_kernel_shape_options_display = {"楕円":cv2.MORPH_ELLIPSE,"矩形":cv2.MORPH_RECT,"十字":cv2.MORPH_CROSS}
-    selected_shape_name_sb = st.sidebar.selectbox("カーネル形状",options=list(morph_kernel_shape_options_display.keys()), 
-                                                  index=0) # デフォルトは "楕円"
-    morph_kernel_shape_to_use = morph_kernel_shape_options_display[selected_shape_name_sb]
-    st.sidebar.caption("輝点の形状に合わせて。") 
+    morph_kernel_shape_to_use = cv2.MORPH_ELLIPSE # ★★★ 形状は楕円に固定 ★★★
+    # ★★★ カーネル形状の選択UIと固定表記を削除 ★★★
+    
     kernel_options_morph = [1,3,5,7,9]
     kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph, 
-                                                      value=3) # デフォルトは 3
-    st.sidebar.caption("""- **大きくすると:** 効果強、輝点も影響あり。\n- **小さくすると:** 効果弱。""") 
+                                                      value=3) # デフォルトは 3 (keyなし)
+    # ★★★ カーネルサイズの説明を簡潔なものに戻す ★★★
+    st.sidebar.caption("""
+    オープニング処理（収縮後に膨張）で、小さなノイズ除去や輝点分離を行います。
+    - **大きくすると:** 効果が強くなり、より大きなノイズや繋がりも除去できますが、輝点自体も小さくなるか消えることがあります。
+    - **小さくすると (例: 1):** 効果は弱く、微細なノイズのみに作用し、輝点への影響は少ないです。
+    画像を見ながら調整してください。
+    """)
     
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
     min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1, 
-                                          value=1) # デフォルト 1 
+                                          value=1) # デフォルト 1 (keyなし)
     st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。(画像リサイズ時注意)""") 
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1, 
-                                          value=1000) # デフォルト 1000
+                                          value=10000) # ★★★ デフォルト値を10000に変更 ★★★ (keyなし)
     st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。(画像リサイズ時注意)""") 
 
     # --- メインエリアの画像処理と表示ロジック ---
@@ -183,7 +182,7 @@ if st.session_state.pil_image_to_process is not None:
     st.markdown("---")
     with st.expander("▼ 2. 形態学的処理後を見る", expanded=False): 
         if opened_img_processed is not None: 
-            st.image(opened_img_processed,caption=f'カーネル:{selected_shape_name_sb} {kernel_size_morph_to_use}x{kernel_size_morph_to_use}',use_container_width=True)
+            st.image(opened_img_processed,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{kernel_size_morph_to_use}',use_container_width=True) # キャプションも固定
         else: st.info("形態学的処理未実施/失敗")
     st.markdown("---") 
     st.subheader("3. 輝点検出とマーキング")
