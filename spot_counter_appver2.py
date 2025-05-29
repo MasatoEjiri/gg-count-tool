@@ -4,7 +4,7 @@ import numpy as np
 import cv2
 from streamlit_drawable_canvas import st_canvas
 import io
-import time # ユニークキー生成のため（最終手段）
+import time 
 
 # ページ設定
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
@@ -26,7 +26,7 @@ def display_count_in_sidebar(placeholder, count_value):
     html=f"""<div style="border-radius:8px;padding:15px;text-align:center;background-color:{bg};margin-bottom:15px;color:{lf};"><p style="font-size:16px;margin-bottom:5px;font-weight:bold;">{label_text}</p><p style="font-size:48px;font-weight:bold;margin-top:0px;color:{vf};line-height:1.1;">{value_text}</p></div>"""
     with placeholder.container(): placeholder.markdown(html, unsafe_allow_html=True)
 
-default_ss = {'counted_spots_value':"---","binary_threshold_value":58,"threshold_slider_for_binary":58,"threshold_number_for_binary":58,"morph_shape_sb_key":"楕円","morph_size_sb_key":3,"min_area_sb_key_v3":1,"max_area_sb_key_v3":1000,'pil_image_to_process':None,'image_source_caption':"アップロードされた画像",'roi_coords':None,'last_uploaded_filename_for_roi_reset':None}
+default_ss = {'counted_spots_value':"---","binary_threshold_value":58,"threshold_slider_for_binary":58,"threshold_number_for_binary":58,'pil_image_to_process':None,'image_source_caption':"アップロードされた画像",'roi_coords':None,'last_uploaded_filename_for_roi_reset':None}
 for k,v in default_ss.items():
     if k not in st.session_state: st.session_state[k]=v
 
@@ -72,97 +72,77 @@ if st.session_state.pil_image_to_process is not None:
     st.header("1. 解析エリア選択") 
     
     # --- 参照用画像と透明なキャンバスの重ね合わせ ---
-    # 参照用画像を準備 (縮小)
-    pil_for_display_and_canvas_bg = pil_image_rgb_full_res.copy()
-    DISPLAY_MAX_DIM = 700 # 表示・描画エリアの最大辺長 (少し大きめに)
+    pil_for_display = pil_image_rgb_full_res.copy()
+    DISPLAY_MAX_DIM = 600 
     
-    original_width_for_scaling = pil_for_display_and_canvas_bg.width
-    original_height_for_scaling = pil_for_display_and_canvas_bg.height
+    original_width_for_scaling = pil_for_display.width
+    original_height_for_scaling = pil_for_display.height
 
-    if pil_for_display_and_canvas_bg.width > DISPLAY_MAX_DIM or pil_for_display_and_canvas_bg.height > DISPLAY_MAX_DIM:
-        pil_for_display_and_canvas_bg.thumbnail((DISPLAY_MAX_DIM, DISPLAY_MAX_DIM))
+    if pil_for_display.width > DISPLAY_MAX_DIM or pil_for_display.height > DISPLAY_MAX_DIM:
+        pil_for_display.thumbnail((DISPLAY_MAX_DIM, DISPLAY_MAX_DIM))
     
-    canvas_width = pil_for_display_and_canvas_bg.width
-    canvas_height = pil_for_display_and_canvas_bg.height
+    canvas_width = pil_for_display.width
+    canvas_height = pil_for_display.height
 
     # スケーリングファクター
     scale_x = original_width_for_scaling / canvas_width if canvas_width > 0 else 1.0
     scale_y = original_height_for_scaling / canvas_height if canvas_height > 0 else 1.0
 
-    st.info(f"↓下の画像の上でマウスをドラッグして、解析したい四角いエリアを描画してください。（キャンバスサイズ: {canvas_width}x{canvas_height}）")
+    st.info(f"↓下の画像の上でマウスをドラッグして、解析したい四角いエリアを描画してください。（表示サイズ: {canvas_width}x{canvas_height}）")
 
     # ★★★ 重ね合わせのためのCSSとHTML構造 ★★★
-    # このCSSは非常に実験的であり、Streamlitのバージョン等で壊れる可能性があります
-    # 親コンテナのIDを固定するためにst.container()を使う試みは、st.markdownでは直接の子要素にしか適用できないため難しい
-    # ここでは、st.imageとst_canvasを連続して配置し、CSSでst_canvasをst.imageの上に持ってくることを試みます。
-    # Streamlitが各要素をラップするdivのdata-testidが頼りになります。
+    # このCSSセレクタはStreamlitの内部構造に依存するため、非常に不安定です。
+    # data-testid属性は比較的安定していますが、それでも変更の可能性があります。
+    overlay_css = f"""
+    <style>
+        .roi-overlay-container {{
+            position: relative;
+            width: {canvas_width}px;
+            height: {canvas_height}px;
+            margin: auto; /* 中央寄せ */
+        }}
+        /* st.image によって生成される img タグを直接ターゲットにするのは難しいので、
+           st.image を含むコンテナをターゲットにする */
+        .roi-overlay-container div[data-testid="stImage"] {{
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1; /* 画像を下に */
+        }}
+        /* st_canvas を囲むdivをターゲット (keyで特定) */
+        .roi-overlay-container div[data-testid="stDrawableCanvas"][key="roi_canvas_overlay_final_attempt"] {{
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: {canvas_width}px !important;
+            height: {canvas_height}px !important;
+            z-index: 2 !important; /* キャンバスを画像の上に */
+            pointer-events: auto !important; /* キャンバスでの描画を可能に */
+        }}
+    </style>
+    <div class="roi-overlay-container">
+    """
+    st.markdown(overlay_css, unsafe_allow_html=True)
 
-    # `st.image` と `st_canvas` を含むコンテナの data-testid は実行時に確認が必要な場合があります。
-    # 一般的に、Streamlitは要素を `div[data-testid="stVerticalBlock"]` の中に入れます。
-    # このCSSは、st.imageのすぐ後にst_canvasが配置されることを前提としています。
-    
-    # 描画エリアのコンテナを開始
-    # このコンテナに relative position を設定し、中の canvas を absolute で配置します。
-    # Streamlitでは st.markdown で囲むのが一般的
-    
-    # 実際のst.imageとst_canvasの出力HTML構造に依存するため、このCSSは調整が非常に難しいです。
-    # data-testid は変更される可能性があるため、より汎用的なセレクタも検討できますが、特定が困難です。
-    # ここでは、st.imageのすぐ後にst_canvasを配置し、st_canvasにマイナスのマージントップを適用して
-    # 無理やり重ねるという、やや強引な方法を試してみます。
-    
-    image_container = st.container() # 画像とキャンバスを同じコンテナに入れる試み
+    # 1. ベースとなる画像を表示 (CSSでキャンバスの下になるようにする)
+    # このst.imageは、上記のCSSの .roi-overlay-container div[data-testid="stImage"] にマッチすることを期待
+    st.image(pil_for_display, width=canvas_width, use_column_width=False, key="base_image_for_roi_overlay")
 
-    with image_container:
-        st.image(pil_for_display_and_canvas_bg, width=canvas_width, use_column_width=False, output_format='PNG')
-        
-        # st_canvasを画像の上に重ねるためのCSS（st.markdownで注入）
-        # このCSSは、st_canvasがst.imageの直後に配置されることを前提としています。
-        # また、st_canvasを囲むdivの正確なクラスや構造はStreamlitのバージョンで変わりえます。
-        # `transform: translateY(-100%)` で上に移動させます。正確な移動量は高さに依存します。
-        # `margin-bottom` でその後の要素が詰まるのを防ぎます。
-        # `pointer-events: auto` でキャンバスが操作できるようにします。
-        
-        # Streamlit 1.18以降の構造を想定したセレクタの試み (stVerticalBlockを辿る)
-        # この方法は非常に不安定で、Streamlitのアップデートで容易に壊れます。
-        # keyを使って特定のst_canvasを狙うのがまだマシかもしれません。
-        canvas_key = "roi_overlay_canvas_v9"
-        
-        # ネガティブマージンで重ねる試み (よりシンプルだが、これも完璧ではない)
-        # 前のst.imageの高さ分だけ上に移動させる
-        # この方法は、st.imageの実際のレンダリング高さに依存します。
-        # st.imageにkeyをつけて、その要素の高さをJavaScriptで取得して動的にCSSを作るのが理想ですが、
-        # Streamlitの範囲を超えるため、ここでは固定値か、近似値を使います。
-        
-        # 一旦、st_canvasをそのまま表示し、重ね合わせは今後の課題とする（安定性のため）
-        # もし重ね合わせを試すなら、以下のようなCSSをst.markdownで注入する必要がある
-        # (ただし、セレクタの特定と調整が非常に難しい)
-        # st.markdown(f"""
-        # <style>
-        # div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] > div[data-testid="stDrawableCanvas"][key="{canvas_key}"] {{
-        #     margin-top: -{canvas_height}px !important; /* st.imageの高さ分だけ上に */
-        #     margin-bottom: {canvas_height}px !important; /* 下の要素が上がってこないように */
-        #     position: relative; /* z-indexを効かせるため (またはabsolute) */
-        #     z-index: 2;
-        # }}
-        # /* st.imageのコンテナのz-indexを下げる (あまり効果がないかもしれない) */
-        # div[data-testid="stImage"] {{
-        #    z-index: 1;
-        # }}
-        # </style>
-        # """, unsafe_allow_html=True)
-
-        canvas_result = st_canvas(
-            fill_color="rgba(255, 0, 0, 0.1)", 
-            stroke_width=2, 
-            stroke_color="red",
-            background_color="rgba(0,0,0,0)",  # 透明な背景
-            # background_image=None, # 背景画像はst.imageで表示
-            update_streamlit=True, 
-            height=canvas_height,   
-            width=canvas_width,    
-            drawing_mode="rect", 
-            key=canvas_key
-        )
+    # 2. 透明なst_canvasを重ねる
+    canvas_result = st_canvas(
+        fill_color="rgba(255, 0, 0, 0.2)", # 描画中の塗りつぶし色を少し濃く
+        stroke_width=2, 
+        stroke_color="red",
+        background_color="rgba(0,0,0,0)",  # 背景を完全に透明に
+        update_streamlit=True, 
+        height=canvas_height,   
+        width=canvas_width,    
+        drawing_mode="rect", 
+        key="roi_canvas_overlay_final_attempt" 
+    )
+    st.markdown("</div>", unsafe_allow_html=True) # roi-overlay-containerの閉じタグ
 
 
     # (以降のROI処理、サイドバーUI、メインの画像処理・表示ロジックは変更なし)
