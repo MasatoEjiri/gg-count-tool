@@ -1,10 +1,9 @@
 import streamlit as st
-from PIL import Image, ImageDraw 
+from PIL import Image, ImageDraw, ImageEnhance # ImageEnhance を追加
 import numpy as np
 import cv2
-from streamlit_drawable_canvas import st_canvas # ROI選択用にインポート
+from streamlit_drawable_canvas import st_canvas
 import io
-# import time # timeモジュールは今回のキー戦略では不要
 
 # ページ設定
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
@@ -26,7 +25,7 @@ def display_count_in_sidebar(placeholder, count_value):
     html=f"""<div style="border-radius:8px;padding:15px;text-align:center;background-color:{bg};margin-bottom:15px;color:{lf};"><p style="font-size:16px;margin-bottom:5px;font-weight:bold;">{label_text}</p><p style="font-size:48px;font-weight:bold;margin-top:0px;color:{vf};line-height:1.1;">{value_text}</p></div>"""
     with placeholder.container(): placeholder.markdown(html, unsafe_allow_html=True)
 
-default_ss = {'counted_spots_value':"---","binary_threshold_value":58,"threshold_slider_for_binary":58,"threshold_number_for_binary":58,"morph_shape_sb_key":"楕円","morph_size_sb_key":3,"min_area_sb_key_v3":1,"max_area_sb_key_v3":1000,'pil_image_to_process':None,'image_source_caption':"アップロードされた画像",'roi_coords':None,'last_uploaded_filename_for_roi_reset':None}
+default_ss = {'counted_spots_value':"---","binary_threshold_value":58,"threshold_slider_for_binary":58,"threshold_number_for_binary":58,'pil_image_to_process':None,'image_source_caption':"アップロードされた画像",'roi_coords':None,'last_uploaded_filename_for_roi_reset':None}
 for k,v in default_ss.items():
     if k not in st.session_state: st.session_state[k]=v
 
@@ -40,7 +39,7 @@ UPLOAD_ICON="📤"; uploaded_file_widget=st.sidebar.file_uploader(f"{UPLOAD_ICON
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>",unsafe_allow_html=True)
 st.markdown("""### 使用方法
 1. 画像を左にアップロードしてください。
-2. 「1. 解析エリア選択」で、表示された画像の上で直接マウスをドラッグし、解析したい四角いエリアを描画します。最後に描画した四角形がROIとなります。何も描画しない場合は画像全体が対象です。
+2. 「1. 解析エリア選択」で、表示された半透明の元画像の上でマウスをドラッグし、解析したい四角いエリアを描画します。最後に描画した四角形がROIとなります。何も描画しない場合は画像全体が対象です。
 3. 画像（または選択エリア）を元に、左サイドバーの「1. 二値化」以降のパラメータを調整してください。
 4. メインエリアの各処理ステップ画像と、最終的な「3. 輝点検出とマーキング」で結果を確認します。
 """)
@@ -59,12 +58,19 @@ else:
     if st.session_state.pil_image_to_process is not None: st.session_state.pil_image_to_process=None; st.session_state.counted_spots_value="---"; st.session_state.roi_coords=None
 
 if st.session_state.pil_image_to_process is not None:
-    pil_image_rgb_full_res = None; img_gray_full_res = None
+    pil_image_rgba_full_res = None; img_gray_full_res = None
     np_array_rgb_uint8_full_res = None 
     
     try:
-        pil_image_rgb_full_res = st.session_state.pil_image_to_process.convert("RGB")
-        np_array_rgb_uint8_full_res = np.array(pil_image_rgb_full_res).astype(np.uint8)
+        pil_image_rgba_full_res = st.session_state.pil_image_to_process.convert("RGBA") # RGBAに変換
+        np_array_rgba_full_res = np.array(pil_image_rgba_full_res)
+        # グレースケール化はRGBから行う
+        if np_array_rgba_full_res.shape[2] == 4: # RGBAの場合
+            np_array_rgb_uint8_full_res = cv2.cvtColor(np_array_rgba_full_res, cv2.COLOR_RGBA2RGB)
+        else: # RGBまたは他の形式の場合は一度RGBとして読み直す（安全のため）
+            pil_image_rgb_full_res_temp = st.session_state.pil_image_to_process.convert("RGB")
+            np_array_rgb_uint8_full_res = np.array(pil_image_rgb_full_res_temp).astype(np.uint8)
+
         img_gray_full_res = cv2.cvtColor(np_array_rgb_uint8_full_res, cv2.COLOR_RGB2GRAY)
         if img_gray_full_res.dtype != np.uint8: img_gray_full_res = img_gray_full_res.astype(np.uint8)
     except Exception as e: st.error(f"画像変換(フル解像度)に失敗: {e}"); st.stop()
@@ -72,94 +78,100 @@ if st.session_state.pil_image_to_process is not None:
     st.header("1. 解析エリア選択") 
     
     # --- 参照用画像と透明なキャンバスの重ね合わせ ---
-    pil_for_display_and_canvas = pil_image_rgb_full_res.copy() # 変数名変更
+    pil_for_display_and_canvas = pil_image_rgba_full_res.copy() # RGBAのままコピー
     DISPLAY_MAX_DIM = 600 
     
     original_width_for_scaling = pil_for_display_and_canvas.width
     original_height_for_scaling = pil_for_display_and_canvas.height
 
     if pil_for_display_and_canvas.width > DISPLAY_MAX_DIM or pil_for_display_and_canvas.height > DISPLAY_MAX_DIM:
-        pil_for_display_and_canvas.thumbnail((DISPLAY_MAX_DIM, DISPLAY_MAX_DIM))
+        pil_for_display_and_canvas.thumbnail((DISPLAY_MAX_DIM, DISPLAY_MAX_DIM)) # 破壊的変更
     
     canvas_width = pil_for_display_and_canvas.width
     canvas_height = pil_for_display_and_canvas.height
 
+    # スケーリングファクター
     scale_x = original_width_for_scaling / canvas_width if canvas_width > 0 else 1.0
     scale_y = original_height_for_scaling / canvas_height if canvas_height > 0 else 1.0
 
-    st.info(f"↓下の画像の上でマウスをドラッグして、解析したい四角いエリアを描画してください。（表示サイズ: {canvas_width}x{canvas_height}）")
+    st.info(f"↓下の半透明の画像の上でマウスをドラッグして、解析したい四角いエリアを描画してください。（表示サイズ: {canvas_width}x{canvas_height}）")
 
-    # ★★★ 重ね合わせのためのCSSとHTML構造 ★★★
-    # このCSSは非常に実験的であり、Streamlitのバージョン等で壊れる可能性があります。
-    # また、ブラウザの開発者ツールで実際のHTML構造を確認しながら調整が必要になることが多いです。
-    unique_container_id = "roi_overlay_container_unique" # 親コンテナにユニークIDを振る試み（実際には動的生成推奨）
-    # st.imageとst_canvasを配置する列のdata-testidは実行時に確認する必要がある場合があります。
-    # 一般的には stHorizontalBlock や stVerticalBlock です。
+    # --- ★★★ 重ね合わせのためのコンテナとCSS (最新の試み) ★★★ ---
+    # 親コンテナに relative を設定
+    # st.image と st_canvas をこのコンテナの直接の子として配置し、両方に absolute を設定する
     
-    # data-testidは変わりやすいので、ここではコンテナのクラス名を指定し、
-    # その直接の子としてst.imageとst_canvasが配置されることを期待します。
-    overlay_css = f"""
-    <style>
-        #{unique_container_id} {{
-            position: relative; /* 子要素のabsoluteの基準点 */
-            width: {canvas_width}px;
-            height: {canvas_height}px;
-            margin: auto; /* 中央寄せ */
-            /* border: 1px solid blue; /* デバッグ用にコンテナ範囲を可視化 */
-        }}
-        /* st.imageが生成するimgタグは、通常div[data-testid="stImage"]の子です */
-        #{unique_container_id} div[data-testid="stImage"] {{
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important; 
-            height: 100% !important;
-            z-index: 1 !important; 
-        }}
-        /* st_canvas (キーで特定) */
-        #{unique_container_id} .stDrawableCanvas[key="roi_canvas_on_image"] canvas {{
-             /* canvas要素自体を狙う必要がある場合も */
-        }}
-        #{unique_container_id} div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] > div[data-testid="stDrawableCanvas"][key="roi_canvas_on_image"] {{
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: {canvas_width}px !important;
-            height: {canvas_height}px !important;
-            z-index: 2 !important; 
-            pointer-events: auto !important; 
-        }}
-    </style>
-    <div id="{unique_container_id}">
+    # 1. まず半透明の背景画像を表示 (CSSでz-index: 1)
+    #    Pillowのアルファ値 (0-255) を調整して半透明にする
+    alpha = pil_for_display_and_canvas.split()[-1] # アルファチャンネルを取得
+    alpha = ImageEnhance.Brightness(alpha).enhance(0.5) # 透明度を50%に (0.0-1.0の範囲で調整)
+    pil_for_display_and_canvas.putalpha(alpha)
+
+    # 2. 同じサイズの透明な描画キャンバスを準備 (CSSでz-index: 2)
+    
+    # CSSで重ねるためのラッパーdivとスタイル
+    # この方法は、Streamlitの要素がどのようにdivでラップされるかに強く依存します。
+    # 完璧な重ね合わせは難しいかもしれませんが、試してみます。
+    # data-testid は変わりやすいので、ここではCSSのクラス名を使ってみます。
+
+    overlay_container_html_start = f"""
+    <div class="overlay-container" style="position: relative; width: {canvas_width}px; height: {canvas_height}px; margin: auto;">
+        <div class="base-image-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1;">
     """
-    # st.markdown(overlay_css, unsafe_allow_html=True) # CSS注入開始
+    overlay_container_html_end = """
+        </div>
+    </div>
+    """
+    canvas_wrapper_html_start = """
+        <div class="canvas-on-top" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none;"> 
+            /* pointer-events: none で下の画像が見えるようにし、canvas自身はautoでイベント取得 */
+    """ # canvas の div に pointer-events: auto を設定する必要がある
+    canvas_wrapper_html_end = """
+        </div>
+    """
+    
+    # 実際には、st.imageとst_canvasをst.markdownで囲むのは難しいので、
+    # st.containerを使って、そのコンテナにCSSを適用する方がまだ可能性があるが、それも困難。
+    # ここでは、CSSで狙えるように、st.imageとst_canvasを順番に配置し、
+    # st_canvasにマイナスのマージンと高いz-indexを与える、より単純な（だが不安定な）方法を試します。
 
-    # このコンテナ内にst.imageとst_canvasを配置
-    # ただし、Streamlitの制約上、st.markdownで開いたdivの中に直接Pythonのst.メソッドを置けないため、
-    # このアプローチは非常に難しい。
-    # 代わりに、st.container() を使い、それにCSSを適用することを試みるが、それも限定的。
+    # --- 最終試行：st.imageとst_canvasを配置し、CSSでst_canvasを上に持ってくる ---
+    # このCSSセレクタは、Streamlitのバージョンやテーマによって調整が必要な場合があります。
+    # `element.style` を使って直接スタイルを適用するのが理想ですが、st_canvasにはそのオプションがない。
+    
+    # 表示用のコンテナ
+    display_container = st.container()
 
-    # --- より現実的なアプローチ：CSSを使わずに、st_canvasの背景に画像を指定する（これが本来の動作） ---
-    # ここまで背景画像表示がうまくいかなかったが、最後にもう一度最もシンプルな形で試す
-    # 「洗濯」処理も一旦外して、純粋なPillow RGBイメージを渡す
-
-    pil_for_canvas_background = pil_image_rgb_full_res.copy()
-    # リサイズはst_canvasの表示サイズに合わせて行う
-    pil_for_canvas_background.thumbnail((canvas_width, canvas_height))
-
-
-    canvas_result = st_canvas(
-        fill_color="rgba(255,0,0,0.2)", 
-        stroke_width=2, 
-        stroke_color="red",
-        background_image=pil_for_canvas_background,  # ★★★ 縮小したPillow RGBイメージを背景に ★★★
-        update_streamlit=True, 
-        height=canvas_height,   
-        width=canvas_width,    
-        drawing_mode="rect", 
-        key="roi_canvas_final_attempt" # 新しいキー
-    )
-    # st.markdown("</div>", unsafe_allow_html=True) # overlay_cssの閉じタグ (使わない場合)
+    with display_container:
+        # 1. ベースとなる半透明画像を表示
+        st.image(pil_for_display_and_canvas, width=canvas_width, use_column_width=False, output_format='PNG', key="base_image_roi")
+        
+        # 2. st_canvasを、前の画像の高さ分だけネガティブマージンで上に移動させ、重ねる
+        #    この方法は非常に不安定で、正確な重ね合わせは保証できません。
+        #    また、Streamlitが要素をラップするdivの構造に依存します。
+        st.markdown(
+            f"""
+            <style>
+                div[data-testid="stVerticalBlock"] div[data-testid="stVerticalBlock"] div[data-testid="stDrawableCanvas"][key="roi_canvas_overlay_final_v2"] {{
+                    margin-top: -{canvas_height}px !important; 
+                    /* margin-bottom: {canvas_height}px !important;  下の要素が詰まるのを防ぐ */
+                    position: relative; /* z-indexのため */
+                    z-index: 10; /* 画像より手前 */
+                    pointer-events: auto; /* キャンバス上で描画できるように */
+                }}
+            </style>
+            """, unsafe_allow_html=True
+        )
+        canvas_result = st_canvas(
+            fill_color="rgba(255, 0, 0, 0.2)", 
+            stroke_width=2, 
+            stroke_color="red",
+            background_color="rgba(0,0,0,0)",  # 背景は完全に透明
+            update_streamlit=True, 
+            height=canvas_height,   
+            width=canvas_width,    
+            drawing_mode="rect", 
+            key="roi_canvas_overlay_final_v2" # キーを変更
+        )
 
 
     # (以降のROI処理、サイドバーUI、メインの画像処理・表示ロジックは変更なし)
