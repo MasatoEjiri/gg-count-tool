@@ -40,10 +40,10 @@ def display_count_in_sidebar(placeholder, count_value):
 
 # --- セッションステートの初期化 ---
 if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots_value = "---" 
-if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 58 
+if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 58
 if "threshold_slider_for_binary" not in st.session_state: st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
 if "threshold_number_for_binary" not in st.session_state: st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
-if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
+if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None # リサイズ後のPillowイメージを保持
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
 
 
@@ -64,21 +64,37 @@ uploaded_file_widget = st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアッ�
 # アプリのメインタイトルと使用方法 (メインエリア)
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_html=True)
 st.markdown("""### 使用方法
-1. 画像を左にアップロードしてください。
+1. 画像を左にアップロードしてください。（大きな画像は自動的に縮小されます）
 2. 画像をアップロードすると、左サイドバーに詳細な解析パラメータが表示されます。
 3. まず「1. 二値化」の閾値を動かし、「1. 二値化処理後」の画像が実物に近い見え方になるよう調整してください。
-4. 必要に応じて「2. 形態学的処理」や「3. 輝点フィルタリング」のパラメータも調整します。""")
+4. 必要に応じて「2. 形態学的処理」や「3. 輝点フィルタリング」のパラメータも調整します。
+**注意:** 画像が縮小された場合、面積パラメータ（最小面積・最大面積）の感覚が変わる点にご注意ください。
+""") # 使用方法にリサイズに関する注意を追加
 st.markdown("---") 
+
+# ★★★ 画像リサイズ関数 ★★★
+def resize_image(image_pil, max_dimension=1280):
+    """Pillowイメージを指定された最大寸法にアスペクト比を保ってリサイズする"""
+    if image_pil.width > max_dimension or image_pil.height > max_dimension:
+        image_pil.thumbnail((max_dimension, max_dimension))
+    return image_pil
 
 # 画像読み込みロジック
 if uploaded_file_widget is not None:
     try:
         uploaded_file_bytes = uploaded_file_widget.getvalue()
-        pil_img = Image.open(io.BytesIO(uploaded_file_bytes))
-        st.session_state.pil_image_to_process = pil_img
-        st.session_state.image_source_caption = f"アップロード: {uploaded_file_widget.name}"
+        pil_img_original = Image.open(io.BytesIO(uploaded_file_bytes))
+        
+        # ★★★ 画像のリサイズ処理を追加 ★★★
+        pil_img_resized = resize_image(pil_img_original.copy()) # 元画像に影響しないようコピーを渡す
+        
+        st.session_state.pil_image_to_process = pil_img_resized # 処理対象はリサイズ後の画像
+        original_dims = f"(元サイズ: {pil_img_original.width}x{pil_img_original.height}px)"
+        resized_dims = f"(処理サイズ: {pil_img_resized.width}x{pil_img_resized.height}px)"
+        st.session_state.image_source_caption = f"アップロード: {uploaded_file_widget.name} {original_dims} {resized_dims if pil_img_original.size != pil_img_resized.size else ''}"
+
     except Exception as e:
-        st.sidebar.error(f"アップロード画像の読み込みに失敗: {e}")
+        st.sidebar.error(f"アップロード画像の読み込みまたはリサイズに失敗: {e}")
         st.session_state.pil_image_to_process = None 
         st.session_state.counted_spots_value = "読込エラー"; st.stop()
 else: 
@@ -102,13 +118,11 @@ if st.session_state.pil_image_to_process is not None:
     st.sidebar.markdown("<br>", unsafe_allow_html=True); st.sidebar.markdown("_二値化だけでうまくいかない場合は下記も調整を_")
     
     st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
-    morph_kernel_shape_to_use = cv2.MORPH_ELLIPSE # ★★★ 形状は楕円に固定 ★★★
-    # ★★★ カーネル形状の選択UIと固定表記を削除 ★★★
+    morph_kernel_shape_to_use = cv2.MORPH_ELLIPSE 
     
     kernel_options_morph = [1,3,5,7,9]
     kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph, 
-                                                      value=3) # デフォルトは 3 (keyなし)
-    # ★★★ カーネルサイズの説明を簡潔なものに戻す ★★★
+                                                      value=3) 
     st.sidebar.caption("""
     オープニング処理（収縮後に膨張）で、小さなノイズ除去や輝点分離を行います。
     - **大きくすると:** 効果が強くなり、より大きなノイズや繋がりも除去できますが、輝点自体も小さくなるか消えることがあります。
@@ -118,15 +132,16 @@ if st.session_state.pil_image_to_process is not None:
     
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
     min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1, 
-                                          value=1) # デフォルト 1 (keyなし)
+                                          value=1) 
     st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。(画像リサイズ時注意)""") 
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1, 
-                                          value=10000) # ★★★ デフォルト値を10000に変更 ★★★ (keyなし)
+                                          value=10000) 
     st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。(画像リサイズ時注意)""") 
 
     # --- メインエリアの画像処理と表示ロジック ---
     original_img_to_display_np_uint8 = None; img_gray = None                         
     try:
+        # st.session_state.pil_image_to_process はリサイズ済みのPillowイメージ
         pil_image_rgb = st.session_state.pil_image_to_process.convert("RGB")
         temp_np_array = np.array(pil_image_rgb)
         if temp_np_array.dtype != np.uint8: 
@@ -174,23 +189,23 @@ if st.session_state.pil_image_to_process is not None:
     
     st.subheader("元の画像")
     if original_img_to_display_np_uint8 is not None:
-        st.image(original_img_to_display_np_uint8, caption=st.session_state.image_source_caption, use_container_width=True)
+        st.image(original_img_to_display_np_uint8, caption=st.session_state.image_source_caption)
     st.markdown("---")
     st.subheader("1. 二値化処理後")
-    if binary_img_processed is not None: st.image(binary_img_processed,caption=f'閾値:{threshold_value_to_use}',use_container_width=True)
+    if binary_img_processed is not None: st.image(binary_img_processed,caption=f'閾値:{threshold_value_to_use}')
     else: st.info("二値化未実施/失敗")
     st.markdown("---")
     with st.expander("▼ 2. 形態学的処理後を見る", expanded=False): 
         if opened_img_processed is not None: 
-            st.image(opened_img_processed,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{kernel_size_morph_to_use}',use_container_width=True) # キャプションも固定
+            st.image(opened_img_processed,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{kernel_size_morph_to_use}')
         else: st.info("形態学的処理未実施/失敗")
     st.markdown("---") 
     st.subheader("3. 輝点検出とマーキング")
     display_final_marked_image_rgb = cv2.cvtColor(output_image_contours_display, cv2.COLOR_BGR2RGB)
     if 'contours' in locals() and contours and binary_img_for_contours_processed is not None and current_counted_spots > 0 :
-         st.image(display_final_marked_image_rgb,caption=f'検出輝点(青い輪郭,面積:{min_area_to_use}-{max_area_to_use})',use_container_width=True)
+         st.image(display_final_marked_image_rgb,caption=f'検出輝点(青い輪郭,面積:{min_area_to_use}-{max_area_to_use})')
     elif binary_img_for_contours_processed is not None: 
-        st.image(display_final_marked_image_rgb,caption='輝点見つからず',use_container_width=True)
+        st.image(display_final_marked_image_rgb,caption='輝点見つからず')
     else: st.info("輝点検出未実施")
 else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
