@@ -43,11 +43,11 @@ if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots
 if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 58
 if "threshold_slider_for_binary" not in st.session_state: st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
 if "threshold_number_for_binary" not in st.session_state: st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
-if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None # リサイズ後のPillowイメージを保持
+if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
+if 'contour_color_hex' not in st.session_state: st.session_state.contour_color_hex = "#00FF00" 
 
-
-# --- コールバック関数の定義 (二値化閾値同期用) ---
+# --- コールバック関数の定義 ---
 def sync_threshold_from_slider():
     st.session_state.binary_threshold_value = st.session_state.threshold_slider_for_binary
     st.session_state.threshold_number_for_binary = st.session_state.threshold_slider_for_binary
@@ -55,44 +55,42 @@ def sync_threshold_from_number_input():
     st.session_state.binary_threshold_value = st.session_state.threshold_number_for_binary
     st.session_state.threshold_slider_for_binary = st.session_state.threshold_number_for_binary
 
-# --- サイドバーの基本部分 (常に表示) ---
+def hex_to_bgr(hex_color):
+    hex_color = hex_color.lstrip('#')
+    h_len = len(hex_color)
+    return tuple(int(hex_color[i:i + h_len // 3], 16) for i in range(0, h_len, h_len // 3))[::-1] 
+
+# --- サイドバーの基本部分 ---
 display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value) 
 st.sidebar.header("解析パラメータ設定")
 UPLOAD_ICON = "📤" 
 uploaded_file_widget = st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアップロード", type=['tif', 'tiff', 'png', 'jpg', 'jpeg'], help="対応形式: TIF, TIFF, PNG, JPG, JPEG。")
 
-# アプリのメインタイトルと使用方法 (メインエリア)
+# --- アプリのメインタイトルと使用方法 ---
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_html=True)
 st.markdown("""### 使用方法
 1. 画像を左にアップロードしてください。（大きな画像は自動的に縮小されます）
 2. 画像をアップロードすると、左サイドバーに詳細な解析パラメータが表示されます。
 3. まず「1. 二値化」の閾値を動かし、「1. 二値化処理後」の画像が実物に近い見え方になるよう調整してください。
-4. 必要に応じて「2. 形態学的処理」や「3. 輝点フィルタリング」のパラメータも調整します。
-**注意:** 画像が縮小された場合、面積パラメータ（最小面積・最大面積）の感覚が変わる点にご注意ください。
-""") # 使用方法にリサイズに関する注意を追加
+4. 必要に応じて「2. 形態学的処理」、「3. 輝点フィルタリング」、「4. 表示設定」の各パラメータも調整します。
+""")
 st.markdown("---") 
 
-# ★★★ 画像リサイズ関数 ★★★
 def resize_image(image_pil, max_dimension=1280):
-    """Pillowイメージを指定された最大寸法にアスペクト比を保ってリサイズする"""
     if image_pil.width > max_dimension or image_pil.height > max_dimension:
         image_pil.thumbnail((max_dimension, max_dimension))
     return image_pil
 
-# 画像読み込みロジック
+# --- 画像読み込みと処理 ---
 if uploaded_file_widget is not None:
     try:
         uploaded_file_bytes = uploaded_file_widget.getvalue()
         pil_img_original = Image.open(io.BytesIO(uploaded_file_bytes))
-        
-        # ★★★ 画像のリサイズ処理を追加 ★★★
-        pil_img_resized = resize_image(pil_img_original.copy()) # 元画像に影響しないようコピーを渡す
-        
-        st.session_state.pil_image_to_process = pil_img_resized # 処理対象はリサイズ後の画像
+        pil_img_resized = resize_image(pil_img_original.copy())
+        st.session_state.pil_image_to_process = pil_img_resized
         original_dims = f"(元サイズ: {pil_img_original.width}x{pil_img_original.height}px)"
         resized_dims = f"(処理サイズ: {pil_img_resized.width}x{pil_img_resized.height}px)"
         st.session_state.image_source_caption = f"アップロード: {uploaded_file_widget.name} {original_dims} {resized_dims if pil_img_original.size != pil_img_resized.size else ''}"
-
     except Exception as e:
         st.sidebar.error(f"アップロード画像の読み込みまたはリサイズに失敗: {e}")
         st.session_state.pil_image_to_process = None 
@@ -102,46 +100,32 @@ else:
         st.session_state.pil_image_to_process = None
         st.session_state.counted_spots_value = "---" 
 
-# メイン処理と、条件付きでのサイドバーパラメータUI表示
 if st.session_state.pil_image_to_process is not None:
-    # --- サイドバーのパラメータ設定UI (画像ロード後に表示) ---
+    # --- サイドバーのパラメータ設定UI ---
     st.sidebar.subheader("1. 二値化") 
-    st.sidebar.markdown("_この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
-    st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,
-                      value=st.session_state.binary_threshold_value, 
-                      key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
-    st.sidebar.number_input('閾値 (直接入力)',min_value=0,max_value=255,step=1,
-                            value=st.session_state.binary_threshold_value, 
-                            key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
+    st.sidebar.markdown("_この値を色々変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
+    st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
+    st.sidebar.number_input('閾値 (直接入力)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
     threshold_value_to_use = st.session_state.binary_threshold_value 
     st.sidebar.caption("""- **大きくすると:** 明るい部分のみ白に。\n- **小さくすると:** 暗い部分も白に。""")
     st.sidebar.markdown("<br>", unsafe_allow_html=True); st.sidebar.markdown("_二値化だけでうまくいかない場合は下記も調整を_")
-    
     st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
     morph_kernel_shape_to_use = cv2.MORPH_ELLIPSE 
-    
     kernel_options_morph = [1,3,5,7,9]
-    kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph, 
-                                                      value=3) 
-    st.sidebar.caption("""
-    オープニング処理（収縮後に膨張）で、小さなノイズ除去や輝点分離を行います。
-    - **大きくすると:** 効果が強くなり、より大きなノイズや繋がりも除去できますが、輝点自体も小さくなるか消えることがあります。
-    - **小さくすると (例: 1):** 効果は弱く、微細なノイズのみに作用し、輝点への影響は少ないです。
-    画像を見ながら調整してください。
-    """)
-    
+    kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,value=3) 
+    st.sidebar.caption("""オープニング処理（収縮後に膨張）で、小さなノイズ除去や輝点分離を行います。\n- **大きくすると:** 効果が強くなり、より大きなノイズや繋がりも除去できますが、輝点自体も小さくなるか消えることがあります。\n- **小さくすると (例: 1):** 効果は弱く、微細なノイズのみに作用し、輝点への影響は少ないです。\n画像を見ながら調整してください。""")
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
-    min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1, 
-                                          value=1) 
+    min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1,value=1) 
     st.sidebar.caption("""- **大きくすると:** 小さな輝点を除外。\n- **小さくすると:** ノイズを拾う可能性。(画像リサイズ時注意)""") 
-    max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1, 
-                                          value=10000) 
+    max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1,value=10000) 
     st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。(画像リサイズ時注意)""") 
+    st.sidebar.subheader("4. 表示設定")
+    st.session_state.contour_color_hex = st.sidebar.color_picker('輝点マーキング色を選択', st.session_state.contour_color_hex)
+    contour_color_bgr = hex_to_bgr(st.session_state.contour_color_hex)
 
     # --- メインエリアの画像処理と表示ロジック ---
     original_img_to_display_np_uint8 = None; img_gray = None                         
     try:
-        # st.session_state.pil_image_to_process はリサイズ済みのPillowイメージ
         pil_image_rgb = st.session_state.pil_image_to_process.convert("RGB")
         temp_np_array = np.array(pil_image_rgb)
         if temp_np_array.dtype != np.uint8: 
@@ -182,30 +166,34 @@ if st.session_state.pil_image_to_process is not None:
                 area = cv2.contourArea(contour)
                 if min_area_to_use <= area <= max_area_to_use: 
                     current_counted_spots += 1
-                    cv2.drawContours(output_image_contours_display, [contour], -1, (255,0,0), 2) 
+                    cv2.drawContours(output_image_contours_display, [contour], -1, contour_color_bgr, 2) 
         st.session_state.counted_spots_value = current_counted_spots 
     else:
         st.warning("輪郭検出元画像準備できず。"); st.session_state.counted_spots_value="エラー"
     
+    # ★★★ 表示画像のwidthを指定 ★★★
+    IMAGE_DISPLAY_WIDTH = 600 
+
     st.subheader("元の画像")
     if original_img_to_display_np_uint8 is not None:
-        st.image(original_img_to_display_np_uint8, caption=st.session_state.image_source_caption)
+        st.image(original_img_to_display_np_uint8, caption=st.session_state.image_source_caption, width=IMAGE_DISPLAY_WIDTH)
     st.markdown("---")
     st.subheader("1. 二値化処理後")
-    if binary_img_processed is not None: st.image(binary_img_processed,caption=f'閾値:{threshold_value_to_use}')
+    if binary_img_processed is not None: 
+        st.image(binary_img_processed,caption=f'閾値:{threshold_value_to_use}', width=IMAGE_DISPLAY_WIDTH)
     else: st.info("二値化未実施/失敗")
     st.markdown("---")
     with st.expander("▼ 2. 形態学的処理後を見る", expanded=False): 
         if opened_img_processed is not None: 
-            st.image(opened_img_processed,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{kernel_size_morph_to_use}')
+            st.image(opened_img_processed,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{kernel_size_morph_to_use}', width=IMAGE_DISPLAY_WIDTH)
         else: st.info("形態学的処理未実施/失敗")
     st.markdown("---") 
     st.subheader("3. 輝点検出とマーキング")
     display_final_marked_image_rgb = cv2.cvtColor(output_image_contours_display, cv2.COLOR_BGR2RGB)
     if 'contours' in locals() and contours and binary_img_for_contours_processed is not None and current_counted_spots > 0 :
-         st.image(display_final_marked_image_rgb,caption=f'検出輝点(青い輪郭,面積:{min_area_to_use}-{max_area_to_use})')
+         st.image(display_final_marked_image_rgb,caption=f'検出輝点(選択色,面積:{min_area_to_use}-{max_area_to_use})', width=IMAGE_DISPLAY_WIDTH)
     elif binary_img_for_contours_processed is not None: 
-        st.image(display_final_marked_image_rgb,caption='輝点見つからず')
+        st.image(display_final_marked_image_rgb,caption='輝点見つからず', width=IMAGE_DISPLAY_WIDTH)
     else: st.info("輝点検出未実施")
 else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
