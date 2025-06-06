@@ -112,39 +112,36 @@ if st.session_state.pil_image_to_process is not None:
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1,value=10000) 
     st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。""") 
     
-    # ★★★ 輝点マーキング色の選択UI ★★★
     st.sidebar.subheader("4. 表示設定")
-    st.sidebar.write("輝点マーキング色を選択:")
+    # ★★★ 色選択UIをスタイリッシュに変更 ★★★
     CONTOUR_COLORS = {
-        "緑": "#28a745",
-        "青": "#007bff",
-        "赤": "#dc3545",
-        "黄": "#ffc107",
-        "ｼｱﾝ": "#17a2b8",
-        "ﾋﾟﾝｸ": "#e83e8c"
+        "緑": "#28a745", "青": "#007bff", "赤": "#dc3545",
+        "黄": "#ffc107", "シアン": "#17a2b8", "ピンク": "#e83e8c"
     }
-    cols = st.sidebar.columns(len(CONTOUR_COLORS))
-    for i, (name, hex_code) in enumerate(CONTOUR_COLORS.items()):
-        with cols[i]:
-            st.markdown(f'<p style="text-align:center; margin-bottom: 2px;">{name}</p>', unsafe_allow_html=True)
-            st.markdown(
-                f'<div style="width:100%; height:25px; background-color:{hex_code}; border: 1px solid #ccc; border-radius: 4px; cursor: pointer;" onclick="this.parentNode.click()"></div>',
-                unsafe_allow_html=True
-            )
-            # ボタンを使って選択状態を管理
-            button_type = "primary" if name == st.session_state.contour_color_name else "secondary"
-            if st.button(" ", key=f"color_btn_{name}", use_container_width=True, type=button_type):
-                st.session_state.contour_color_name = name
-                st.rerun() # UIを即時更新
-
-    selected_color_hex = CONTOUR_COLORS[st.session_state.contour_color_name]
-    contour_color_bgr = hex_to_bgr(selected_color_hex)
+    COLOR_EMOJIS = {"緑": "🟢", "青": "🔵", "赤": "🔴", "黄": "🟡", "シアン": "💧", "ピンク": "🌸"}
+    def format_color_option(color_name):
+        return f"{COLOR_EMOJIS.get(color_name, '🎨')} {color_name}"
     
+    st.sidebar.radio(
+        "輝点マーキング色を選択", options=CONTOUR_COLORS.keys(),
+        format_func=format_color_option, key="contour_color_name", horizontal=True
+    )
+    selected_name = st.session_state.contour_color_name
+    selected_hex = CONTOUR_COLORS[selected_name]
+    st.sidebar.markdown(f"""
+        <div style="text-align: left; margin-top: 5px;">
+            <span style="font-size: 0.9em;">選択中の色:</span>
+            <div style="width: 100%; height: 25px; background-color: {selected_hex}; border: 1px solid #ccc; border-radius: 5px; margin-top: 5px;"></div>
+        </div>
+        """, unsafe_allow_html=True)
+    contour_color_bgr = hex_to_bgr(selected_hex)
+
     # --- メインエリアの画像処理と表示ロジック ---
     # (内容は変更なし)
     original_img_to_display_np_uint8 = None; img_gray = None                         
     try:
-        pil_image_rgb = st.session_state.pil_image_to_process.convert("RGB")
+        # st.session_state.pil_image_original_full_res から処理を開始
+        pil_image_rgb = st.session_state.pil_image_original_full_res.convert("RGB")
         temp_np_array = np.array(pil_image_rgb)
         if temp_np_array.dtype != np.uint8: 
             if np.issubdtype(temp_np_array.dtype, np.floating):
@@ -157,10 +154,14 @@ if st.session_state.pil_image_to_process is not None:
         else: original_img_to_display_np_uint8 = temp_np_array
         img_gray = cv2.cvtColor(original_img_to_display_np_uint8, cv2.COLOR_RGB2GRAY)
         if img_gray.dtype != np.uint8: img_gray = img_gray.astype(np.uint8)
-    except Exception as e: st.error(f"画像の基本変換に失敗: {e}"); st.session_state.counted_spots_value="変換エラー"; st.stop() 
+    except Exception as e:
+        st.error(f"画像の基本変換に失敗: {e}"); st.session_state.counted_spots_value="変換エラー"; st.stop() 
+    
     st.header("処理ステップごとの画像")
     kernel_size_blur = 1 
-    if img_gray is None or img_gray.size == 0 : st.error("グレースケール画像準備失敗。"); st.session_state.counted_spots_value="処理エラー"; st.stop()
+    if img_gray is None or img_gray.size == 0 : 
+        st.error("グレースケール画像準備失敗。"); st.session_state.counted_spots_value="処理エラー"; st.stop()
+        
     blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur,kernel_size_blur),0)
     ret_thresh, binary_img_processed = cv2.threshold(blurred_img,threshold_value_to_use,255,cv2.THRESH_BINARY)
     if not ret_thresh: st.error("二値化失敗。"); binary_img_for_morph_processed=None
@@ -182,7 +183,8 @@ if st.session_state.pil_image_to_process is not None:
                     current_counted_spots += 1
                     cv2.drawContours(output_image_contours_display, [contour], -1, contour_color_bgr, 2) 
         st.session_state.counted_spots_value = current_counted_spots 
-    else: st.warning("輪郭検出元画像準備できず。"); st.session_state.counted_spots_value="エラー"
+    else:
+        st.warning("輪郭検出元画像準備できず。"); st.session_state.counted_spots_value="エラー"
     
     IMAGE_DISPLAY_WIDTH = 600
     st.subheader("元の画像")
@@ -200,7 +202,8 @@ if st.session_state.pil_image_to_process is not None:
     display_final_marked_image_rgb = cv2.cvtColor(output_image_contours_display, cv2.COLOR_BGR2RGB)
     if 'contours' in locals() and contours and binary_img_for_contours_processed is not None and current_counted_spots > 0 :
          st.image(display_final_marked_image_rgb,caption=f'検出輝点(選択色,面積:{min_area_to_use}-{max_area_to_use})', width=IMAGE_DISPLAY_WIDTH)
-    elif binary_img_for_contours_processed is not None: st.image(display_final_marked_image_rgb,caption='輝点見つからず', width=IMAGE_DISPLAY_WIDTH)
+    elif binary_img_for_contours_processed is not None: 
+        st.image(display_final_marked_image_rgb,caption='輝点見つからず', width=IMAGE_DISPLAY_WIDTH)
     else: st.info("輝点検出未実施")
 else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
