@@ -73,38 +73,22 @@ uploaded_file_widget = st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアッ�
 # --- アプリのメインタイトルと使用方法 ---
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_html=True)
 st.markdown("""### 使用方法
-1. 画像を左にアップロードしてください。（大きな画像は自動的に縮小されます）
+1. 画像を左にアップロードしてください。
 2. 画像をアップロードすると、左サイドバーに詳細な解析パラメータが表示されます。
-3. まず「1. 二値化」の閾値を動かし、「1. 二値化処理後」の画像（表示は縮小、解析は元サイズ）が実物に近い見え方になるよう調整してください。
+3. まず「1. 二値化」の閾値を動かし、「1. 二値化処理後」の画像が実物に近い見え方になるよう調整してください。
 4. 必要に応じて「2. 形態学的処理」、「3. 輝点フィルタリング」、「4. 表示設定」の各パラメータも調整します。
-**注意:** 画像が縮小された場合、面積パラメータ（最小面積・最大面積）の感覚が変わる点にご注意ください。
 """)
 st.markdown("---") 
-
-def resize_image(image_pil, max_dimension=1280):
-    if image_pil.width > max_dimension or image_pil.height > max_dimension:
-        image_pil.thumbnail((max_dimension, max_dimension))
-    return image_pil
 
 # --- 画像読み込みと処理のロジック ---
 if uploaded_file_widget is not None:
     try:
         uploaded_file_bytes = uploaded_file_widget.getvalue()
         pil_img_original = Image.open(io.BytesIO(uploaded_file_bytes))
-        
-        # 解析はフル解像度で行うため、フル解像度のPillowイメージを保持
         st.session_state.pil_image_original_full_res = pil_img_original
-        original_dims = f"(元サイズ: {pil_img_original.width}x{pil_img_original.height}px)"
-        
-        # 処理サイズ（表示用）を決定するためのリサイズ（実際の処理にはこのリサイズ画像は使わない）
-        pil_img_check_resize = pil_img_original.copy()
-        pil_img_for_display_sizing = resize_image(pil_img_check_resize) # リサイズ後のサイズを取得するため
-        resized_dims = f"(処理サイズ: {pil_img_for_display_sizing.width}x{pil_img_for_display_sizing.height}px)"
-        
-        st.session_state.image_source_caption = f"アップロード: {uploaded_file_widget.name} {original_dims} {resized_dims if pil_img_original.size != pil_img_for_display_sizing.size else ''}"
-
+        st.session_state.image_source_caption = f"アップロード: {uploaded_file_widget.name} (元サイズ: {pil_img_original.width}x{pil_img_original.height}px)"
     except Exception as e:
-        st.sidebar.error(f"アップロード画像の読み込みまたはリサイズに失敗: {e}")
+        st.sidebar.error(f"アップロード画像の読み込みに失敗: {e}")
         st.session_state.pil_image_original_full_res = None 
         st.session_state.counted_spots_value = "読込エラー"; st.stop()
 else: 
@@ -115,7 +99,7 @@ else:
 if st.session_state.pil_image_original_full_res is not None:
     # --- サイドバーのパラメータ設定UI ---
     st.sidebar.subheader("1. 二値化") 
-    st.sidebar.markdown("_この値を色々と変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
+    st.sidebar.markdown("_この値を色々変更して、「1. 二値化処理後」画像を実物に近づけてください。_")
     st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
     st.sidebar.number_input('閾値 (直接入力)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
     threshold_value_to_use = st.session_state.binary_threshold_value 
@@ -131,17 +115,12 @@ if st.session_state.pil_image_original_full_res is not None:
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1,value=10000) 
     st.sidebar.caption("""- **大きくすると:** 大きな塊もカウント。\n- **小さくすると:** 大きな塊を除外。""") 
     
-    # ★★★ 色選択UIをシンプルに変更 ★★★
     st.sidebar.subheader("4. 表示設定")
     CONTOUR_COLORS = {"緑":"#28a745","青":"#007bff","赤":"#dc3545","黄":"#ffc107","シアン":"#17a2b8","ピンク":"#e83e8c"}
-    st.sidebar.radio(
-        "輝点マーキング色を選択",
-        options=list(CONTOUR_COLORS.keys()),
-        key="contour_color_name", # format_func を削除
-        horizontal=True
-    )
+    st.sidebar.radio("輝点マーキング色を選択",options=list(CONTOUR_COLORS.keys()),key="contour_color_name",horizontal=True)
     selected_name = st.session_state.contour_color_name
     selected_hex = CONTOUR_COLORS[selected_name]
+    st.sidebar.markdown(f"""<div style="padding-top: 5px;"><span style="font-size: 0.9em;">選択中の色: <b>{selected_name}</b></span><div style="width: 100%; height: 25px; background-color: {selected_hex}; border: 1px solid rgba(0,0,0,0.2); border-radius: 5px; margin-top: 5px;"></div></div>""", unsafe_allow_html=True)
     contour_color_bgr = hex_to_bgr(selected_hex)
 
     # --- メインエリアの画像処理と表示ロジック ---
@@ -192,21 +171,21 @@ if st.session_state.pil_image_original_full_res is not None:
     marked_img_for_display = create_display_version_pil(Image.fromarray(cv2.cvtColor(output_image_contours_display_full_res, cv2.COLOR_BGR2RGB)), IMAGE_DISPLAY_WIDTH)
 
     st.subheader("元の画像")
-    if original_img_for_display is not None: st.image(original_img_for_display, caption=st.session_state.image_source_caption)
+    if original_img_for_display is not None: st.image(original_img_for_display, caption=st.session_state.image_source_caption, width=IMAGE_DISPLAY_WIDTH)
     st.markdown("---")
     st.subheader("1. 二値化処理後")
-    if binary_img_for_display is not None: st.image(binary_img_for_display,caption=f'閾値:{threshold_value_to_use}')
+    if binary_img_for_display is not None: st.image(binary_img_for_display,caption=f'閾値:{threshold_value_to_use}', width=IMAGE_DISPLAY_WIDTH)
     else: st.info("二値化未実施/失敗")
     st.markdown("---")
     with st.expander("▼ 2. 形態学的処理後を見る", expanded=False): 
-        if opened_img_for_display is not None: st.image(opened_img_for_display,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{kernel_size_morph_to_use}')
+        if opened_img_for_display is not None: st.image(opened_img_for_display,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{kernel_size_morph_to_use}', width=IMAGE_DISPLAY_WIDTH)
         else: st.info("形態学的処理未実施/失敗")
     st.markdown("---") 
     st.subheader("3. 輝点検出とマーキング")
     if marked_img_for_display is not None:
         if current_counted_spots > 0 :
-             st.image(marked_img_for_display,caption=f'検出輝点(選択色,面積:{min_area_to_use}-{max_area_to_use})')
-        else: st.image(marked_img_for_display,caption='輝点見つからず')
+             st.image(marked_img_for_display,caption=f'検出輝点(選択色,面積:{min_area_to_use}-{max_area_to_use})', width=IMAGE_DISPLAY_WIDTH)
+        else: st.image(marked_img_for_display,caption='輝点見つからず', width=IMAGE_DISPLAY_WIDTH)
     else: st.info("輝点検出未実施")
 else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
