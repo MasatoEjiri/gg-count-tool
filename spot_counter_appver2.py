@@ -47,7 +47,6 @@ if 'pil_image_original_full_res' not in st.session_state: st.session_state.pil_i
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
 if 'contour_color_name' not in st.session_state: st.session_state.contour_color_name = "緑"
 
-
 # --- コールバック関数とヘルパー関数 ---
 def sync_threshold_from_slider():
     st.session_state.binary_threshold_value = st.session_state.threshold_slider_for_binary
@@ -57,8 +56,7 @@ def sync_threshold_from_number_input():
     st.session_state.threshold_slider_for_binary = st.session_state.threshold_number_for_binary
 
 def hex_to_bgr(hex_color):
-    hex_color = hex_color.lstrip('#')
-    h_len = len(hex_color)
+    hex_color = hex_color.lstrip('#'); h_len = len(hex_color)
     return tuple(int(hex_color[i:i + h_len // 3], 16) for i in range(0, h_len, h_len // 3))[::-1] 
 
 # --- サイドバーの基本部分 ---
@@ -85,13 +83,10 @@ if uploaded_file_widget is not None:
         st.session_state.pil_image_original_full_res = pil_img_original
         st.session_state.image_source_caption = f"アップロード: {uploaded_file_widget.name} (元サイズ: {pil_img_original.width}x{pil_img_original.height}px)"
     except Exception as e:
-        st.sidebar.error(f"アップロード画像の読み込みに失敗: {e}")
-        st.session_state.pil_image_original_full_res = None 
-        st.session_state.counted_spots_value = "読込エラー"; st.stop()
+        st.sidebar.error(f"アップロード画像の読み込みに失敗: {e}"); st.session_state.pil_image_original_full_res = None; st.session_state.counted_spots_value = "読込エラー"; st.stop()
 else: 
     if st.session_state.pil_image_original_full_res is not None: 
-        st.session_state.pil_image_original_full_res = None
-        st.session_state.counted_spots_value = "---" 
+        st.session_state.pil_image_original_full_res = None; st.session_state.counted_spots_value = "---" 
 
 if st.session_state.pil_image_original_full_res is not None:
     # --- サイドバーのパラメータ設定UI ---
@@ -105,7 +100,7 @@ if st.session_state.pil_image_original_full_res is not None:
         st.sidebar.caption("値を大きくするとコントラストが強くなりますが、ノイズも目立ちやすくなります。")
         clahe_tile_size = st.sidebar.slider("タイルグリッドサイズ", 2, 16, 8, 1)
         st.sidebar.caption("画像をこのサイズのタイルに分割し、各タイル内で個別にコントラストを最適化します。")
-
+    
     st.sidebar.subheader("2. 二値化") 
     st.sidebar.markdown("_この値を調整して、輝点と背景を分離します。_")
     st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
@@ -113,7 +108,7 @@ if st.session_state.pil_image_original_full_res is not None:
     threshold_value_to_use = st.session_state.binary_threshold_value 
     st.sidebar.caption("この値より明るいピクセルは白に、暗いピクセルは黒になります。輝点と背景を分ける境界値を設定します。")
     st.sidebar.markdown("<br>", unsafe_allow_html=True)
-    
+
     st.sidebar.subheader("3. 形態学的処理 (オープニング)") 
     morph_kernel_shape_to_use = cv2.MORPH_ELLIPSE 
     kernel_options_morph = [1,3,5,7,9]; kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,value=3) 
@@ -130,7 +125,7 @@ if st.session_state.pil_image_original_full_res is not None:
     st.sidebar.radio("輝点マーキング色を選択",options=list(CONTOUR_COLORS.keys()),key="contour_color_name",horizontal=True)
     selected_name = st.session_state.contour_color_name
     selected_hex = CONTOUR_COLORS[selected_name]
-    st.sidebar.markdown(f"""<div style="padding-top:5px;"><span style="font-size:0.9em;">選択中の色: <b>{selected_name}</b></span><div style="width:100%;height:25px;background-color:{selected_hex};border:1px solid rgba(0,0,0,0.2);border-radius:5px;margin-top:5px;"></div></div>""", unsafe_allow_html=True)
+    st.sidebar.markdown(f"""<div style="padding-top: 5px;"><span style="font-size: 0.9em;">選択中の色: <b>{selected_name}</b></span><div style="width: 100%; height: 25px; background-color: {selected_hex}; border: 1px solid rgba(0,0,0,0.2); border-radius: 5px; margin-top: 5px;"></div></div>""", unsafe_allow_html=True)
     contour_color_bgr = hex_to_bgr(selected_hex)
 
     # --- メインエリアの画像処理と表示ロジック ---
@@ -141,25 +136,19 @@ if st.session_state.pil_image_original_full_res is not None:
     
     st.header("処理ステップごとの画像")
     
-    # ★★★ コントラスト強調 (CLAHE) 処理 ★★★
-    img_for_binarization = img_gray_full_res.copy() # 解析に使うグレースケール画像
-    clahe_color_img_for_display = None # 表示用のカラー強調画像
-
+    # コントラスト強調 (CLAHE) 処理
+    img_for_binarization = img_gray_full_res.copy() 
+    clahe_color_img_for_display = None 
     if apply_clahe:
-        # 解析用のグレースケール画像にCLAHEを適用
         clahe = cv2.createCLAHE(clipLimit=clahe_clip_limit, tileGridSize=(clahe_tile_size, clahe_tile_size))
         img_for_binarization = clahe.apply(img_gray_full_res)
-        
-        # 表示用のカラー画像にCLAHEを適用
         img_ycrcb = cv2.cvtColor(np_rgb_full_uint8, cv2.COLOR_RGB2YCrCb)
         y_channel, cr, cb = cv2.split(img_ycrcb)
         y_channel_clahe = clahe.apply(y_channel)
         img_ycrcb_clahe = cv2.merge([y_channel_clahe, cr, cb])
         clahe_color_img_for_display = cv2.cvtColor(img_ycrcb_clahe, cv2.COLOR_YCrCb2RGB)
-    
-    # 画像処理パイプラインの開始
-    kernel_size_blur=1;
-    if img_for_binarization.size == 0 : st.error("グレースケール画像準備失敗。"); st.stop()
+
+    kernel_size_blur=1; 
     blurred_img_full_res = cv2.GaussianBlur(img_for_binarization, (kernel_size_blur,kernel_size_blur),0)
     ret_thresh, binary_img_processed_full_res = cv2.threshold(blurred_img_full_res,threshold_value_to_use,255,cv2.THRESH_BINARY)
     if not ret_thresh: st.error("二値化失敗。"); binary_img_for_morph_full_res=None
@@ -184,11 +173,10 @@ if st.session_state.pil_image_original_full_res is not None:
     else:
         st.warning("輪郭検出元画像準備できず。"); st.session_state.counted_spots_value="エラー"
     
-    # --- 表示用の縮小画像準備 ---
     IMAGE_DISPLAY_WIDTH = 600
     def create_display_version_pil(pil_image, target_width):
         if pil_image is None: return None
-        img_copy = pil_image.copy()
+        img_copy = pil_image.copy();
         if img_copy.width > target_width:
             aspect_ratio = img_copy.height / img_copy.width; display_h = int(target_width * aspect_ratio)
             img_copy = img_copy.resize((target_width, display_h), Image.Resampling.LANCZOS)
@@ -203,14 +191,11 @@ if st.session_state.pil_image_original_full_res is not None:
     st.subheader("元の画像")
     if original_img_for_display is not None: st.image(original_img_for_display, caption=st.session_state.image_source_caption)
     st.markdown("---")
-    
     st.subheader("1. コントラスト強調後 (CLAHE適用時)")
     if apply_clahe and clahe_color_for_display is not None:
         st.image(clahe_color_for_display, caption=f"クリップ制限: {clahe_clip_limit}, タイルサイズ: {clahe_tile_size}")
-    else:
-        st.info("コントラスト強調(CLAHE)は適用されていません。")
+    else: st.info("コントラスト強調(CLAHE)は適用されていません。")
     st.markdown("---")
-
     st.subheader("2. 二値化処理後") 
     if binary_img_for_display is not None: st.image(binary_img_for_display,caption=f'閾値:{threshold_value_to_use}')
     else: st.info("二値化未実施/失敗")
