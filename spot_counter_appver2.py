@@ -7,6 +7,17 @@ import io
 # ページ設定 (一番最初に呼び出す)
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
+# ★★★ メイン画面上部の余白を調整するためのCSS ★★★
+# Streamlitのデフォルトの余白を小さくします。
+st.markdown("""
+<style>
+    .main .block-container {
+        padding-top: 2rem !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+
 # ファイルアップローダーのカスタムCSS
 file_uploader_css = """
 <style>
@@ -45,9 +56,10 @@ if "threshold_slider_for_binary" not in st.session_state: st.session_state.thres
 if "threshold_number_for_binary" not in st.session_state: st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
 if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
+if 'contour_color_name' not in st.session_state: st.session_state.contour_color_name = "緑" # ★★★ 色選択のデフォルトを追加 ★★★
 
 
-# --- コールバック関数の定義 (二値化閾値同期用) ---
+# --- コールバック関数とヘルパー関数 ---
 def sync_threshold_from_slider():
     st.session_state.binary_threshold_value = st.session_state.threshold_slider_for_binary
     st.session_state.threshold_number_for_binary = st.session_state.threshold_slider_for_binary
@@ -55,23 +67,28 @@ def sync_threshold_from_number_input():
     st.session_state.binary_threshold_value = st.session_state.threshold_number_for_binary
     st.session_state.threshold_slider_for_binary = st.session_state.threshold_number_for_binary
 
-# --- サイドバーの基本部分 (常に表示) ---
+def hex_to_bgr(hex_color):
+    hex_color = hex_color.lstrip('#')
+    h_len = len(hex_color)
+    return tuple(int(hex_color[i:i + h_len // 3], 16) for i in range(0, h_len, h_len // 3))[::-1] 
+
+# --- サイドバーの基本部分 ---
 display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value) 
 st.sidebar.header("解析パラメータ設定")
 UPLOAD_ICON = "📤" 
 uploaded_file_widget = st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアップロード", type=['tif', 'tiff', 'png', 'jpg', 'jpeg'], help="対応形式: TIF, TIFF, PNG, JPG, JPEG。")
 
-# アプリのメインタイトルと使用方法 (メインエリア)
+# --- アプリのメインタイトルと使用方法 ---
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_html=True)
 st.markdown("""### 使用方法
 1. 画像を左にアップロードしてください。
 2. 画像をアップロードすると、左サイドバーに詳細な解析パラメータが表示されます。
 3. まず「1. 二値化」の閾値を動かし、「元の画像」と「輝点検出とマーキング」の画像を比較しながら、実物に近い見え方になるよう調整してください。
-4. 必要に応じて「2. 形態学的処理」や「3. 輝点フィルタリング」のパラメータも調整します。
+4. 必要に応じて「2. 形態学的処理」、「3. 輝点フィルタリング」、「4. 表示設定」の各パラメータも調整します。
 """)
 st.markdown("---") 
 
-# 画像読み込みロジック
+# --- 画像読み込みと処理のロジック ---
 if uploaded_file_widget is not None:
     try:
         uploaded_file_bytes = uploaded_file_widget.getvalue()
@@ -79,15 +96,12 @@ if uploaded_file_widget is not None:
         st.session_state.pil_image_to_process = pil_img
         st.session_state.image_source_caption = f"アップロード: {uploaded_file_widget.name}"
     except Exception as e:
-        st.sidebar.error(f"アップロード画像の読み込みに失敗: {e}")
-        st.session_state.pil_image_to_process = None 
-        st.session_state.counted_spots_value = "読込エラー"; st.stop()
+        st.sidebar.error(f"アップロード画像の読み込みに失敗: {e}"); st.session_state.pil_image_to_process = None; st.session_state.counted_spots_value = "読込エラー"; st.stop()
 else: 
     if st.session_state.pil_image_to_process is not None: 
         st.session_state.pil_image_to_process = None
         st.session_state.counted_spots_value = "---" 
 
-# メイン処理と、条件付きでのサイドバーパラメータUI表示
 if st.session_state.pil_image_to_process is not None:
     # --- サイドバーのパラメータ設定UI ---
     st.sidebar.subheader("1. 二値化") 
@@ -110,6 +124,15 @@ if st.session_state.pil_image_to_process is not None:
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1,value=10000) 
     st.sidebar.caption("このピクセル数より大きい輝点（または塊）はカウントから除外されます。") 
 
+    # ★★★ 色選択UIをサイドバーに再追加 ★★★
+    st.sidebar.subheader("4. 表示設定")
+    CONTOUR_COLORS = {"緑":"#28a745","青":"#007bff","赤":"#dc3545","黄":"#ffc107","シアン":"#17a2b8","ピンク":"#e83e8c"}
+    st.sidebar.radio("輝点マーキング色を選択",options=list(CONTOUR_COLORS.keys()),key="contour_color_name",horizontal=True)
+    selected_name = st.session_state.contour_color_name
+    selected_hex = CONTOUR_COLORS[selected_name]
+    st.sidebar.markdown(f"""<div style="padding-top: 5px;"><span style="font-size: 0.9em;">選択中の色: <b>{selected_name}</b></span><div style="width: 100%; height: 25px; background-color: {selected_hex}; border: 1px solid rgba(0,0,0,0.2); border-radius: 5px; margin-top: 5px;"></div></div>""", unsafe_allow_html=True)
+    contour_color_bgr = hex_to_bgr(selected_hex)
+
     # --- メインエリアの画像処理と表示ロジック ---
     original_img_to_display_np_uint8 = None; img_gray = None                         
     try:
@@ -117,17 +140,14 @@ if st.session_state.pil_image_to_process is not None:
         temp_np_array = np.array(pil_image_rgb)
         if temp_np_array.dtype != np.uint8: 
             if np.issubdtype(temp_np_array.dtype, np.floating):
-                if temp_np_array.min() >= 0.0 and temp_np_array.max() <= 1.0:
-                    original_img_to_display_np_uint8 = (temp_np_array * 255).astype(np.uint8)
+                if temp_np_array.min() >= 0.0 and temp_np_array.max() <= 1.0: original_img_to_display_np_uint8 = (temp_np_array * 255).astype(np.uint8)
                 else: original_img_to_display_np_uint8 = np.clip(temp_np_array, 0, 255).astype(np.uint8)
-            elif np.issubdtype(temp_np_array.dtype, np.integer): 
-                original_img_to_display_np_uint8 = np.clip(temp_np_array, 0, 255).astype(np.uint8)
+            elif np.issubdtype(temp_np_array.dtype, np.integer): original_img_to_display_np_uint8 = np.clip(temp_np_array, 0, 255).astype(np.uint8)
             else: original_img_to_display_np_uint8 = temp_np_array.astype(np.uint8)
         else: original_img_to_display_np_uint8 = temp_np_array
         img_gray = cv2.cvtColor(original_img_to_display_np_uint8, cv2.COLOR_RGB2GRAY)
         if img_gray.dtype != np.uint8: img_gray = img_gray.astype(np.uint8)
-    except Exception as e:
-        st.error(f"画像の基本変換に失敗: {e}"); st.session_state.counted_spots_value="変換エラー"; st.stop() 
+    except Exception as e: st.error(f"画像の基本変換に失敗: {e}"); st.session_state.counted_spots_value="変換エラー"; st.stop() 
     
     st.header("解析結果の比較")
     kernel_size_blur=1 
@@ -151,8 +171,7 @@ if st.session_state.pil_image_to_process is not None:
                 area = cv2.contourArea(contour)
                 if min_area_to_use <= area <= max_area_to_use: 
                     current_counted_spots += 1
-                    # 輪郭描画色は青色固定
-                    cv2.drawContours(output_image_contours, [contour], -1, (255,0,0), 2) 
+                    cv2.drawContours(output_image_contours, [contour], -1, contour_color_bgr, 2) 
         st.session_state.counted_spots_value = current_counted_spots 
     else:
         st.warning("輪郭検出元画像準備できず。"); st.session_state.counted_spots_value="エラー"
@@ -161,15 +180,15 @@ if st.session_state.pil_image_to_process is not None:
     with col1:
         st.subheader("元の画像")
         if original_img_to_display_np_uint8 is not None:
-            st.image(original_img_to_display_np_uint8, caption=st.session_state.image_source_caption)
+            st.image(original_img_to_display_np_uint8, caption=st.session_state.image_source_caption, use_container_width=True)
             
     with col2:
         st.subheader("輝点検出とマーキング")
         display_final_marked_image_rgb = cv2.cvtColor(output_image_contours, cv2.COLOR_BGR2RGB)
-        caption_text = f'検出輝点({current_counted_spots}個, 青い輪郭, 面積:{min_area_to_use}-{max_area_to_use})'
+        caption_text = f'検出輝点({current_counted_spots}個, 選択色, 面積:{min_area_to_use}-{max_area_to_use})'
         if current_counted_spots == 0:
             caption_text = '輝点見つからず'
-        st.image(display_final_marked_image_rgb, caption=caption_text)
+        st.image(display_final_marked_image_rgb, caption=caption_text, use_container_width=True)
 
     st.markdown("---")
     
