@@ -73,8 +73,7 @@ st.markdown("""### 使用方法
 1. 画像を左にアップロードしてください。
 2. 画像をアップロードすると、左サイドバーに詳細な解析パラメータが表示されます。
 3. まず「1. 二値化」の閾値を動かし、「元の画像」と「輝点検出とマーキング」の画像を比較しながら、実物に近い見え方になるよう調整してください。
-4. 必要に応じて「2. 形態学的処理」や「3. 輝点フィルタリング」のパラメータも調整します。
-5. 「4. 表示設定」で、最終的なマーキングの色を変更できます。
+4. 必要に応じて「2. 形態学的処理」や「3. 輝点フィルタリング」、「4. 表示設定」の各パラメータも調整します。
 """)
 st.markdown("---") 
 
@@ -104,16 +103,26 @@ if st.session_state.pil_image_original_full_res is not None:
     
     st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
     morph_kernel_shape_to_use = cv2.MORPH_ELLIPSE 
-    kernel_options_morph = [1,3,5,7,9]; kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,value=3) 
-    st.sidebar.caption("小さなノイズの除去や、くっついた輝点の分離を試みます。")
+    kernel_options_morph = [1,3,5,7,9]
+    # ★★★ デフォルト値を1に変更 ★★★
+    kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,value=1) 
+    # ★★★ 説明を追記・修正 ★★★
+    st.sidebar.markdown("""
+    オープニング処理は、画像中の小さな白いノイズ（ゴミなど）を除去したり、輝点同士を繋ぐ細い線を取り除く効果があります。これは、画像を一度「収縮」させて細い部分を取り除き、次に「膨張」させて元の輝点のサイズを復元する2段階の処理です（カーネル形状は「楕円」に固定）。
+
+    **カーネルサイズ**は、この処理の強さを決定します。
+    - **大きくすると:** 効果が強くなり、より大きなノイズや繋がりも除去できますが、輝点自体も削られて小さくなるか消えることがあります。
+    - **小さくすると:** 効果は弱く、微細なノイズのみに作用し、輝点への影響は少なくなります。
+
+    「中間処理の画像を見る」で処理結果を確認しながら調整してください。
+    """)
     
     st.sidebar.subheader("3. 輝点フィルタリング (面積)") 
     min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1,value=1) 
     st.sidebar.caption("このピクセル数より小さい輝点（またはノイズ）はカウントから除外されます。") 
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1,value=10000) 
     st.sidebar.caption("このピクセル数より大きい輝点（または塊）はカウントから除外されます。") 
-
-    # ★★★ 色選択UIをサイドバーに配置 ★★★
+    
     st.sidebar.subheader("4. 表示設定")
     CONTOUR_COLORS = {"緑":"#28a745","青":"#007bff","赤":"#dc3545","黄":"#ffc107","シアン":"#17a2b8","ピンク":"#e83e8c"}
     st.sidebar.radio("輝点マーキング色を選択",options=list(CONTOUR_COLORS.keys()),key="contour_color_name",horizontal=True)
@@ -155,12 +164,11 @@ if st.session_state.pil_image_original_full_res is not None:
     else:
         st.warning("輪郭検出元画像準備できず。"); st.session_state.counted_spots_value="エラー"
     
-    # ★★★ 元画像と最終結果を横並びに表示 ★★★
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("元の画像")
         st.image(np_rgb_full_uint8, caption=st.session_state.image_source_caption, use_container_width=True)
-
+            
     with col2:
         st.subheader("輝点検出とマーキング")
         display_final_marked_image_rgb = cv2.cvtColor(output_image_contours_display_full_res, cv2.COLOR_BGR2RGB)
@@ -171,16 +179,15 @@ if st.session_state.pil_image_original_full_res is not None:
 
     st.markdown("---")
     
-    # ★★★ 中間処理の画像はエキスパンダーに格納 ★★★
     with st.expander("▼ 中間処理の画像を見る"):
         st.subheader("1. 二値化処理後")
         if binary_img_processed_full_res is not None: 
-            st.image(binary_img_processed_full_res,caption=f'閾値:{threshold_value_to_use}', use_container_width=True)
+            st.image(binary_img_processed_full_res,caption=f'閾値:{threshold_value_to_use}')
         else: st.info("二値化未実施/失敗")
         
         st.subheader("2. 形態学的処理後")
         if opened_img_processed_full_res is not None: 
-            st.image(opened_img_processed_full_res,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{kernel_size_morph_to_use}', use_container_width=True)
+            st.image(opened_img_processed_full_res,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{kernel_size_morph_to_use}')
         else: st.info("形態学的処理未実施/失敗")
 else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
