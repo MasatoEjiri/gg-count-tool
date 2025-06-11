@@ -107,23 +107,22 @@ if st.session_state.pil_image_original_full_res is not None:
     st.sidebar.subheader("3. 輝点分離 (Watershed)")
     apply_watershed = st.sidebar.checkbox("Watershedアルゴリズムで輝点を分離する", value=False)
     st.sidebar.caption("近接・接触している輝点同士の間に境界線を引き、分離します。")
-    watershed_dist_threshold = 0.7
+    watershed_dist_threshold = 0.5 # デフォルト値
     if apply_watershed:
-        watershed_dist_threshold = st.sidebar.slider("分離の積極性", 0.1, 1.0, 0.5, 0.05)
+        # ★★★ スライダーの値を直感的に修正 ★★★
+        # スライダーの値が大きいほど、内部で使う閾値も大きくなり、より積極的に分離される
+        watershed_dist_threshold = st.sidebar.slider("分離の積極性", 0.1, 0.9, 0.5, 0.05)
         st.sidebar.caption("値を大きくすると、より積極的に分離しようとします。")
 
     st.sidebar.subheader("4. 輝点フィルタリング (面積)") 
     min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1,value=1) 
-    st.sidebar.caption("このピクセル数より小さい輝点（またはノイズ）はカウントから除外されます。") 
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1,value=10000) 
-    st.sidebar.caption("このピクセル数より大きい輝点（または塊）はカウントから除外されます。") 
     
     st.sidebar.subheader("5. 表示設定")
     CONTOUR_COLORS = {"緑":"#28a745","青":"#007bff","赤":"#dc3545","黄":"#ffc107","シアン":"#17a2b8","ピンク":"#e83e8c"}
     st.sidebar.radio("輝点マーキング色を選択",options=list(CONTOUR_COLORS.keys()),key="contour_color_name",horizontal=True)
     selected_name = st.session_state.contour_color_name
     selected_hex = CONTOUR_COLORS[selected_name]
-    st.sidebar.markdown(f"""<div style="padding-top: 5px;"><span style="font-size: 0.9em;">選択中の色: <b>{selected_name}</b></span><div style="width: 100%; height: 25px; background-color: {selected_hex}; border: 1px solid rgba(0,0,0,0.2); border-radius: 5px; margin-top: 5px;"></div></div>""", unsafe_allow_html=True)
     contour_color_bgr = hex_to_bgr(selected_hex)
 
     # --- メインエリアの画像処理と表示ロジック ---
@@ -136,17 +135,21 @@ if st.session_state.pil_image_original_full_res is not None:
     
     kernel_size_blur=1; blurred_img = cv2.GaussianBlur(img_gray_full_res, (kernel_size_blur,kernel_size_blur),0)
     ret_thresh, binary_img = cv2.threshold(blurred_img,threshold_value_to_use,255,cv2.THRESH_BINARY)
-    if not ret_thresh: st.error("二値化失敗。"); binary_img_for_morph=None
-    else: binary_img_for_morph=binary_img.copy()
+    if not ret_thresh: st.error("二値化失敗。"); st.stop()
+
     kernel_morph_obj=cv2.getStructuringElement(morph_kernel_shape_to_use,(kernel_size_morph_to_use,kernel_size_morph_to_use))
-    opened_img = cv2.morphologyEx(binary_img_for_morph, cv2.MORPH_OPEN, kernel_morph_obj)
+    opened_img = cv2.morphologyEx(binary_img, cv2.MORPH_OPEN, kernel_morph_obj)
     
     binary_img_for_contours = opened_img.copy()
     if apply_watershed:
-        sure_bg = cv2.dilate(opened_img, kernel_morph_obj, iterations=3)
         dist_transform = cv2.distanceTransform(opened_img, cv2.DIST_L2, 5)
+        # ★★★ ここの計算式が、スライダーの挙動を決定します ★★★
+        # スライダーの値 (0.1-0.9) が大きいほど、閾値も高くなり、より小さな中心部だけが前景として残ります。
+        # これにより、より積極的に分離が行われます。
         ret, sure_fg = cv2.threshold(dist_transform, watershed_dist_threshold * dist_transform.max(), 255, 0)
+        
         sure_fg = np.uint8(sure_fg)
+        sure_bg = cv2.dilate(opened_img, kernel_morph_obj, iterations=3)
         unknown = cv2.subtract(sure_bg, sure_fg)
         ret, markers = cv2.connectedComponents(sure_fg)
         markers = markers + 1; markers[unknown==255] = 0
@@ -184,9 +187,6 @@ if st.session_state.pil_image_original_full_res is not None:
         if binary_img is not None: 
             st.image(binary_img,caption=f'閾値:{threshold_value_to_use}')
         else: st.info("二値化未実施/失敗")
-        
-        # ★★★ 形態学的処理後 と Watershed処理後の表示を削除 ★★★
-        
 else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
 
