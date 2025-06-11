@@ -101,22 +101,24 @@ if st.session_state.pil_image_original_full_res is not None:
     
     st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
     morph_kernel_shape_to_use = cv2.MORPH_ELLIPSE 
-    kernel_options_morph = [1,3,5,7,9]; kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,value=1) 
+    kernel_options_morph = [1,3,5,7,9]
+    kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,value=1) 
     st.sidebar.caption("小さなノイズの除去や、くっついた輝点の分離を試みます。")
     
     st.sidebar.subheader("3. 輝点分離 (Watershed)")
     apply_watershed = st.sidebar.checkbox("Watershedアルゴリズムで輝点を分離する", value=False)
     st.sidebar.caption("近接・接触している輝点同士の間に境界線を引き、分離します。")
-    watershed_dist_threshold = 0.5 # デフォルト値
+    watershed_dist_threshold = 0.5 
     if apply_watershed:
-        # ★★★ スライダーの値を直感的に修正 ★★★
-        # スライダーの値が大きいほど、内部で使う閾値も大きくなり、より積極的に分離される
-        watershed_dist_threshold = st.sidebar.slider("分離の積極性", 0.1, 0.9, 0.5, 0.05)
+        # ★★★ スライダーの最大値を 0.9 から 0.99 に変更 ★★★
+        watershed_dist_threshold = st.sidebar.slider("分離の積極性", min_value=0.1, max_value=0.99, value=0.5, step=0.05)
         st.sidebar.caption("値を大きくすると、より積極的に分離しようとします。")
 
     st.sidebar.subheader("4. 輝点フィルタリング (面積)") 
     min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1,value=1) 
+    st.sidebar.caption("このピクセル数より小さい輝点（またはノイズ）はカウントから除外されます。") 
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1,value=10000) 
+    st.sidebar.caption("このピクセル数より大きい輝点（または塊）はカウントから除外されます。") 
     
     st.sidebar.subheader("5. 表示設定")
     CONTOUR_COLORS = {"緑":"#28a745","青":"#007bff","赤":"#dc3545","黄":"#ffc107","シアン":"#17a2b8","ピンク":"#e83e8c"}
@@ -143,9 +145,6 @@ if st.session_state.pil_image_original_full_res is not None:
     binary_img_for_contours = opened_img.copy()
     if apply_watershed:
         dist_transform = cv2.distanceTransform(opened_img, cv2.DIST_L2, 5)
-        # ★★★ ここの計算式が、スライダーの挙動を決定します ★★★
-        # スライダーの値 (0.1-0.9) が大きいほど、閾値も高くなり、より小さな中心部だけが前景として残ります。
-        # これにより、より積極的に分離が行われます。
         ret, sure_fg = cv2.threshold(dist_transform, watershed_dist_threshold * dist_transform.max(), 255, 0)
         
         sure_fg = np.uint8(sure_fg)
