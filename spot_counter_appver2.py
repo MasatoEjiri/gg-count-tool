@@ -73,7 +73,7 @@ st.markdown("""### 使用方法
 1. 画像を左にアップロードしてください。
 2. 画像をアップロードすると、左サイドバーに詳細な解析パラメータが表示されます。
 3. まず「1. 二値化」の閾値を動かし、「元の画像」と「輝点検出とマーキング」の画像を比較しながら、実物に近い見え方になるよう調整してください。
-4. 精度を上げるには、「2. 形態学的処理」や、新機能の「3. 輝点分離」をお試しください。
+4. 精度を上げるには、「2. 形態学的処理」や「3. 輝点分離」のパラメータも調整します。
 """)
 st.markdown("---") 
 
@@ -99,26 +99,26 @@ if st.session_state.pil_image_original_full_res is not None:
     st.sidebar.number_input('閾値 (直接入力)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
     threshold_value_to_use = st.session_state.binary_threshold_value 
     
-    st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
+    st.sidebar.subheader("2. 形態学的処理") 
     morph_kernel_shape_to_use = cv2.MORPH_ELLIPSE 
-    kernel_options_morph = [1,3,5,7,9]
+    kernel_options_morph = [1,3,5,7,9]; 
     kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,value=1) 
-    st.sidebar.caption("小さなノイズの除去や、くっついた輝点の分離を試みます。")
+    st.sidebar.caption("ノイズ除去・輝点分離の基本単位の大きさ。")
+    # ★★★ 「収縮の強さ」スライダーを追加 ★★★
+    erosion_iterations = st.sidebar.slider("収縮の強さ（分離度）", 1, 5, 1, 1)
+    st.sidebar.caption("値を大きくすると、より強力に輝点を分離しますが、輝点自体が消える可能性もあります。")
     
     st.sidebar.subheader("3. 輝点分離 (Watershed)")
-    apply_watershed = st.sidebar.checkbox("Watershedアルゴリズムで輝点を分離する", value=False)
-    st.sidebar.caption("近接・接触している輝点同士の間に境界線を引き、分離します。")
+    apply_watershed = st.sidebar.checkbox("Watershedアルゴリズムで輝点をさらに分離する", value=False)
+    st.sidebar.caption("形態学的処理で分離しきれない輝点の分離を試みます。")
     watershed_dist_threshold = 0.5 
     if apply_watershed:
-        # ★★★ スライダーの最大値を 0.9 から 0.99 に変更 ★★★
         watershed_dist_threshold = st.sidebar.slider("分離の積極性", min_value=0.1, max_value=0.99, value=0.5, step=0.05)
         st.sidebar.caption("値を大きくすると、より積極的に分離しようとします。")
 
     st.sidebar.subheader("4. 輝点フィルタリング (面積)") 
     min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1,value=1) 
-    st.sidebar.caption("このピクセル数より小さい輝点（またはノイズ）はカウントから除外されます。") 
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1,value=10000) 
-    st.sidebar.caption("このピクセル数より大きい輝点（または塊）はカウントから除外されます。") 
     
     st.sidebar.subheader("5. 表示設定")
     CONTOUR_COLORS = {"緑":"#28a745","青":"#007bff","赤":"#dc3545","黄":"#ffc107","シアン":"#17a2b8","ピンク":"#e83e8c"}
@@ -139,8 +139,12 @@ if st.session_state.pil_image_original_full_res is not None:
     ret_thresh, binary_img = cv2.threshold(blurred_img,threshold_value_to_use,255,cv2.THRESH_BINARY)
     if not ret_thresh: st.error("二値化失敗。"); st.stop()
 
+    # ★★★ 形態学的処理を「収縮の強さ」を反映した処理に変更 ★★★
     kernel_morph_obj=cv2.getStructuringElement(morph_kernel_shape_to_use,(kernel_size_morph_to_use,kernel_size_morph_to_use))
-    opened_img = cv2.morphologyEx(binary_img, cv2.MORPH_OPEN, kernel_morph_obj)
+    # まず指定された回数だけ収縮
+    eroded_img = cv2.erode(binary_img, kernel_morph_obj, iterations=erosion_iterations)
+    # その後、収縮させた分だけ膨張させてサイズを復元（オープニング処理の強化版）
+    opened_img = cv2.dilate(eroded_img, kernel_morph_obj, iterations=erosion_iterations)
     
     binary_img_for_contours = opened_img.copy()
     if apply_watershed:
