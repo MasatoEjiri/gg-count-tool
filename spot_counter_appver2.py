@@ -43,7 +43,7 @@ if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots
 if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 15
 if "threshold_slider_for_binary" not in st.session_state: st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
 if "threshold_number_for_binary" not in st.session_state: st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
-if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
+if 'pil_image_original_full_res' not in st.session_state: st.session_state.pil_image_original_full_res = None
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
 if 'contour_color_name' not in st.session_state: st.session_state.contour_color_name = "緑"
 
@@ -74,24 +74,24 @@ st.markdown("""### 使用方法
 2. 画像をアップロードすると、左サイドバーに詳細な解析パラメータが表示されます。
 3. まず「1. 二値化」の閾値を動かし、「元の画像」と「輝点検出とマーキング」の画像を比較しながら、実物に近い見え方になるよう調整してください。
 4. 精度を上げるには、「2. 形態学的処理」や、新機能の「3. 輝点分離」をお試しください。
-""") # 使用方法を更新
+""")
 st.markdown("---") 
 
 # --- 画像読み込みと処理のロジック ---
 if uploaded_file_widget is not None:
     try:
         uploaded_file_bytes = uploaded_file_widget.getvalue()
-        pil_img = Image.open(io.BytesIO(uploaded_file_bytes))
-        st.session_state.pil_image_to_process = pil_img
-        st.session_state.image_source_caption = f"アップロード: {uploaded_file_widget.name}"
+        pil_img_original = Image.open(io.BytesIO(uploaded_file_bytes))
+        st.session_state.pil_image_original_full_res = pil_img_original
+        st.session_state.image_source_caption = f"アップロード: {uploaded_file_widget.name} (元サイズ: {pil_img_original.width}x{pil_img_original.height}px)"
     except Exception as e:
-        st.sidebar.error(f"アップロード画像の読み込みに失敗: {e}"); st.session_state.pil_image_to_process = None; st.session_state.counted_spots_value = "読込エラー"; st.stop()
+        st.sidebar.error(f"アップロード画像の読み込みに失敗: {e}"); st.session_state.pil_image_original_full_res = None; st.session_state.counted_spots_value = "読込エラー"; st.stop()
 else: 
-    if st.session_state.pil_image_to_process is not None: 
-        st.session_state.pil_image_to_process = None
+    if st.session_state.pil_image_original_full_res is not None: 
+        st.session_state.pil_image_original_full_res = None
         st.session_state.counted_spots_value = "---" 
 
-if st.session_state.pil_image_to_process is not None:
+if st.session_state.pil_image_original_full_res is not None:
     # --- サイドバーのパラメータ設定UI ---
     st.sidebar.subheader("1. 二値化") 
     st.sidebar.markdown("_この値を調整して、輝点と背景を分離します。_")
@@ -101,11 +101,9 @@ if st.session_state.pil_image_to_process is not None:
     
     st.sidebar.subheader("2. 形態学的処理 (オープニング)") 
     morph_kernel_shape_to_use = cv2.MORPH_ELLIPSE 
-    kernel_options_morph = [1,3,5,7,9]
-    kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,value=1) 
+    kernel_options_morph = [1,3,5,7,9]; kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,value=1) 
     st.sidebar.caption("小さなノイズの除去や、くっついた輝点の分離を試みます。")
     
-    # ★★★ 3. 輝点の分離 (Watershed) ★★★
     st.sidebar.subheader("3. 輝点分離 (Watershed)")
     apply_watershed = st.sidebar.checkbox("Watershedアルゴリズムで輝点を分離する", value=False)
     st.sidebar.caption("近接・接触している輝点同士の間に境界線を引き、分離します。")
@@ -129,53 +127,34 @@ if st.session_state.pil_image_to_process is not None:
     contour_color_bgr = hex_to_bgr(selected_hex)
 
     # --- メインエリアの画像処理と表示ロジック ---
-    original_img_to_display_np_uint8 = None; img_gray = None                         
-    try:
-        pil_image_rgb = st.session_state.pil_image_to_process.convert("RGB")
-        original_img_to_display_np_uint8 = np.array(pil_image_rgb).astype(np.uint8)
-        img_gray = cv2.cvtColor(original_img_to_display_np_uint8, cv2.COLOR_RGB2GRAY)
-    except Exception as e:
-        st.error(f"画像の基本変換に失敗: {e}"); st.session_state.counted_spots_value="変換エラー"; st.stop() 
+    pil_rgb_full = st.session_state.pil_image_original_full_res.convert("RGB")
+    np_rgb_full_uint8 = np.array(pil_rgb_full).astype(np.uint8)
+    img_gray_full_res = cv2.cvtColor(np_rgb_full_uint8, cv2.COLOR_RGB2GRAY)
+    if img_gray_full_res.dtype != np.uint8: img_gray_full_res = img_gray_full_res.astype(np.uint8)
     
     st.header("解析結果の比較")
     
-    kernel_size_blur=1; blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur,kernel_size_blur),0)
+    kernel_size_blur=1; blurred_img = cv2.GaussianBlur(img_gray_full_res, (kernel_size_blur,kernel_size_blur),0)
     ret_thresh, binary_img = cv2.threshold(blurred_img,threshold_value_to_use,255,cv2.THRESH_BINARY)
-    if not ret_thresh: st.error("二値化失敗。"); st.stop()
-
+    if not ret_thresh: st.error("二値化失敗。"); binary_img_for_morph=None
+    else: binary_img_for_morph=binary_img.copy()
     kernel_morph_obj=cv2.getStructuringElement(morph_kernel_shape_to_use,(kernel_size_morph_to_use,kernel_size_morph_to_use))
-    opened_img = cv2.morphologyEx(binary_img, cv2.MORPH_OPEN, kernel_morph_obj)
+    opened_img = cv2.morphologyEx(binary_img_for_morph, cv2.MORPH_OPEN, kernel_morph_obj)
     
-    # ★★★ Watershed処理 ★★★
     binary_img_for_contours = opened_img.copy()
-    watershed_preview_img = None # プレビュー用画像
     if apply_watershed:
-        # 背景領域を特定
         sure_bg = cv2.dilate(opened_img, kernel_morph_obj, iterations=3)
-        # 前景領域を特定（距離変換）
         dist_transform = cv2.distanceTransform(opened_img, cv2.DIST_L2, 5)
         ret, sure_fg = cv2.threshold(dist_transform, watershed_dist_threshold * dist_transform.max(), 255, 0)
         sure_fg = np.uint8(sure_fg)
-        # 不明領域を特定
         unknown = cv2.subtract(sure_bg, sure_fg)
-        # マーカーを作成
         ret, markers = cv2.connectedComponents(sure_fg)
-        markers = markers + 1
-        markers[unknown==255] = 0
-        # Watershedアルゴリズム適用
-        # マーキング用のカラー画像に適用する
-        markers = cv2.watershed(cv2.cvtColor(original_img_to_display_np_uint8, cv2.COLOR_RGB2BGR), markers)
-        
-        # 輪郭検出用の二値化画像に境界線を描画
+        markers = markers + 1; markers[unknown==255] = 0
+        markers = cv2.watershed(cv2.cvtColor(np_rgb_full_uint8, cv2.COLOR_RGB2BGR), markers)
         binary_img_for_contours[markers == -1] = 0
         
-        # プレビュー用に元のカラー画像に境界線を描画
-        watershed_preview_img = original_img_to_display_np_uint8.copy()
-        watershed_preview_img[markers == -1] = [255,0,0] # 境界線を赤色に
-
-    # 輪郭検出とカウント
     current_counted_spots = 0 
-    output_image_contours_display = cv2.cvtColor(original_img_to_display_np_uint8, cv2.COLOR_RGB2BGR) 
+    output_image_contours_display = cv2.cvtColor(np_rgb_full_uint8.copy(), cv2.COLOR_RGB2BGR) 
     contours, hierarchy = cv2.findContours(binary_img_for_contours,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
     if 'contours' in locals() and contours: 
         for contour in contours:
@@ -189,8 +168,7 @@ if st.session_state.pil_image_to_process is not None:
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("元の画像")
-        if original_img_to_display_np_uint8 is not None:
-            st.image(original_img_to_display_np_uint8, caption=st.session_state.image_source_caption, use_container_width=True)
+        st.image(np_rgb_full_uint8, caption=st.session_state.image_source_caption, use_container_width=True)
             
     with col2:
         st.subheader("輝点検出とマーキング")
@@ -207,13 +185,8 @@ if st.session_state.pil_image_to_process is not None:
             st.image(binary_img,caption=f'閾値:{threshold_value_to_use}')
         else: st.info("二値化未実施/失敗")
         
-        # ★★★ Watershedプレビュー表示を追加 ★★★
-        if apply_watershed:
-            st.subheader("2. 輝点分離後 (Watershed)")
-            if watershed_preview_img is not None:
-                st.image(watershed_preview_img, caption="Watershedアルゴリズムによる分離境界（赤線）")
-            else:
-                st.info("Watershedプレビューは生成されませんでした。")
+        # ★★★ 形態学的処理後 と Watershed処理後の表示を削除 ★★★
+        
 else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
 
