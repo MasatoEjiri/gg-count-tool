@@ -4,7 +4,7 @@ import numpy as np
 import cv2
 import io
 
-# ページ設定 (一番最初に呼び出す)
+# ページ設定
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
 # ファイルアップローダーのカスタムCSS
@@ -72,8 +72,8 @@ st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_ht
 st.markdown("""### 使用方法
 1. 画像を左にアップロードしてください。
 2. 画像をアップロードすると、左サイドバーに詳細な解析パラメータが表示されます。
-3. まず「1. 二値化」の閾値を動かし、「元の画像」と「輝点検出とマーキング」の画像を比較しながら、実物に近い見え方になるよう調整してください。
-4. 精度を上げるには、「2. 形態学的処理」や「3. 輝点分離」のパラメータも調整します。
+3. **「1. 輝点検出方法の選択」**で、**「Hough Circle Transformで検出」**にチェックを入れると、より高精度な分離が期待できます。
+4. 各パラメータを調整し、「元の画像」と「輝点検出とマーキング」の画像を比較しながら、最適な設定を見つけてください。
 """)
 st.markdown("---") 
 
@@ -93,84 +93,123 @@ else:
 
 if st.session_state.pil_image_original_full_res is not None:
     # --- サイドバーのパラメータ設定UI ---
-    st.sidebar.subheader("1. 二値化") 
-    st.sidebar.markdown("_この値を調整して、輝点と背景を分離します。_")
-    st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
-    st.sidebar.number_input('閾値 (直接入力)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
-    threshold_value_to_use = st.session_state.binary_threshold_value 
-    
-    st.sidebar.subheader("2. 形態学的処理") 
-    morph_kernel_shape_to_use = cv2.MORPH_ELLIPSE 
-    kernel_options_morph = [1,3,5,7,9]; 
-    kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=kernel_options_morph,value=1) 
-    st.sidebar.caption("ノイズ除去・輝点分離の基本単位の大きさ。")
-    # ★★★ 「収縮の強さ」スライダーを追加 ★★★
-    erosion_iterations = st.sidebar.slider("収縮の強さ（分離度）", 1, 5, 1, 1)
-    st.sidebar.caption("値を大きくすると、より強力に輝点を分離しますが、輝点自体が消える可能性もあります。")
-    
-    st.sidebar.subheader("3. 輝点分離 (Watershed)")
-    apply_watershed = st.sidebar.checkbox("Watershedアルゴリズムで輝点をさらに分離する", value=False)
-    st.sidebar.caption("形態学的処理で分離しきれない輝点の分離を試みます。")
-    watershed_dist_threshold = 0.5 
-    if apply_watershed:
-        watershed_dist_threshold = st.sidebar.slider("分離の積極性", min_value=0.1, max_value=0.99, value=0.5, step=0.05)
-        st.sidebar.caption("値を大きくすると、より積極的に分離しようとします。")
+    st.sidebar.subheader("1. 輝点検出方法の選択")
+    use_hough = st.sidebar.checkbox("Hough Circle Transformで検出", value=False)
+    st.sidebar.caption("輝点を円として検出し、接触した輝点を分離します。精度が高いですが、パラメータ調整が必要です。")
+    st.sidebar.markdown("---")
 
-    st.sidebar.subheader("4. 輝点フィルタリング (面積)") 
-    min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1,value=1) 
-    max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1,value=10000) 
-    
-    st.sidebar.subheader("5. 表示設定")
-    CONTOUR_COLORS = {"緑":"#28a745","青":"#007bff","赤":"#dc3545","黄":"#ffc107","シアン":"#17a2b8","ピンク":"#e83e8c"}
-    st.sidebar.radio("輝点マーキング色を選択",options=list(CONTOUR_COLORS.keys()),key="contour_color_name",horizontal=True)
-    selected_name = st.session_state.contour_color_name
-    selected_hex = CONTOUR_COLORS[selected_name]
-    contour_color_bgr = hex_to_bgr(selected_hex)
-
-    # --- メインエリアの画像処理と表示ロジック ---
+    # --- メインの画像処理と表示ロジックのための準備 ---
     pil_rgb_full = st.session_state.pil_image_original_full_res.convert("RGB")
     np_rgb_full_uint8 = np.array(pil_rgb_full).astype(np.uint8)
     img_gray_full_res = cv2.cvtColor(np_rgb_full_uint8, cv2.COLOR_RGB2GRAY)
     if img_gray_full_res.dtype != np.uint8: img_gray_full_res = img_gray_full_res.astype(np.uint8)
     
-    st.header("解析結果の比較")
-    
-    kernel_size_blur=1; blurred_img = cv2.GaussianBlur(img_gray_full_res, (kernel_size_blur,kernel_size_blur),0)
-    ret_thresh, binary_img = cv2.threshold(blurred_img,threshold_value_to_use,255,cv2.THRESH_BINARY)
-    if not ret_thresh: st.error("二値化失敗。"); st.stop()
-
-    # ★★★ 形態学的処理を「収縮の強さ」を反映した処理に変更 ★★★
-    kernel_morph_obj=cv2.getStructuringElement(morph_kernel_shape_to_use,(kernel_size_morph_to_use,kernel_size_morph_to_use))
-    # まず指定された回数だけ収縮
-    eroded_img = cv2.erode(binary_img, kernel_morph_obj, iterations=erosion_iterations)
-    # その後、収縮させた分だけ膨張させてサイズを復元（オープニング処理の強化版）
-    opened_img = cv2.dilate(eroded_img, kernel_morph_obj, iterations=erosion_iterations)
-    
-    binary_img_for_contours = opened_img.copy()
-    if apply_watershed:
-        dist_transform = cv2.distanceTransform(opened_img, cv2.DIST_L2, 5)
-        ret, sure_fg = cv2.threshold(dist_transform, watershed_dist_threshold * dist_transform.max(), 255, 0)
-        
-        sure_fg = np.uint8(sure_fg)
-        sure_bg = cv2.dilate(opened_img, kernel_morph_obj, iterations=3)
-        unknown = cv2.subtract(sure_bg, sure_fg)
-        ret, markers = cv2.connectedComponents(sure_fg)
-        markers = markers + 1; markers[unknown==255] = 0
-        markers = cv2.watershed(cv2.cvtColor(np_rgb_full_uint8, cv2.COLOR_RGB2BGR), markers)
-        binary_img_for_contours[markers == -1] = 0
-        
     current_counted_spots = 0 
     output_image_contours_display = cv2.cvtColor(np_rgb_full_uint8.copy(), cv2.COLOR_RGB2BGR) 
-    contours, hierarchy = cv2.findContours(binary_img_for_contours,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-    if 'contours' in locals() and contours: 
-        for contour in contours:
-            area = cv2.contourArea(contour)
-            if min_area_to_use <= area <= max_area_to_use: 
-                current_counted_spots += 1
-                cv2.drawContours(output_image_contours_display, [contour], -1, contour_color_bgr, 2) 
-    st.session_state.counted_spots_value = current_counted_spots 
     
-    # --- 表示 ---
+    contour_color_bgr = hex_to_bgr(st.session_state.contour_color_name) # 色選択の値を取得
+
+
+    if use_hough:
+        # --- Hough変換用のパラメータ ---
+        st.sidebar.subheader("Hough Circle Transform パラメータ")
+        h_min_dist = st.sidebar.slider("輝点間の最小距離", 1, 50, 10)
+        h_param1 = st.sidebar.slider("Cannyエッジ検出の閾値", 1, 200, 100)
+        h_param2 = st.sidebar.slider("検出の感度", 1, 100, 10)
+        st.sidebar.caption("値を小さくすると、より多くの円（偽陽性含む）を検出します。")
+        h_min_radius = st.sidebar.slider("輝点の最小半径", 0, 50, 1)
+        h_max_radius = st.sidebar.slider("輝点の最大半径", 0, 100, 20)
+        
+        # Hough Circle Transform 実行
+        # 画像がノイジーな場合、ブラーをかけると安定することがある
+        gray_for_hough = cv2.medianBlur(img_gray_full_res, 5)
+        circles = cv2.HoughCircles(
+            gray_for_hough, 
+            cv2.HOUGH_GRADIENT, 
+            dp=1, 
+            minDist=h_min_dist, 
+            param1=h_param1, 
+            param2=h_param2, 
+            minRadius=h_min_radius, 
+            maxRadius=h_max_radius
+        )
+        
+        if circles is not None:
+            circles = np.uint16(np.around(circles))
+            current_counted_spots = len(circles[0, :])
+            for i in circles[0,:]:
+                # 円と中心を描画
+                cv2.circle(output_image_contours_display, (i[0], i[1]), i[2], contour_color_bgr, 2)
+                cv2.circle(output_image_contours_display, (i[0], i[1]), 2, (0,0,255), 3) # 中心を赤で
+        else:
+            current_counted_spots = 0
+
+        st.session_state.counted_spots_value = current_counted_spots
+        
+    else:
+        # --- 従来の閾値ベースの処理 ---
+        st.sidebar.subheader("2. 二値化")
+        st.sidebar.markdown("_この値を調整して、輝点と背景を分離します。_")
+        st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
+        st.sidebar.number_input('閾値 (直接入力)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
+        threshold_value_to_use = st.session_state.binary_threshold_value 
+
+        st.sidebar.subheader("3. 形態学的処理")
+        kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=[1,3,5,7,9],value=1) 
+        erosion_iterations = st.sidebar.slider("収縮の強さ（分離度）", 1, 5, 1, 1)
+        
+        st.sidebar.subheader("4. 輝点フィルタリング (面積)") 
+        min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1,value=1) 
+        max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1,value=10000) 
+
+        # 従来の画像処理パイプライン
+        kernel_size_blur=1; blurred_img = cv2.GaussianBlur(img_gray_full_res, (kernel_size_blur,kernel_size_blur),0)
+        ret_thresh, binary_img = cv2.threshold(blurred_img,threshold_value_to_use,255,cv2.THRESH_BINARY)
+        if not ret_thresh: st.error("二値化失敗。"); st.stop()
+        
+        kernel_morph_obj=cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(kernel_size_morph_to_use,kernel_size_morph_to_use))
+        eroded_img = cv2.erode(binary_img, kernel_morph_obj, iterations=erosion_iterations)
+        opened_img = cv2.dilate(eroded_img, kernel_morph_obj, iterations=erosion_iterations)
+        
+        contours, hierarchy = cv2.findContours(opened_img,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+        
+        if 'contours' in locals() and contours: 
+            for contour in contours:
+                area = cv2.contourArea(contour)
+                if min_area_to_use <= area <= max_area_to_use: 
+                    current_counted_spots += 1
+                    cv2.drawContours(output_image_contours_display, [contour], -1, contour_color_bgr, 2) 
+        st.session_state.counted_spots_value = current_counted_spots
+
+    # --- 共通の表示設定UI ---
+    st.sidebar.subheader("表示設定")
+    CONTOUR_COLORS = {"緑":"#28a745","青":"#007bff","赤":"#dc3545","黄":"#ffc107","シアン":"#17a2b8","ピンク":"#e83e8c"}
+    st.sidebar.radio("輝点マーキング色を選択",options=list(CONTOUR_COLORS.keys()),key="contour_color_name",horizontal=True)
+    selected_name = st.session_state.contour_color_name
+    selected_hex = CONTOUR_COLORS[selected_name]
+    contour_color_bgr = hex_to_bgr(selected_hex) # 描画で使うために再計算
+
+    # 色選択の変更を反映するために、描画処理を再実行する必要がある。
+    # Streamlitの仕組み上、ウィジェットの変更でスクリプトが再実行され、
+    # このブロックの最初から処理が走り直すので、最新の色で再描画される。
+    if use_hough:
+        # Houghの場合、ここで再描画
+        output_image_contours_display = cv2.cvtColor(np_rgb_full_uint8.copy(), cv2.COLOR_RGB2BGR)
+        if circles is not None:
+            for i in circles[0,:]:
+                cv2.circle(output_image_contours_display, (i[0], i[1]), i[2], contour_color_bgr, 2)
+                cv2.circle(output_image_contours_display, (i[0], i[1]), 2, (0,0,255), 3)
+    else:
+        # 従来法の場合、ここで再描画
+        output_image_contours_display = cv2.cvtColor(np_rgb_full_uint8.copy(), cv2.COLOR_RGB2BGR)
+        if 'contours' in locals() and contours:
+            for contour in contours:
+                area = cv2.contourArea(contour)
+                if min_area_to_use <= area <= max_area_to_use:
+                    cv2.drawContours(output_image_contours_display, [contour], -1, contour_color_bgr, 2)
+    
+    # --- 表示エリア ---
+    st.header("解析結果の比較")
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("元の画像")
@@ -179,17 +218,10 @@ if st.session_state.pil_image_original_full_res is not None:
     with col2:
         st.subheader("輝点検出とマーキング")
         display_final_marked_image_rgb = cv2.cvtColor(output_image_contours_display, cv2.COLOR_BGR2RGB)
-        caption_text = f'検出輝点({current_counted_spots}個, 選択色, 面積:{min_area_to_use}-{max_area_to_use})'
+        caption_text = f'検出輝点({current_counted_spots}個)'
         if current_counted_spots == 0: caption_text = '輝点見つからず'
         st.image(display_final_marked_image_rgb, caption=caption_text, use_container_width=True)
 
-    st.markdown("---")
-    
-    with st.expander("▼ 中間処理の画像を見る"):
-        st.subheader("1. 二値化処理後")
-        if binary_img is not None: 
-            st.image(binary_img,caption=f'閾値:{threshold_value_to_use}')
-        else: st.info("二値化未実施/失敗")
 else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
 
