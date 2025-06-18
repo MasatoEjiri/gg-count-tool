@@ -58,6 +58,7 @@ if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
 if 'contour_color_name' not in st.session_state: st.session_state.contour_color_name = "緑"
 if 'cropper_box_color_name' not in st.session_state: st.session_state.cropper_box_color_name = '赤'
+if 'detection_method' not in st.session_state: st.session_state.detection_method = "色で検出（新機能）" # ★★★ デフォルトを設定 ★★★
 
 
 # --- コールバック関数とヘルパー関数 ---
@@ -83,7 +84,7 @@ uploaded_file_widget = st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアッ�
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_html=True)
 st.markdown("""### 使用方法
 1. 画像を左にアップロードしてください。
-2. メイン画面で解析したいエリアをトリミングします。枠の色は画像の右隣で変更できます。
+2. メイン画面に表示された画像の上で、四角い枠をドラッグ＆リサイズして解析したいエリアを選択します。
 3. サイドバーの「1. 輝点検出方法の選択」で解析手法を選び、続く各パラメータを調整してください。
 4. 「元の画像（トリミング後）」と「輝点検出とマーキング」を比較しながら最適な設定を見つけます。
 """)
@@ -140,39 +141,42 @@ if st.session_state.pil_image_original is not None:
     
     # --- サイドバーのパラメータ設定UI ---
     st.sidebar.subheader("1. 輝点検出方法")
-    detection_method = st.sidebar.radio(
+    st.sidebar.radio(
         "検出方法を選択",
         ("明るさで検出（従来法）", "色で検出（新機能）"),
+        key="detection_method", # ★★★ key を使って状態を管理 ★★★
         horizontal=True,
     )
     st.sidebar.markdown("---")
     
     binary_img = None 
 
-    if detection_method == "明るさで検出（従来法）":
+    if st.session_state.detection_method == "明るさで検出（従来法）":
         st.sidebar.subheader("2. 二値化")
-        st.sidebar.markdown("_この値を調整して、輝点と背景を分離します。_")
-        st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
-        st.sidebar.number_input('閾値 (直接入力)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
-        threshold_value_to_use = st.session_state.binary_threshold_value
+        threshold_value_to_use = st.sidebar.slider(
+            '閾値',
+            min_value=0, max_value=255, value=st.session_state.binary_threshold_value,
+            key="threshold_slider_for_binary", on_change=sync_threshold_from_slider,
+            help="この値より明るいピクセルは白（検出対象）に、暗いピクセルは黒になります。"
+        )
     else: # 色で検出（新機能）
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
         st.sidebar.markdown("検出したい輝点の色が抽出されるように各値を調整します。")
-        # ★★★ 彩度と明度のスライダーに説明を追加 ★★★
+        # ★★★ 彩度と明度のスライダーに説明を追加し、デフォルト値を変更 ★★★
         sat_min = st.sidebar.slider(
             "彩度(Saturation)の下限", 
             min_value=0, max_value=255, value=120,
-            help="色の「鮮やかさ」の最低ライン。値を上げると、白やグレーに近いくすんだ色が除外され、鮮やかな色の輝点だけが残りやすくなります。"
+            help="色の「鮮やかさ」の最低ライン。値を上げると、白やグレーに近いくすんだ色が除外されます。"
         )
         val_min = st.sidebar.slider(
             "明度(Value)の下限", 
             min_value=0, max_value=255, value=60,
-            help="色の「明るさ」の最低ライン。値を上げると、暗い部分にあるノイズが除外されます。"
+            help="色の「明るさ」の最低ライン。値を上げると、暗いピクセルが除外されます。"
         )
         # 色相(Hue)は内部で固定値を使用 (赤色と緑色をカバーする広い範囲)
-        hue_lower1, hue_upper1 = 0, 15
-        hue_lower2, hue_upper2 = 165, 179
-        # 緑色を検出したい場合は、例えば hue_lower1=35, hue_upper1=85, hue_lower2=35, hue_upper2=85 のように調整
+        hue_lower1, hue_upper1 = 0, 20    # 赤色領域の前半を少し広げる
+        hue_lower2, hue_upper2 = 160, 179 # 赤色領域の後半
+        hue_lower_green, hue_upper_green = 35, 85 # 緑色領域
 
     # --- 共通のパラメータ ---
     st.sidebar.subheader("3. 形態学的処理")
@@ -201,7 +205,7 @@ if st.session_state.pil_image_original is not None:
     except Exception as e:
         st.error(f"トリミング後の画像の基本変換に失敗: {e}"); st.session_state.counted_spots_value="変換エラー"; st.stop() 
     
-    if detection_method == "明るさで検出（従来法）":
+    if st.session_state.detection_method == "明るさで検出（従来法）":
         img_gray = cv2.cvtColor(original_img_to_display_np_uint8, cv2.COLOR_RGB2GRAY)
         kernel_size_blur=1; blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur,kernel_size_blur),0)
         ret_thresh, binary_img = cv2.threshold(blurred_img,threshold_value_to_use,255,cv2.THRESH_BINARY)
@@ -211,9 +215,13 @@ if st.session_state.pil_image_original is not None:
         upper_range1 = np.array([hue_upper1, 255, 255])
         lower_range2 = np.array([hue_lower2, sat_min, val_min])
         upper_range2 = np.array([hue_upper2, 255, 255])
-        mask1 = cv2.inRange(img_hsv, lower_range1, upper_range1)
-        mask2 = cv2.inRange(img_hsv, lower_range2, upper_range2)
-        binary_img = mask1 + mask2 
+        mask_red = cv2.add(cv2.inRange(img_hsv, lower_range1, upper_range1), cv2.inRange(img_hsv, lower_range2, upper_range2))
+        
+        lower_range_green = np.array([hue_lower_green, sat_min, val_min])
+        upper_range_green = np.array([hue_upper_green, 255, 255])
+        mask_green = cv2.inRange(img_hsv, lower_range_green, upper_range_green)
+        
+        binary_img = cv2.add(mask_red, mask_green)
 
     if binary_img is None: st.error("二値化処理に失敗しました。"); st.stop()
     
@@ -247,7 +255,7 @@ if st.session_state.pil_image_original is not None:
 
     st.markdown("---")
     with st.expander("▼ 中間処理の画像を見る"):
-        st.subheader(f"1. {detection_method}による二値化処理後")
+        st.subheader(f"1. {st.session_state.detection_method}による二値化処理後")
         st.image(binary_img,caption=f'適用された二値化画像')
         st.subheader("2. 形態学的処理後")
         st.image(opened_img,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{erosion_iterations}回')
