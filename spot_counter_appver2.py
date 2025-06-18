@@ -58,7 +58,9 @@ if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
 if 'contour_color_name' not in st.session_state: st.session_state.contour_color_name = "緑"
 if 'cropper_box_color_name' not in st.session_state: st.session_state.cropper_box_color_name = '赤'
-if 'detection_method' not in st.session_state: st.session_state.detection_method = "色で検出（新機能）" # ★★★ デフォルトを設定 ★★★
+# ★★★ 検出方法のデフォルトを「色で検出」に設定 ★★★
+if 'detection_method' not in st.session_state: 
+    st.session_state.detection_method = "色で検出（新機能）"
 
 
 # --- コールバック関数とヘルパー関数 ---
@@ -84,8 +86,8 @@ uploaded_file_widget = st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアッ�
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_html=True)
 st.markdown("""### 使用方法
 1. 画像を左にアップロードしてください。
-2. メイン画面に表示された画像の上で、四角い枠をドラッグ＆リサイズして解析したいエリアを選択します。
-3. サイドバーの「1. 輝点検出方法の選択」で解析手法を選び、続く各パラメータを調整してください。
+2. メイン画面で解析したいエリアをトリミングします。枠の色は画像の右隣で変更できます。
+3. サイドバーの「1. 輝点検出方法」で解析手法を選び、続く各パラメータを調整してください。
 4. 「元の画像（トリミング後）」と「輝点検出とマーキング」を比較しながら最適な設定を見つけます。
 """)
 st.markdown("---") 
@@ -153,12 +155,10 @@ if st.session_state.pil_image_original is not None:
 
     if st.session_state.detection_method == "明るさで検出（従来法）":
         st.sidebar.subheader("2. 二値化")
-        threshold_value_to_use = st.sidebar.slider(
-            '閾値',
-            min_value=0, max_value=255, value=st.session_state.binary_threshold_value,
-            key="threshold_slider_for_binary", on_change=sync_threshold_from_slider,
-            help="この値より明るいピクセルは白（検出対象）に、暗いピクセルは黒になります。"
-        )
+        st.sidebar.markdown("_この値を調整して、輝点と背景を分離します。_")
+        threshold_value_to_use = st.sidebar.slider('閾値',min_value=0,max_value=255,value=st.session_state.binary_threshold_value)
+        st.session_state.binary_threshold_value = threshold_value_to_use # 同期
+    
     else: # 色で検出（新機能）
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
         st.sidebar.markdown("検出したい輝点の色が抽出されるように各値を調整します。")
@@ -171,17 +171,16 @@ if st.session_state.pil_image_original is not None:
         val_min = st.sidebar.slider(
             "明度(Value)の下限", 
             min_value=0, max_value=255, value=60,
-            help="色の「明るさ」の最低ライン。値を上げると、暗いピクセルが除外されます。"
+            help="色の「明るさ」の最低ライン。値を上げると、暗い部分にあるノイズが除外されます。"
         )
         # 色相(Hue)は内部で固定値を使用 (赤色と緑色をカバーする広い範囲)
-        hue_lower1, hue_upper1 = 0, 20    # 赤色領域の前半を少し広げる
-        hue_lower2, hue_upper2 = 160, 179 # 赤色領域の後半
-        hue_lower_green, hue_upper_green = 35, 85 # 緑色領域
+        hue_lower1, hue_upper1 = 0, 20
+        hue_lower2, hue_upper2 = 160, 179
+        hue_lower_green, hue_upper_green = 35, 85
 
     # --- 共通のパラメータ ---
     st.sidebar.subheader("3. 形態学的処理")
-    kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=[1,3,5,7,9],value=1)
-    erosion_iterations = 1 
+    kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=[1,3,5,7,9],value=1, help="オープニング処理で使う円形カーネルのサイズ。")
     st.sidebar.markdown("""- **小さくすると:** 輝点への影響は少なくなりますが、小さなノイズが残りやすくなります。\n- **大きくすると:** ノイズ除去や輝点の分離効果は高まりますが、輝点自体が削られて消えてしまうことがあります。""")
     
     st.sidebar.subheader("4. 輝点フィルタリング (面積)")
@@ -216,15 +215,14 @@ if st.session_state.pil_image_original is not None:
         lower_range2 = np.array([hue_lower2, sat_min, val_min])
         upper_range2 = np.array([hue_upper2, 255, 255])
         mask_red = cv2.add(cv2.inRange(img_hsv, lower_range1, upper_range1), cv2.inRange(img_hsv, lower_range2, upper_range2))
-        
         lower_range_green = np.array([hue_lower_green, sat_min, val_min])
         upper_range_green = np.array([hue_upper_green, 255, 255])
         mask_green = cv2.inRange(img_hsv, lower_range_green, upper_range_green)
-        
         binary_img = cv2.add(mask_red, mask_green)
 
     if binary_img is None: st.error("二値化処理に失敗しました。"); st.stop()
     
+    erosion_iterations = 1 
     morph_kernel_shape_to_use = cv2.MORPH_ELLIPSE
     kernel_morph_obj=cv2.getStructuringElement(morph_kernel_shape_to_use,(kernel_size_morph_to_use,kernel_size_morph_to_use))
     eroded_img = cv2.erode(binary_img, kernel_morph_obj, iterations=erosion_iterations)
