@@ -48,7 +48,7 @@ if 'pil_image_original' not in st.session_state: st.session_state.pil_image_orig
 if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
 if 'contour_color_name' not in st.session_state: st.session_state.contour_color_name = "緑"
-if 'cropper_box_color_name' not in st.session_state: st.session_state.cropper_box_color_name = '赤' # ★★★ トリミング枠の色をセッションステートで管理 ★★★
+if 'cropper_box_color_name' not in st.session_state: st.session_state.cropper_box_color_name = '赤'
 
 
 # --- コールバック関数とヘルパー関数 ---
@@ -97,21 +97,10 @@ else:
 if st.session_state.pil_image_original is not None:
     # --- サイドバーのパラメータ設定UI ---
     st.sidebar.subheader("1. 解析エリア設定 (ROI)")
-    # ★★★ トリミング枠の色選択UIをラジオボタンに変更 ★★★
-    CROP_BOX_COLORS = {
-        "赤": "#FF4500",      # OrangeRed
-        "黄": "#FFD700",      # Gold
-        "シアン": "#00FFFF",  # Cyan/Aqua
-        "白": "#FFFFFF"       # White
-    }
-    st.sidebar.radio(
-        "トリミング枠の色を選択",
-        options=list(CROP_BOX_COLORS.keys()),
-        key="cropper_box_color_name",
-        horizontal=True
-    )
+    CROP_BOX_COLORS = {"赤": "#FF4500","黄": "#FFD700","シアン": "#00FFFF","白": "#FFFFFF"}
+    st.sidebar.radio("トリミング枠の色を選択",options=list(CROP_BOX_COLORS.keys()),key="cropper_box_color_name",horizontal=True)
     selected_cropper_color_hex = CROP_BOX_COLORS[st.session_state.cropper_box_color_name]
-    st.sidebar.markdown("---") # 区切り線を追加
+    st.sidebar.markdown("---") 
     
     # --- メインエリアのトリミングUI ---
     st.header("1. 解析エリアの選択 (トリミング)")
@@ -121,12 +110,15 @@ if st.session_state.pil_image_original is not None:
     if img_for_cropper.width > CROPPER_MAX_DIM or img_for_cropper.height > CROPPER_MAX_DIM:
         img_for_cropper.thumbnail((CROPPER_MAX_DIM, CROPPER_MAX_DIM))
     
+    # ★★★ key をファイル名に基づいて動的に変更 ★★★
+    cropper_key = f"cropper_{uploaded_file_widget.name}"
+
     cropped_img = st_cropper(
         img_for_cropper, 
         realtime_update=True, 
-        box_color=selected_cropper_color_hex, # ★★★ 選択された色を適用 ★★★
+        box_color=selected_cropper_color_hex, 
         aspect_ratio=None,
-        key='image_cropper'
+        key=cropper_key
     )
     st.session_state.pil_image_to_process = cropped_img
     
