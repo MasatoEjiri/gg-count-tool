@@ -163,6 +163,7 @@ if st.session_state.pil_image_original is not None:
     
     else: # 色で検出（新機能）
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
+        st.sidebar.markdown("検出したい輝点の色が抽出されるように各値を調整します。")
         # ★★★ 彩度と明度のスライダーに説明を追加 ★★★
         sat_min = st.sidebar.slider(
             "彩度(Saturation)の下限", 
