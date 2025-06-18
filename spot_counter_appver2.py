@@ -58,9 +58,7 @@ if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
 if 'contour_color_name' not in st.session_state: st.session_state.contour_color_name = "緑"
 if 'cropper_box_color_name' not in st.session_state: st.session_state.cropper_box_color_name = '赤'
-# ★★★ 検出方法のデフォルトを「色で検出」に設定 ★★★
-if 'detection_method' not in st.session_state: 
-    st.session_state.detection_method = "色で検出（新機能）"
+if 'detection_method' not in st.session_state: st.session_state.detection_method = "色で検出（新機能）"
 
 
 # --- コールバック関数とヘルパー関数 ---
@@ -143,10 +141,21 @@ if st.session_state.pil_image_original is not None:
     
     # --- サイドバーのパラメータ設定UI ---
     st.sidebar.subheader("1. 輝点検出方法")
+    
+    # ★★★ ラジオボタンのデフォルト選択を index を使って明示的に指定 ★★★
+    detection_options = ("明るさで検出（従来法）", "色で検出（新機能）")
+    try:
+        # セッションステートに保存されている現在の選択肢が、optionsタプルの何番目にあるかを探す
+        current_method_index = detection_options.index(st.session_state.detection_method)
+    except ValueError:
+        # もしセッションステートに予期しない値が入っていたら、安全のため0番目（最初）をデフォルトにする
+        current_method_index = 0
+
     st.sidebar.radio(
         "検出方法を選択",
-        ("明るさで検出（従来法）", "色で検出（新機能）"),
-        key="detection_method", # ★★★ key を使って状態を管理 ★★★
+        options=detection_options,
+        index=current_method_index, # UIの表示をセッションステートと一致させる
+        key="detection_method", 
         horizontal=True,
     )
     st.sidebar.markdown("---")
@@ -155,15 +164,14 @@ if st.session_state.pil_image_original is not None:
 
     if st.session_state.detection_method == "明るさで検出（従来法）":
         st.sidebar.subheader("2. 二値化")
-        threshold_value_to_use = st.sidebar.slider(
-            '閾値',
-            min_value=0, max_value=255, value=st.session_state.binary_threshold_value,
-            help="この値より明るいピクセルは白（検出対象）に、暗いピクセルは黒になります。"
-        )
+        st.sidebar.markdown("_この値を調整して、輝点と背景を分離します。_")
+        # 以前の警告対策で削除したvalue引数は含めない
+        st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
+        st.sidebar.number_input('閾値 (直接入力)',min_value=0,max_value=255,step=1,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
+        threshold_value_to_use = st.session_state.binary_threshold_value
     
     else: # 色で検出（新機能）
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
-        st.sidebar.markdown("検出したい輝点の色が抽出されるように各値を調整します。")
         # ★★★ 彩度と明度のスライダーに説明を追加 ★★★
         sat_min = st.sidebar.slider(
             "彩度(Saturation)の下限", 
