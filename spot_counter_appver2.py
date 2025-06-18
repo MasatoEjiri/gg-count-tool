@@ -8,19 +8,6 @@ from streamlit_cropper import st_cropper
 # ページ設定 (一番最初に呼び出す)
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
-# ★★★ オプションボックス用のCSSを修正 ★★★
-options_box_css = """
-<style>
-    .options-container-custom-border {
-        border: 2px solid #555b61;   /* 枠線を2pxの太さ、少し明るいグレーに */
-        border-radius: 0.75rem;      /* 角を少し丸くする */
-        padding: 1rem;               /* 内側の余白 */
-    }
-</style>
-"""
-st.markdown(options_box_css, unsafe_allow_html=True)
-
-
 # ファイルアップローダーのカスタムCSS
 file_uploader_css = """
 <style>
@@ -133,15 +120,14 @@ if st.session_state.pil_image_original is not None:
         st.session_state.pil_image_to_process = cropped_img
     
     with col_options:
-        # ★★★ カスタムCSSを適用したdivでオプションを囲む ★★★
-        st.markdown('<div class="options-container-custom-border">', unsafe_allow_html=True)
-        st.subheader("枠のオプション", divider="rainbow")
-        st.radio(
-            "トリミング枠の色を選択",
-            options=list(CROP_BOX_COLORS.keys()),
-            key="cropper_box_color_name",
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
+        # ★★★ 枠線付きのコンテナと、虹色の区切り線付きヘッダーで目立たせる ★★★
+        with st.container(border=True):
+            st.subheader("枠のオプション", divider="rainbow")
+            st.radio(
+                "トリミング枠の色を選択",
+                options=list(CROP_BOX_COLORS.keys()),
+                key="cropper_box_color_name",
+            )
     
     # --- サイドバーのパラメータ設定UI ---
     st.sidebar.subheader("1. 二値化")
@@ -151,7 +137,8 @@ if st.session_state.pil_image_original is not None:
     threshold_value_to_use = st.session_state.binary_threshold_value
     st.sidebar.subheader("2. 形態学的処理")
     kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=[1,3,5,7,9],value=1)
-    erosion_iterations = st.sidebar.slider("収縮の強さ（分離度）", 1, 5, 1, 1)
+    erosion_iterations = 1 # ★★★ 収縮の強さを1に固定 ★★★
+    st.sidebar.caption("小さなノイズの除去や、くっついた輝点の分離を試みます。")
     st.sidebar.subheader("3. 輝点フィルタリング (面積)")
     min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1,value=1)
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1,value=10000)
