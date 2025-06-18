@@ -3,7 +3,7 @@ from PIL import Image
 import numpy as np
 import cv2
 import io
-from streamlit_cropper import st_cropper # ★★★ ライブラリをインポート ★★★
+from streamlit_cropper import st_cropper
 
 # ページ設定 (一番最初に呼び出す)
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
@@ -48,9 +48,7 @@ if 'pil_image_original' not in st.session_state: st.session_state.pil_image_orig
 if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
 if 'contour_color_name' not in st.session_state: st.session_state.contour_color_name = "緑"
-# ★★★ トリミング枠の色をセッションステートで管理 ★★★
-if 'cropper_box_color' not in st.session_state:
-    st.session_state.cropper_box_color = '#FF0000' # デフォルトは赤
+if 'cropper_box_color_name' not in st.session_state: st.session_state.cropper_box_color_name = '赤' # ★★★ トリミング枠の色をセッションステートで管理 ★★★
 
 
 # --- コールバック関数とヘルパー関数 ---
@@ -98,13 +96,22 @@ else:
 # --- メイン処理 ---
 if st.session_state.pil_image_original is not None:
     # --- サイドバーのパラメータ設定UI ---
-    # ★★★ トリミング枠の色選択UIを追加 ★★★
     st.sidebar.subheader("1. 解析エリア設定 (ROI)")
-    st.session_state.cropper_box_color = st.sidebar.color_picker(
+    # ★★★ トリミング枠の色選択UIをラジオボタンに変更 ★★★
+    CROP_BOX_COLORS = {
+        "赤": "#FF4500",      # OrangeRed
+        "黄": "#FFD700",      # Gold
+        "シアン": "#00FFFF",  # Cyan/Aqua
+        "白": "#FFFFFF"       # White
+    }
+    st.sidebar.radio(
         "トリミング枠の色を選択",
-        st.session_state.cropper_box_color
+        options=list(CROP_BOX_COLORS.keys()),
+        key="cropper_box_color_name",
+        horizontal=True
     )
-    st.sidebar.markdown("---")
+    selected_cropper_color_hex = CROP_BOX_COLORS[st.session_state.cropper_box_color_name]
+    st.sidebar.markdown("---") # 区切り線を追加
     
     # --- メインエリアのトリミングUI ---
     st.header("1. 解析エリアの選択 (トリミング)")
@@ -117,7 +124,7 @@ if st.session_state.pil_image_original is not None:
     cropped_img = st_cropper(
         img_for_cropper, 
         realtime_update=True, 
-        box_color=st.session_state.cropper_box_color, # ★★★ セッションステートから色を指定 ★★★
+        box_color=selected_cropper_color_hex, # ★★★ 選択された色を適用 ★★★
         aspect_ratio=None,
         key='image_cropper'
     )
@@ -185,6 +192,13 @@ if st.session_state.pil_image_original is not None:
         display_final_marked_image_rgb = cv2.cvtColor(output_image_contours_display, cv2.COLOR_BGR2RGB)
         caption_text = f'検出輝点({current_counted_spots}個)'
         st.image(display_final_marked_image_rgb, caption=caption_text, use_container_width=True)
+
+    st.markdown("---")
+    with st.expander("▼ 中間処理の画像を見る"):
+        st.subheader("1. 二値化処理後")
+        st.image(binary_img,caption=f'閾値:{threshold_value_to_use}')
+        st.subheader("2. 形態学的処理後")
+        st.image(opened_img,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{kernel_size_morph_to_use}')
 else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
 
