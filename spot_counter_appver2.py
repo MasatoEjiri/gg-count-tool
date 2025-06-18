@@ -120,7 +120,6 @@ if st.session_state.pil_image_original is not None:
         st.session_state.pil_image_to_process = cropped_img
     
     with col_options:
-        # ★★★ 枠線付きのコンテナと、虹色の区切り線付きヘッダーで目立たせる ★★★
         with st.container(border=True):
             st.subheader("枠のオプション", divider="rainbow")
             st.radio(
@@ -135,13 +134,22 @@ if st.session_state.pil_image_original is not None:
     st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
     st.sidebar.number_input('閾値 (直接入力)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
     threshold_value_to_use = st.session_state.binary_threshold_value
+    
     st.sidebar.subheader("2. 形態学的処理")
     kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=[1,3,5,7,9],value=1)
-    erosion_iterations = 1 # ★★★ 収縮の強さを1に固定 ★★★
-    st.sidebar.caption("小さなノイズの除去や、くっついた輝点の分離を試みます。")
+    # ★★★ 収縮の強さのスライダーを削除 ★★★
+    # erosion_iterations = st.sidebar.slider("収縮の強さ（分離度）", 1, 5, 1, 1)
+    erosion_iterations = 1 # ★★★ 内部で1に固定 ★★★
+    # ★★★ 形態学的処理の説明を再修正 ★★★
+    st.sidebar.markdown("""
+    二値化後の画像に含まれる小さなノイズを除去したり、近接する輝点同士の細い繋がりを切断して分離しやすくします。
+    - **カーネルサイズ:** この処理を行う際の「範囲の広さ」を決定します。値を大きくするとより強力な処理になりますが、輝点自体が削られて小さくなる、または消える可能性があります。
+    """)
+
     st.sidebar.subheader("3. 輝点フィルタリング (面積)")
     min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1,value=1)
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1,value=10000)
+    
     st.sidebar.subheader("4. 表示設定")
     CONTOUR_COLORS = {"緑":"#28a745","青":"#007bff","赤":"#dc3545","黄":"#ffc107","シアン":"#17a2b8","ピンク":"#e83e8c"}
     st.sidebar.radio("輝点マーキング色を選択",options=list(CONTOUR_COLORS.keys()),key="contour_color_name",horizontal=True)
@@ -166,6 +174,7 @@ if st.session_state.pil_image_original is not None:
     if not ret_thresh: st.error("二値化失敗。"); st.stop()
     
     kernel_morph_obj=cv2.getStructuringElement(morph_kernel_shape_to_use,(kernel_size_morph_to_use,kernel_size_morph_to_use))
+    # ★★★ 収縮の強さ（erosion_iterations）を処理に反映 ★★★
     eroded_img = cv2.erode(binary_img, kernel_morph_obj, iterations=erosion_iterations)
     opened_img = cv2.dilate(eroded_img, kernel_morph_obj, iterations=erosion_iterations)
     binary_img_for_contours = opened_img.copy()
@@ -198,7 +207,7 @@ if st.session_state.pil_image_original is not None:
         st.subheader("1. 二値化処理後")
         st.image(binary_img,caption=f'閾値:{threshold_value_to_use}')
         st.subheader("2. 形態学的処理後")
-        st.image(opened_img,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{erosion_iterations}回')
+        st.image(opened_img,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{kernel_size_morph_to_use}, 収縮強度: {erosion_iterations}')
 else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
 
