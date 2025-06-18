@@ -6,20 +6,11 @@ import io
 from streamlit_cropper import st_cropper
 
 # ページ設定 (一番最初に呼び出す)
-st.set_page_config(page_title="輝点解析ツール", layout="wide")
-
-# ★★★ オプションボックス用のCSSを修正 ★★★
-options_box_css = """
-<style>
-    .options-container-custom-border {
-        border: 3px solid #888;      /* 枠線を3pxの太さ、明るいグレーに */
-        border-radius: 0.75rem;      /* 角を少し丸くする */
-        padding: 1rem;               /* 内側の余白 */
-    }
-</style>
-"""
-st.markdown(options_box_css, unsafe_allow_html=True)
-
+st.set_page_config(
+    page_title="輝点解析ツール", 
+    layout="wide",
+    initial_sidebar_state="expanded" # ★★★ サイドバーを最初から展開 ★★★
+)
 
 # ファイルアップローダーのカスタムCSS
 file_uploader_css = """
@@ -133,14 +124,14 @@ if st.session_state.pil_image_original is not None:
         st.session_state.pil_image_to_process = cropped_img
     
     with col_options:
-        st.markdown('<div class="options-container-custom-border">', unsafe_allow_html=True)
-        st.subheader("枠のオプション", divider="rainbow")
-        st.radio(
-            "トリミング枠の色を選択",
-            options=list(CROP_BOX_COLORS.keys()),
-            key="cropper_box_color_name",
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
+        # ★★★ 枠線付きのコンテナと、虹色の区切り線付きヘッダーで目立たせる ★★★
+        with st.container(border=True):
+            st.subheader("枠のオプション", divider="rainbow")
+            st.radio(
+                "トリミング枠の色を選択",
+                options=list(CROP_BOX_COLORS.keys()),
+                key="cropper_box_color_name",
+            )
     
     # --- サイドバーのパラメータ設定UI ---
     st.sidebar.subheader("1. 二値化")
@@ -148,20 +139,12 @@ if st.session_state.pil_image_original is not None:
     st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
     st.sidebar.number_input('閾値 (直接入力)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
     threshold_value_to_use = st.session_state.binary_threshold_value
-    
     st.sidebar.subheader("2. 形態学的処理")
     kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=[1,3,5,7,9],value=1)
-    # ★★★ カーネルサイズの説明を簡易的に修正 ★★★
-    st.sidebar.markdown("""
-    - **小さくすると:** 輝点への影響は少なくなりますが、小さなノイズが残りやすくなります。
-    - **大きくすると:** ノイズ除去や輝点の分離効果は高まりますが、輝点自体が削られて消えてしまうことがあります。
-    """)
-    erosion_iterations = 1 
-    
+    erosion_iterations = st.sidebar.slider("収縮の強さ（分離度）", 1, 5, 1, 1)
     st.sidebar.subheader("3. 輝点フィルタリング (面積)")
     min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1,value=1)
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1,value=10000)
-    
     st.sidebar.subheader("4. 表示設定")
     CONTOUR_COLORS = {"緑":"#28a745","青":"#007bff","赤":"#dc3545","黄":"#ffc107","シアン":"#17a2b8","ピンク":"#e83e8c"}
     st.sidebar.radio("輝点マーキング色を選択",options=list(CONTOUR_COLORS.keys()),key="contour_color_name",horizontal=True)
@@ -218,7 +201,7 @@ if st.session_state.pil_image_original is not None:
         st.subheader("1. 二値化処理後")
         st.image(binary_img,caption=f'閾値:{threshold_value_to_use}')
         st.subheader("2. 形態学的処理後")
-        st.image(opened_img,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{kernel_size_morph_to_use}, 収縮強度: {erosion_iterations}')
+        st.image(opened_img,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{erosion_iterations}回')
 else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
 
