@@ -157,16 +157,25 @@ if st.session_state.pil_image_original is not None:
         threshold_value_to_use = st.session_state.binary_threshold_value
     else: # 色で検出（新機能）
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
-        val_min = st.sidebar.slider("明度(Value)の下限", min_value=0, max_value=255, value=60, help="色の明るさ。値を上げると、暗い色のノイズを除去できます。")
-        # 色相(Hue)と彩度(Saturation)は内部で固定値を使用
+        # ★★★ 彩度のスライダーを追加 ★★★
+        sat_min = st.sidebar.slider(
+            "彩度(Saturation)の下限", 
+            min_value=0, max_value=255, value=120,
+            help="色の「鮮やかさ」の最低ライン。値を上げると、白やグレーに近いくすんだ色が除外され、鮮やかな色の輝点だけが残りやすくなります。"
+        )
+        val_min = st.sidebar.slider(
+            "明度(Value)の下限", 
+            min_value=0, max_value=255, value=60,
+            help="色の「明るさ」の最低ライン。値を上げると、暗い部分にあるノイズが除外されます。"
+        )
+        # 色相(Hue)は内部で固定値を使用
         hue_lower1, hue_upper1 = 0, 15    # 赤色領域の前半
         hue_lower2, hue_upper2 = 165, 179 # 赤色領域の後半
-        sat_min = 120                      
 
     # --- 共通のパラメータ ---
     st.sidebar.subheader("3. 形態学的処理")
     kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=[1,3,5,7,9],value=1)
-    erosion_iterations = 1 # 収縮の強さは1に固定
+    erosion_iterations = 1 
     st.sidebar.markdown("""- **小さくすると:** 輝点への影響は少なくなりますが、小さなノイズが残りやすくなります。\n- **大きくすると:** ノイズ除去や輝点の分離効果は高まりますが、輝点自体が削られて消えてしまうことがあります。""")
     
     st.sidebar.subheader("4. 輝点フィルタリング (面積)")
