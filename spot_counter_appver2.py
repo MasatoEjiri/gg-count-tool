@@ -8,6 +8,19 @@ from streamlit_cropper import st_cropper
 # ページ設定 (一番最初に呼び出す)
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
+# ★★★ オプションボックス用のCSSを修正 ★★★
+options_box_css = """
+<style>
+    .options-container-custom-border {
+        border: 3px solid #888;      /* 枠線を3pxの太さ、明るいグレーに */
+        border-radius: 0.75rem;      /* 角を少し丸くする */
+        padding: 1rem;               /* 内側の余白 */
+    }
+</style>
+"""
+st.markdown(options_box_css, unsafe_allow_html=True)
+
+
 # ファイルアップローダーのカスタムCSS
 file_uploader_css = """
 <style>
@@ -120,13 +133,14 @@ if st.session_state.pil_image_original is not None:
         st.session_state.pil_image_to_process = cropped_img
     
     with col_options:
-        with st.container(border=True):
-            st.subheader("枠のオプション", divider="rainbow")
-            st.radio(
-                "トリミング枠の色を選択",
-                options=list(CROP_BOX_COLORS.keys()),
-                key="cropper_box_color_name",
-            )
+        st.markdown('<div class="options-container-custom-border">', unsafe_allow_html=True)
+        st.subheader("枠のオプション", divider="rainbow")
+        st.radio(
+            "トリミング枠の色を選択",
+            options=list(CROP_BOX_COLORS.keys()),
+            key="cropper_box_color_name",
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
     
     # --- サイドバーのパラメータ設定UI ---
     st.sidebar.subheader("1. 二値化")
@@ -137,15 +151,13 @@ if st.session_state.pil_image_original is not None:
     
     st.sidebar.subheader("2. 形態学的処理")
     kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=[1,3,5,7,9],value=1)
-    # ★★★ 収縮の強さのスライダーを削除 ★★★
-    # erosion_iterations = st.sidebar.slider("収縮の強さ（分離度）", 1, 5, 1, 1)
-    erosion_iterations = 1 # ★★★ 内部で1に固定 ★★★
-    # ★★★ 形態学的処理の説明を再修正 ★★★
+    # ★★★ カーネルサイズの説明を簡易的に修正 ★★★
     st.sidebar.markdown("""
-    二値化後の画像に含まれる小さなノイズを除去したり、近接する輝点同士の細い繋がりを切断して分離しやすくします。
-    - **カーネルサイズ:** この処理を行う際の「範囲の広さ」を決定します。値を大きくするとより強力な処理になりますが、輝点自体が削られて小さくなる、または消える可能性があります。
+    - **小さくすると:** 輝点への影響は少なくなりますが、小さなノイズが残りやすくなります。
+    - **大きくすると:** ノイズ除去や輝点の分離効果は高まりますが、輝点自体が削られて消えてしまうことがあります。
     """)
-
+    erosion_iterations = 1 
+    
     st.sidebar.subheader("3. 輝点フィルタリング (面積)")
     min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1,value=1)
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1,value=10000)
@@ -174,7 +186,6 @@ if st.session_state.pil_image_original is not None:
     if not ret_thresh: st.error("二値化失敗。"); st.stop()
     
     kernel_morph_obj=cv2.getStructuringElement(morph_kernel_shape_to_use,(kernel_size_morph_to_use,kernel_size_morph_to_use))
-    # ★★★ 収縮の強さ（erosion_iterations）を処理に反映 ★★★
     eroded_img = cv2.erode(binary_img, kernel_morph_obj, iterations=erosion_iterations)
     opened_img = cv2.dilate(eroded_img, kernel_morph_obj, iterations=erosion_iterations)
     binary_img_for_contours = opened_img.copy()
