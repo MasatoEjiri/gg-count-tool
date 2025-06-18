@@ -8,7 +8,18 @@ from streamlit_cropper import st_cropper
 # ページ設定 (一番最初に呼び出す)
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
-# ★★★ 不要になった options-box-css を削除 ★★★
+# ★★★ オプションボックス用のCSSを修正 ★★★
+options_box_css = """
+<style>
+    .options-container-custom-border {
+        border: 2px solid #555b61;   /* 枠線を2pxの太さ、少し明るいグレーに */
+        border-radius: 0.75rem;      /* 角を少し丸くする */
+        padding: 1rem;               /* 内側の余白 */
+    }
+</style>
+"""
+st.markdown(options_box_css, unsafe_allow_html=True)
+
 
 # ファイルアップローダーのカスタムCSS
 file_uploader_css = """
@@ -122,14 +133,15 @@ if st.session_state.pil_image_original is not None:
         st.session_state.pil_image_to_process = cropped_img
     
     with col_options:
-        # ★★★ 枠線付きのコンテナと、虹色の区切り線付きヘッダーで目立たせる ★★★
-        with st.container(border=True):
-            st.subheader("枠のオプション", divider="rainbow")
-            st.radio(
-                "トリミング枠の色を選択",
-                options=list(CROP_BOX_COLORS.keys()),
-                key="cropper_box_color_name",
-            )
+        # ★★★ カスタムCSSを適用したdivでオプションを囲む ★★★
+        st.markdown('<div class="options-container-custom-border">', unsafe_allow_html=True)
+        st.subheader("枠のオプション", divider="rainbow")
+        st.radio(
+            "トリミング枠の色を選択",
+            options=list(CROP_BOX_COLORS.keys()),
+            key="cropper_box_color_name",
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
     
     # --- サイドバーのパラメータ設定UI ---
     st.sidebar.subheader("1. 二値化")
