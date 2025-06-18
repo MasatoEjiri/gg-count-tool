@@ -84,7 +84,7 @@ st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_ht
 st.markdown("""### 使用方法
 1. 画像を左にアップロードしてください。
 2. メイン画面で解析したいエリアをトリミングします。枠の色は画像の右隣で変更できます。
-3. サイドバーの「1. 輝点検出方法」で解析手法を選び、続く各パラメータを調整してください。
+3. サイドバーの「1. 輝点検出方法の選択」で解析手法を選び、続く各パラメータを調整してください。
 4. 「元の画像（トリミング後）」と「輝点検出とマーキング」を比較しながら最適な設定を見つけます。
 """)
 st.markdown("---") 
@@ -157,7 +157,8 @@ if st.session_state.pil_image_original is not None:
         threshold_value_to_use = st.session_state.binary_threshold_value
     else: # 色で検出（新機能）
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
-        # ★★★ 彩度のスライダーを追加 ★★★
+        st.sidebar.markdown("検出したい輝点の色が抽出されるように各値を調整します。")
+        # ★★★ 彩度と明度のスライダーに説明を追加 ★★★
         sat_min = st.sidebar.slider(
             "彩度(Saturation)の下限", 
             min_value=0, max_value=255, value=120,
@@ -168,9 +169,10 @@ if st.session_state.pil_image_original is not None:
             min_value=0, max_value=255, value=60,
             help="色の「明るさ」の最低ライン。値を上げると、暗い部分にあるノイズが除外されます。"
         )
-        # 色相(Hue)は内部で固定値を使用
-        hue_lower1, hue_upper1 = 0, 15    # 赤色領域の前半
-        hue_lower2, hue_upper2 = 165, 179 # 赤色領域の後半
+        # 色相(Hue)は内部で固定値を使用 (赤色と緑色をカバーする広い範囲)
+        hue_lower1, hue_upper1 = 0, 15
+        hue_lower2, hue_upper2 = 165, 179
+        # 緑色を検出したい場合は、例えば hue_lower1=35, hue_upper1=85, hue_lower2=35, hue_upper2=85 のように調整
 
     # --- 共通のパラメータ ---
     st.sidebar.subheader("3. 形態学的処理")
