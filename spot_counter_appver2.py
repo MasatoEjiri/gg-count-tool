@@ -8,24 +8,7 @@ from streamlit_cropper import st_cropper
 # ページ設定 (一番最初に呼び出す)
 st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
-# ★★★ オプションボックス用のCSSを追加 ★★★
-options_box_css = """
-<style>
-    .options-box {
-        background-color: #f0f2f6; /* 薄いグレーの背景 */
-        border-radius: 0.5rem;   /* 角を丸くする */
-        padding: 1rem;           /* 内側の余白 */
-        border: 1px solid #e6e6e6; /* 薄い枠線 */
-    }
-    /* ダークテーマ用の色設定（オプション） */
-    body.dark .options-box {
-        background-color: #262730; /* ダークテーマ用の背景色 */
-        border: 1px solid #444;    /* ダークテーマ用の枠線 */
-    }
-</style>
-"""
-st.markdown(options_box_css, unsafe_allow_html=True)
-
+# ★★★ 不要になった options-box-css を削除 ★★★
 
 # ファイルアップローダーのカスタムCSS
 file_uploader_css = """
@@ -139,15 +122,14 @@ if st.session_state.pil_image_original is not None:
         st.session_state.pil_image_to_process = cropped_img
     
     with col_options:
-        # ★★★ 枠線付きのコンテナでオプションを囲む ★★★
-        st.markdown('<div class="options-box">', unsafe_allow_html=True)
-        st.subheader("枠のオプション")
-        st.radio(
-            "トリミング枠の色を選択",
-            options=list(CROP_BOX_COLORS.keys()),
-            key="cropper_box_color_name",
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
+        # ★★★ 枠線付きのコンテナと、虹色の区切り線付きヘッダーで目立たせる ★★★
+        with st.container(border=True):
+            st.subheader("枠のオプション", divider="rainbow")
+            st.radio(
+                "トリミング枠の色を選択",
+                options=list(CROP_BOX_COLORS.keys()),
+                key="cropper_box_color_name",
+            )
     
     # --- サイドバーのパラメータ設定UI ---
     st.sidebar.subheader("1. 二値化")
