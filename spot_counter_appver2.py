@@ -6,11 +6,7 @@ import io
 from streamlit_cropper import st_cropper
 
 # ページ設定 (一番最初に呼び出す)
-st.set_page_config(
-    page_title="輝点解析ツール", 
-    layout="wide",
-    initial_sidebar_state="expanded" # サイドバーを最初から展開した状態にする
-)
+st.set_page_config(page_title="輝点解析ツール", layout="wide")
 
 # ファイルアップローダーのカスタムCSS
 file_uploader_css = """
@@ -110,9 +106,12 @@ if st.session_state.pil_image_original is not None:
         if img_for_cropper.width > CROPPER_MAX_DIM or img_for_cropper.height > CROPPER_MAX_DIM:
             img_for_cropper.thumbnail((CROPPER_MAX_DIM, CROPPER_MAX_DIM))
         
-        cropper_key = f"cropper_{uploaded_file_widget.name}_{uploaded_file_widget.size}"
+        # 色選択の辞書定義
         CROP_BOX_COLORS = {"赤":"#FF4500","黄":"#FFD700","シアン":"#00FFFF","白":"#FFFFFF"}
         selected_cropper_color_hex = CROP_BOX_COLORS[st.session_state.cropper_box_color_name]
+        
+        # keyを動的に生成して、画像更新時にcropperをリセット
+        cropper_key = f"cropper_{uploaded_file_widget.name}_{uploaded_file_widget.size}"
 
         cropped_img = st_cropper(
             img_for_cropper, 
@@ -124,9 +123,15 @@ if st.session_state.pil_image_original is not None:
         st.session_state.pil_image_to_process = cropped_img
     
     with col_options:
-        st.subheader("枠のオプション")
-        st.radio("トリミング枠の色を選択",options=list(CROP_BOX_COLORS.keys()),key="cropper_box_color_name")
-
+        # ★★★ 枠線付きのコンテナでオプションを囲む ★★★
+        with st.container(border=True):
+            st.subheader("枠のオプション")
+            st.radio(
+                "トリミング枠の色を選択",
+                options=list(CROP_BOX_COLORS.keys()),
+                key="cropper_box_color_name",
+            )
+    
     # --- サイドバーのパラメータ設定UI ---
     st.sidebar.subheader("1. 二値化")
     st.sidebar.markdown("_この値を調整して、輝点と背景を分離します。_")
