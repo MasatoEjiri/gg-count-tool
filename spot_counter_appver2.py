@@ -8,6 +8,15 @@ from streamlit_cropper import st_cropper
 # ページ設定 (一番最初に呼び出す)
 st.set_page_config(page_title="輝点解析ツール", layout="wide", initial_sidebar_state="expanded")
 
+# メイン画面上部の余白を調整するためのCSS
+st.markdown("""
+<style>
+    .main .block-container {
+        padding-top: 2rem !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # ファイルアップローダーのカスタムCSS
 file_uploader_css = """
 <style>
@@ -137,13 +146,14 @@ if st.session_state.pil_image_original is not None:
     
     st.sidebar.subheader("2. 形態学的処理")
     kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=[1,3,5,7,9],value=1)
+    erosion_iterations = 1 
     st.sidebar.caption("ノイズ除去や輝点分離の効果の強さを調整します。")
     
     st.sidebar.subheader("3. 輝点フィルタリング (面積)")
     min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1,value=1)
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1,value=10000)
     
-    # ★★★ 色選択の辞書定義とUIをここに追加 ★★★
+    # ★★★ 色選択UIをサイドバーに再追加 ★★★
     st.sidebar.subheader("4. 表示設定")
     CONTOUR_COLORS = {"緑":"#28a745","青":"#007bff","赤":"#dc3545","黄":"#ffc107","シアン":"#17a2b8","ピンク":"#e83e8c"}
     st.sidebar.radio("輝点マーキング色を選択",options=list(CONTOUR_COLORS.keys()),key="contour_color_name",horizontal=True)
@@ -163,7 +173,6 @@ if st.session_state.pil_image_original is not None:
         st.error(f"トリミング後の画像の基本変換に失敗: {e}"); st.session_state.counted_spots_value="変換エラー"; st.stop() 
     
     morph_kernel_shape_to_use = cv2.MORPH_ELLIPSE
-    erosion_iterations = 1 # 収縮の強さは固定
     kernel_size_blur=1; blurred_img = cv2.GaussianBlur(img_gray, (kernel_size_blur,kernel_size_blur),0)
     ret_thresh, binary_img = cv2.threshold(blurred_img,threshold_value_to_use,255,cv2.THRESH_BINARY)
     if not ret_thresh: st.error("二値化失敗。"); st.stop()
@@ -193,7 +202,7 @@ if st.session_state.pil_image_original is not None:
     with col2_res:
         st.subheader("輝点検出とマーキング")
         display_final_marked_image_rgb = cv2.cvtColor(output_image_contours_display, cv2.COLOR_BGR2RGB)
-        caption_text = f'検出輝点({current_counted_spots}個)'
+        caption_text = f'検出輝点({current_counted_spots}個, 選択色)'
         st.image(display_final_marked_image_rgb, caption=caption_text, use_container_width=True)
 
     st.markdown("---")
