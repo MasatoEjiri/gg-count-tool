@@ -74,8 +74,8 @@ uploaded_file_widget = st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアッ�
 st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_html=True)
 st.markdown("""### 使用方法
 1. 画像を左にアップロードしてください。
-2. メイン画面に表示された画像の上で、四角い枠をドラッグ＆リサイズして解析したいエリアを選択します。枠の色はサイドバーの「1. 解析エリア設定」で変更できます。
-3. 左サイドバーの「2. 二値化」以降の各パラメータを調整し、「元の画像（トリミング後）」と「輝点検出とマーキング」を比較しながら最適な設定を見つけてください。
+2. メイン画面に表示された画像の上で、四角い枠をドラッグ＆リサイズして解析したいエリアを選択します。枠の色は、画像の右隣のオプションで変更できます。
+3. 左サイドバーの各パラメータを調整し、「元の画像（トリミング後）」と「輝点検出とマーキング」を比較しながら最適な設定を見つけてください。
 """)
 st.markdown("---") 
 
@@ -95,46 +95,58 @@ else:
 
 # --- メイン処理 ---
 if st.session_state.pil_image_original is not None:
-    # --- サイドバーのパラメータ設定UI ---
-    st.sidebar.subheader("1. 解析エリア設定 (ROI)")
-    CROP_BOX_COLORS = {"赤": "#FF4500","黄": "#FFD700","シアン": "#00FFFF","白": "#FFFFFF"}
-    st.sidebar.radio("トリミング枠の色を選択",options=list(CROP_BOX_COLORS.keys()),key="cropper_box_color_name",horizontal=True)
-    selected_cropper_color_hex = CROP_BOX_COLORS[st.session_state.cropper_box_color_name]
-    st.sidebar.markdown("---") 
-    
-    # --- メインエリアのトリミングUI ---
     st.header("1. 解析エリアの選択 (トリミング)")
-    st.info("画像上の四角い枠をドラッグ、または枠の角をドラッグして、解析したいエリアを選択してください。")
-    img_for_cropper = st.session_state.pil_image_original.copy()
-    CROPPER_MAX_DIM = 700
-    if img_for_cropper.width > CROPPER_MAX_DIM or img_for_cropper.height > CROPPER_MAX_DIM:
-        img_for_cropper.thumbnail((CROPPER_MAX_DIM, CROPPER_MAX_DIM))
     
-    # ★★★ key をファイル名に基づいて動的に変更 ★★★
-    cropper_key = f"cropper_{uploaded_file_widget.name}"
+    # ★★★ トリミングUIと色選択UIを横並びに配置 ★★★
+    col_cropper, col_options = st.columns([3, 1]) # 3:1の比率で分割
 
-    cropped_img = st_cropper(
-        img_for_cropper, 
-        realtime_update=True, 
-        box_color=selected_cropper_color_hex, 
-        aspect_ratio=None,
-        key=cropper_key
-    )
-    st.session_state.pil_image_to_process = cropped_img
+    with col_cropper:
+        st.info("画像上の四角い枠をドラッグ、または枠の角をドラッグして、解析したいエリアを選択してください。")
+        img_for_cropper = st.session_state.pil_image_original.copy()
+        CROPPER_MAX_DIM = 700
+        if img_for_cropper.width > CROPPER_MAX_DIM or img_for_cropper.height > CROPPER_MAX_DIM:
+            img_for_cropper.thumbnail((CROPPER_MAX_DIM, CROPPER_MAX_DIM))
+        
+        # ★★★ ファイル名とサイズに基づいて、cropperのkeyを動的に生成 ★★★
+        cropper_key = f"cropper_{uploaded_file_widget.name}_{uploaded_file_widget.size}"
+        
+        # 色選択の辞書
+        CROP_BOX_COLORS = {"赤":"#FF4500","黄":"#FFD700","シアン":"#00FFFF","白":"#FFFFFF"}
+        selected_cropper_color_hex = CROP_BOX_COLORS[st.session_state.cropper_box_color_name]
+
+        cropped_img = st_cropper(
+            img_for_cropper, 
+            realtime_update=True, 
+            box_color=selected_cropper_color_hex, 
+            aspect_ratio=None,
+            key=cropper_key
+        )
+        st.session_state.pil_image_to_process = cropped_img
     
-    # --- 残りのサイドバーUI ---
-    st.sidebar.subheader("2. 二値化")
+    with col_options:
+        st.subheader("枠のオプション")
+        st.radio(
+            "トリミング枠の色を選択",
+            options=list(CROP_BOX_COLORS.keys()),
+            key="cropper_box_color_name",
+        )
+    
+    # --- サイドバーのパラメータ設定UI ---
+    st.sidebar.subheader("1. 二値化")
     st.sidebar.markdown("_この値を調整して、輝点と背景を分離します。_")
     st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
     st.sidebar.number_input('閾値 (直接入力)',min_value=0,max_value=255,step=1,value=st.session_state.binary_threshold_value,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
     threshold_value_to_use = st.session_state.binary_threshold_value
-    st.sidebar.subheader("3. 形態学的処理")
+    
+    st.sidebar.subheader("2. 形態学的処理")
     kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=[1,3,5,7,9],value=1)
     erosion_iterations = st.sidebar.slider("収縮の強さ（分離度）", 1, 5, 1, 1)
-    st.sidebar.subheader("4. 輝点フィルタリング (面積)")
+    
+    st.sidebar.subheader("3. 輝点フィルタリング (面積)")
     min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1,value=1)
     max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1,value=10000)
-    st.sidebar.subheader("5. 表示設定")
+    
+    st.sidebar.subheader("4. 表示設定")
     CONTOUR_COLORS = {"緑":"#28a745","青":"#007bff","赤":"#dc3545","黄":"#ffc107","シアン":"#17a2b8","ピンク":"#e83e8c"}
     st.sidebar.radio("輝点マーキング色を選択",options=list(CONTOUR_COLORS.keys()),key="contour_color_name",horizontal=True)
     selected_name = st.session_state.contour_color_name
@@ -173,13 +185,13 @@ if st.session_state.pil_image_original is not None:
     st.session_state.counted_spots_value = current_counted_spots 
     
     # --- 表示エリア ---
-    col1, col2 = st.columns(2)
-    with col1:
+    col1_res, col2_res = st.columns(2)
+    with col1_res:
         st.subheader("元の画像 (トリミング後)")
         if original_img_to_display_np_uint8 is not None:
             st.image(original_img_to_display_np_uint8, caption=f"処理対象エリア (サイズ: {original_img_to_display_np_uint8.shape[1]}x{original_img_to_display_np_uint8.shape[0]})", use_container_width=True)
             
-    with col2:
+    with col2_res:
         st.subheader("輝点検出とマーキング")
         display_final_marked_image_rgb = cv2.cvtColor(output_image_contours_display, cv2.COLOR_BGR2RGB)
         caption_text = f'検出輝点({current_counted_spots}個)'
@@ -190,7 +202,7 @@ if st.session_state.pil_image_original is not None:
         st.subheader("1. 二値化処理後")
         st.image(binary_img,caption=f'閾値:{threshold_value_to_use}')
         st.subheader("2. 形態学的処理後")
-        st.image(opened_img,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{kernel_size_morph_to_use}')
+        st.image(opened_img,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{erosion_iterations}回') # キャプションを修正
 else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
 
