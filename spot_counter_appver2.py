@@ -50,9 +50,19 @@ def display_count_in_sidebar(placeholder, count_value):
 
 # --- セッションステートの初期化 ---
 if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots_value = "---" 
+# 二値化用
 if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 15
 if "threshold_slider_for_binary" not in st.session_state: st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
 if "threshold_number_for_binary" not in st.session_state: st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
+# 色検出（彩度）用
+if "saturation_value" not in st.session_state: st.session_state.saturation_value = 120
+if "saturation_slider" not in st.session_state: st.session_state.saturation_slider = st.session_state.saturation_value
+if "saturation_number" not in st.session_state: st.session_state.saturation_number = st.session_state.saturation_value
+# 色検出（明度）用
+if "brightness_value" not in st.session_state: st.session_state.brightness_value = 60
+if "brightness_slider" not in st.session_state: st.session_state.brightness_slider = st.session_state.brightness_value
+if "brightness_number" not in st.session_state: st.session_state.brightness_number = st.session_state.brightness_value
+# その他
 if 'pil_image_original' not in st.session_state: st.session_state.pil_image_original = None
 if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
@@ -60,14 +70,27 @@ if 'contour_color_name' not in st.session_state: st.session_state.contour_color_
 if 'cropper_box_color_name' not in st.session_state: st.session_state.cropper_box_color_name = '赤'
 if 'detection_method' not in st.session_state: st.session_state.detection_method = "色で検出（新機能）"
 
-
 # --- コールバック関数とヘルパー関数 ---
 def sync_threshold_from_slider():
     st.session_state.binary_threshold_value = st.session_state.threshold_slider_for_binary
-    st.session_state.threshold_number_for_binary = st.session_state.threshold_slider_for_binary
+    st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
 def sync_threshold_from_number_input():
     st.session_state.binary_threshold_value = st.session_state.threshold_number_for_binary
-    st.session_state.threshold_slider_for_binary = st.session_state.threshold_number_for_binary
+    st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
+# 彩度同期用
+def sync_saturation_from_slider():
+    st.session_state.saturation_value = st.session_state.saturation_slider
+    st.session_state.saturation_number = st.session_state.saturation_value
+def sync_saturation_from_number_input():
+    st.session_state.saturation_value = st.session_state.saturation_number
+    st.session_state.saturation_slider = st.session_state.saturation_value
+# 明度同期用
+def sync_brightness_from_slider():
+    st.session_state.brightness_value = st.session_state.brightness_slider
+    st.session_state.brightness_number = st.session_state.brightness_value
+def sync_brightness_from_number_input():
+    st.session_state.brightness_value = st.session_state.brightness_number
+    st.session_state.brightness_slider = st.session_state.brightness_value
 
 def hex_to_bgr(hex_color):
     hex_color = hex_color.lstrip('#')
@@ -85,7 +108,7 @@ st.markdown("<h1>Gra&Green<br>輝点カウントツール</h1>", unsafe_allow_ht
 st.markdown("""### 使用方法
 1. 画像を左にアップロードしてください。
 2. メイン画面で解析したいエリアをトリミングします。枠の色は画像の右隣で変更できます。
-3. サイドバーの「1. 輝点検出方法の選択」で解析手法を選び、続く各パラメータを調整してください。
+3. サイドバーの「1. 輝点検出方法」で解析手法を選び、続く各パラメータを調整してください。
 4. 「元の画像（トリミング後）」と「輝点検出とマーキング」を比較しながら最適な設定を見つけます。
 """)
 st.markdown("---") 
@@ -93,15 +116,6 @@ st.markdown("---")
 # --- 画像読み込みロジック ---
 if uploaded_file_widget is not None:
     try:
-        # 新しいファイルがアップロードされたら、古いセッション情報をクリアする
-        if 'last_uploaded_filename' not in st.session_state or st.session_state.last_uploaded_filename != uploaded_file_widget.name:
-            # 必要なセッションステートをクリア
-            if 'pil_image_original' in st.session_state:
-                del st.session_state['pil_image_original']
-            if 'pil_image_to_process' in st.session_state:
-                del st.session_state['pil_image_to_process']
-        st.session_state.last_uploaded_filename = uploaded_file_widget.name
-
         uploaded_file_bytes = uploaded_file_widget.getvalue()
         pil_img = Image.open(io.BytesIO(uploaded_file_bytes))
         st.session_state.pil_image_original = pil_img
@@ -118,35 +132,22 @@ if st.session_state.pil_image_original is not None:
     # --- メインエリアのトリミングUI ---
     st.header("1. 解析エリアの選択 (トリミング)")
     col_cropper, col_options = st.columns([3, 1])
-
     with col_cropper:
         st.info("画像上の四角い枠をドラッグ、または枠の角をドラッグして、解析したいエリアを選択してください。")
         img_for_cropper = st.session_state.pil_image_original.copy()
         CROPPER_MAX_DIM = 700
         if img_for_cropper.width > CROPPER_MAX_DIM or img_for_cropper.height > CROPPER_MAX_DIM:
             img_for_cropper.thumbnail((CROPPER_MAX_DIM, CROPPER_MAX_DIM))
-        
         cropper_key = f"cropper_{uploaded_file_widget.name}_{uploaded_file_widget.size}"
         CROP_BOX_COLORS = {"赤":"#FF4500","黄":"#FFD700","シアン":"#00FFFF","白":"#FFFFFF"}
         selected_cropper_color_hex = CROP_BOX_COLORS[st.session_state.cropper_box_color_name]
-
-        cropped_img = st_cropper(
-            img_for_cropper, 
-            realtime_update=True, 
-            box_color=selected_cropper_color_hex, 
-            aspect_ratio=None,
-            key=cropper_key
-        )
+        cropped_img = st_cropper(img_for_cropper, realtime_update=True, box_color=selected_cropper_color_hex, aspect_ratio=None, key=cropper_key)
         st.session_state.pil_image_to_process = cropped_img
     
     with col_options:
         with st.container(border=True):
             st.subheader("枠のオプション", divider="rainbow")
-            st.radio(
-                "トリミング枠の色を選択",
-                options=list(CROP_BOX_COLORS.keys()),
-                key="cropper_box_color_name",
-            )
+            st.radio("トリミング枠の色を選択",options=list(CROP_BOX_COLORS.keys()),key="cropper_box_color_name")
     
     # --- サイドバーのパラメータ設定UI ---
     st.sidebar.subheader("1. 輝点検出方法")
@@ -162,20 +163,29 @@ if st.session_state.pil_image_original is not None:
 
     if st.session_state.detection_method == "明るさで検出（従来法）":
         st.sidebar.subheader("2. 二値化")
-        threshold_value_to_use = st.sidebar.slider('閾値',min_value=0,max_value=255,value=st.session_state.binary_threshold_value, help="この値より明るいピクセルは白（検出対象）に、暗いピクセルは黒になります。")
-    
+        st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,key="threshold_slider_for_binary",on_change=sync_threshold_from_slider)
+        st.sidebar.number_input('閾値 (直接入力)',min_value=0,max_value=255,step=1,key="threshold_number_for_binary",on_change=sync_threshold_from_number_input)
+        threshold_value_to_use = st.session_state.binary_threshold_value
     else: # 色で検出（新機能）
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
-        sat_min = st.sidebar.slider("彩度(Saturation)の下限", min_value=0, max_value=255, value=120, help="色の「鮮やかさ」の最低ライン。値を上げると、白やグレーに近いくすんだ色が除外されます。")
-        val_min = st.sidebar.slider("明度(Value)の下限", min_value=0, max_value=255, value=60, help="色の「明るさ」の最低ライン。値を上げると、暗い部分にあるノイズが除外されます。")
+        # ★★★ 彩度(S)と明度(V)のUIをスライダーと数値入力のセットに変更 ★★★
+        st.sidebar.slider("彩度(S)の下限", min_value=0, max_value=255, key="saturation_slider", on_change=sync_saturation_from_slider)
+        st.sidebar.number_input("（直接入力）", min_value=0, max_value=255, key="saturation_number", on_change=sync_saturation_from_number_input)
+        sat_min = st.session_state.saturation_value
+        st.sidebar.caption("色の鮮やかさの最低ライン。値を上げると、白やグレーに近い色が除外されます。")
+
+        st.sidebar.slider("明度(V)の下限", min_value=0, max_value=255, key="brightness_slider", on_change=sync_brightness_from_slider)
+        st.sidebar.number_input("（直接入力）", min_value=0, max_value=255, key="brightness_number", on_change=sync_brightness_from_number_input)
+        val_min = st.session_state.brightness_value
+        st.sidebar.caption("色の明るさの最低ライン。値を上げると、暗い部分にあるノイズが除外されます。")
+        
         hue_lower1, hue_upper1 = 0, 20
         hue_lower2, hue_upper2 = 160, 179
         hue_lower_green, hue_upper_green = 35, 85
 
     # --- 共通のパラメータ ---
     st.sidebar.subheader("3. 形態学的処理")
-    # ★★★ カーネルサイズの説明をヘルプマークに格納 ★★★
-    kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=[1,3,5,7,9],value=1, help="オープニング処理で使う円形カーネルのサイズです。値を大きくするとノイズ除去効果が高まりますが、輝点自体が消える可能性もあります。小さくすると輝点への影響は減りますが、ノイズが残りやすくなります。")
+    kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=[1,3,5,7,9],value=1, help="ノイズ除去や輝点分離の効果の強さを調整します。")
     erosion_iterations = 1 
     
     st.sidebar.subheader("4. 輝点フィルタリング (面積)")
@@ -250,8 +260,7 @@ if st.session_state.pil_image_original is not None:
         st.subheader(f"1. {st.session_state.detection_method}による二値化処理後")
         st.image(binary_img,caption=f'適用された二値化画像')
         st.subheader("2. 形態学的処理後")
-        # ★★★ キャプションから収縮強度を削除 ★★★
-        st.image(opened_img,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{kernel_size_morph_to_use}')
+        st.image(opened_img,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{erosion_iterations}回')
 else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
 
