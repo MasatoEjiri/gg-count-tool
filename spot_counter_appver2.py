@@ -51,6 +51,8 @@ def display_count_in_sidebar(placeholder, count_value):
 # --- セッションステートの初期化 ---
 if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots_value = "---" 
 if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 15
+if "threshold_slider_for_binary" not in st.session_state: st.session_state.threshold_slider_for_binary = st.session_state.binary_threshold_value
+if "threshold_number_for_binary" not in st.session_state: st.session_state.threshold_number_for_binary = st.session_state.binary_threshold_value
 if 'pil_image_original' not in st.session_state: st.session_state.pil_image_original = None
 if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
@@ -59,7 +61,14 @@ if 'cropper_box_color_name' not in st.session_state: st.session_state.cropper_bo
 if 'detection_method' not in st.session_state: st.session_state.detection_method = "色で検出（新機能）"
 
 
-# --- ヘルパー関数 ---
+# --- コールバック関数とヘルパー関数 ---
+def sync_threshold_from_slider():
+    st.session_state.binary_threshold_value = st.session_state.threshold_slider_for_binary
+    st.session_state.threshold_number_for_binary = st.session_state.threshold_slider_for_binary
+def sync_threshold_from_number_input():
+    st.session_state.binary_threshold_value = st.session_state.threshold_number_for_binary
+    st.session_state.threshold_slider_for_binary = st.session_state.threshold_number_for_binary
+
 def hex_to_bgr(hex_color):
     hex_color = hex_color.lstrip('#')
     h_len = len(hex_color)
@@ -84,14 +93,19 @@ st.markdown("---")
 # --- 画像読み込みロジック ---
 if uploaded_file_widget is not None:
     try:
+        # 新しいファイルがアップロードされたら、古いセッション情報をクリアする
+        if 'last_uploaded_filename' not in st.session_state or st.session_state.last_uploaded_filename != uploaded_file_widget.name:
+            # 必要なセッションステートをクリア
+            if 'pil_image_original' in st.session_state:
+                del st.session_state['pil_image_original']
+            if 'pil_image_to_process' in st.session_state:
+                del st.session_state['pil_image_to_process']
+        st.session_state.last_uploaded_filename = uploaded_file_widget.name
+
         uploaded_file_bytes = uploaded_file_widget.getvalue()
         pil_img = Image.open(io.BytesIO(uploaded_file_bytes))
-        # 新しい画像がアップロードされたら、古い画像情報をクリア
-        if 'pil_image_original' not in st.session_state or st.session_state.pil_image_original != pil_img:
-            st.session_state.pil_image_original = pil_img
-            st.session_state.image_source_caption = f"アップロード: {uploaded_file_widget.name}"
-            # 他の関連セッションステートもリセットするならここ
-            st.session_state.pil_image_to_process = None 
+        st.session_state.pil_image_original = pil_img
+        st.session_state.image_source_caption = f"アップロード: {uploaded_file_widget.name}"
     except Exception as e:
         st.sidebar.error(f"アップロード画像の読み込みに失敗: {e}"); st.session_state.pil_image_original = None; st.session_state.counted_spots_value = "読込エラー"; st.stop()
 else: 
@@ -140,7 +154,7 @@ if st.session_state.pil_image_original is not None:
     try:
         current_method_index = detection_options.index(st.session_state.detection_method)
     except ValueError:
-        current_method_index = 1 # デフォルトを「色で検出」に
+        current_method_index = 1 
     st.sidebar.radio("検出方法を選択", options=detection_options, index=current_method_index, key="detection_method", horizontal=True)
     st.sidebar.markdown("---")
     
@@ -149,6 +163,7 @@ if st.session_state.pil_image_original is not None:
     if st.session_state.detection_method == "明るさで検出（従来法）":
         st.sidebar.subheader("2. 二値化")
         threshold_value_to_use = st.sidebar.slider('閾値',min_value=0,max_value=255,value=st.session_state.binary_threshold_value, help="この値より明るいピクセルは白（検出対象）に、暗いピクセルは黒になります。")
+    
     else: # 色で検出（新機能）
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
         sat_min = st.sidebar.slider("彩度(Saturation)の下限", min_value=0, max_value=255, value=120, help="色の「鮮やかさ」の最低ライン。値を上げると、白やグレーに近いくすんだ色が除外されます。")
@@ -157,6 +172,7 @@ if st.session_state.pil_image_original is not None:
         hue_lower2, hue_upper2 = 160, 179
         hue_lower_green, hue_upper_green = 35, 85
 
+    # --- 共通のパラメータ ---
     st.sidebar.subheader("3. 形態学的処理")
     # ★★★ カーネルサイズの説明をヘルプマークに格納 ★★★
     kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=[1,3,5,7,9],value=1, help="オープニング処理で使う円形カーネルのサイズです。値を大きくするとノイズ除去効果が高まりますが、輝点自体が消える可能性もあります。小さくすると輝点への影響は減りますが、ノイズが残りやすくなります。")
@@ -234,7 +250,8 @@ if st.session_state.pil_image_original is not None:
         st.subheader(f"1. {st.session_state.detection_method}による二値化処理後")
         st.image(binary_img,caption=f'適用された二値化画像')
         st.subheader("2. 形態学的処理後")
-        st.image(opened_img,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{erosion_iterations}回')
+        # ★★★ キャプションから収縮強度を削除 ★★★
+        st.image(opened_img,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{kernel_size_morph_to_use}')
 else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
 
