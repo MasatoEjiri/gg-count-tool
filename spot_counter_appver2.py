@@ -12,7 +12,7 @@ st.set_page_config(page_title="GG輝点解析ツール", layout="wide", initial_
 st.markdown("""
 <style>
     .main .block-container {
-        padding-top: 1rem !important; /* ★★★ 余白をさらに小さく調整 ★★★ */
+        padding-top: 2rem !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -112,12 +112,7 @@ st.markdown("---")
 # --- 画像読み込みロジック ---
 if uploaded_file_widget is not None:
     try:
-        if 'last_uploaded_filename' not in st.session_state or st.session_state.last_uploaded_filename != uploaded_file_widget.name:
-            st.session_state.last_uploaded_filename = uploaded_file_widget.name
-            st.session_state.binary_threshold_value = 15; st.session_state.threshold_slider = 15; st.session_state.threshold_number = 15
-            st.session_state.saturation_value = 120; st.session_state.saturation_slider = 120; st.session_state.saturation_number = 120
-            st.session_state.brightness_value = 60; st.session_state.brightness_slider = 60; st.session_state.brightness_number = 60
-            st.session_state.hue_range = (0, 20)
+        # ★★★ 新しい画像がアップロードされても、パラメータはリセットしない ★★★
         uploaded_file_bytes = uploaded_file_widget.getvalue()
         pil_img = Image.open(io.BytesIO(uploaded_file_bytes))
         st.session_state.pil_image_original = pil_img
@@ -135,6 +130,7 @@ if st.session_state.pil_image_original is not None:
     st.header("1. 解析エリアの選択 (トリミング)")
     col_cropper, col_options = st.columns([3, 1])
     with col_cropper:
+        st.info("画像上の四角い枠をドラッグ、または枠の角をドラッグして、解析したいエリアを選択してください。")
         img_for_cropper = st.session_state.pil_image_original.copy()
         CROPPER_MAX_DIM = 700
         if img_for_cropper.width > CROPPER_MAX_DIM or img_for_cropper.height > CROPPER_MAX_DIM:
@@ -163,7 +159,20 @@ if st.session_state.pil_image_original is not None:
         threshold_value_to_use = st.session_state.binary_threshold_value
     else: # 色で検出
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
-        st.session_state.hue_range = st.sidebar.slider("色相(H)の範囲", 0, 179, st.session_state.hue_range, help="検出したい輝点の色のおおまかな範囲を指定します。")
+        # ★★★ 色相スライダーに詳しい説明を追加 ★★★
+        st.session_state.hue_range = st.sidebar.slider(
+            "色相(H)の範囲", 0, 179, st.session_state.hue_range,
+            help="""
+            検出したい輝点の色のおおまかな範囲を指定します。\n
+            **代表的な色の目安 (0-179):**\n
+            - **赤:** 0-15 と 165-179 の両方\n
+            - **黄:** 20-35\n
+            - **緑:** 35-85\n
+            - **シアン:** 85-100\n
+            - **青:** 100-130\n
+            - **マゼンタ:** 130-160
+            """
+        )
         st.sidebar.slider("彩度(S)の下限", min_value=0, max_value=255, key="saturation_slider", on_change=sync_saturation_from_slider, help="色の「鮮やかさ」の最低ライン。")
         st.sidebar.number_input("（直接入力）", min_value=0, max_value=255, key="saturation_number", on_change=sync_saturation_from_number, label_visibility="collapsed")
         sat_min = st.session_state.saturation_value
@@ -191,9 +200,10 @@ if st.session_state.pil_image_original is not None:
     else: # 色で検出
         img_hsv = cv2.cvtColor(original_img_to_display_np_uint8, cv2.COLOR_RGB2HSV)
         hue_min, hue_max = st.session_state.hue_range
-        sat_min = st.session_state.saturation_value; val_min = st.session_state.brightness_value
         lower_range = np.array([hue_min, sat_min, val_min]); upper_range = np.array([hue_max, 255, 255])
         binary_img = cv2.inRange(img_hsv, lower_range, upper_range)
+        # 注: 赤色のようにHueが0と179をまたぐ場合は、このロジックでは片方の範囲しか検出できません。
+        # 完全な赤色検出にはUIのさらなる工夫が必要です。
     if binary_img is None: st.error("二値化処理に失敗しました。"); st.stop()
     
     erosion_iterations = 1; morph_kernel_shape_to_use = cv2.MORPH_ELLIPSE
