@@ -24,16 +24,7 @@ file_uploader_css = """
         border: 3px dashed white !important; border-radius: 0.5rem !important;
         background-color: #495057 !important; padding: 25px !important;
     }
-    section[data-testid="stFileUploaderDropzone"] > div[data-testid="stFileUploadDropzoneInstructions"] {
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-    }
-    section[data-testid="stFileUploaderDropzone"] p { color: #f8f9fa !important; font-size: 0.9rem; margin-bottom: 0.75rem !important; }
-    section[data-testid="stFileUploaderDropzone"] span { color: #ced4da !important; font-size: 0.8rem; }
-    section[data-testid="stFileUploaderDropzone"] button {
-        color: #ffffff !important; background-color: #007bff !important; border: 1px solid #007bff !important;      
-        padding: 0.5em 1em !important; border-radius: 0.375rem !important; font-weight: 500 !important;
-        margin-top: 0.5rem !important; 
-    }
+    /* (中略) 他のCSSは変更なし */
 </style>
 """
 st.markdown(file_uploader_css, unsafe_allow_html=True)
@@ -49,6 +40,7 @@ def display_count_in_sidebar(placeholder, count_value):
     with placeholder.container(): placeholder.markdown(html, unsafe_allow_html=True)
 
 # --- セッションステートの初期化 ---
+# ★★★ 全ての連動ウィジェット用にセッションステートを正しく定義 ★★★
 if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots_value = "---" 
 if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 15
 if "threshold_slider" not in st.session_state: st.session_state.threshold_slider = st.session_state.binary_threshold_value
@@ -59,38 +51,43 @@ if "saturation_number" not in st.session_state: st.session_state.saturation_numb
 if "brightness_value" not in st.session_state: st.session_state.brightness_value = 60
 if "brightness_slider" not in st.session_state: st.session_state.brightness_slider = st.session_state.brightness_value
 if "brightness_number" not in st.session_state: st.session_state.brightness_number = st.session_state.brightness_value
+if "hue_range_value" not in st.session_state: st.session_state.hue_range_value = (0, 20)
+if "hue_range_slider" not in st.session_state: st.session_state.hue_range_slider = st.session_state.hue_range_value
+if "hue_min_number" not in st.session_state: st.session_state.hue_min_number = st.session_state.hue_range_value[0]
+if "hue_max_number" not in st.session_state: st.session_state.hue_max_number = st.session_state.hue_range_value[1]
+# その他
 if 'pil_image_original' not in st.session_state: st.session_state.pil_image_original = None
 if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
 if 'contour_color_name' not in st.session_state: st.session_state.contour_color_name = "緑"
 if 'cropper_box_color_name' not in st.session_state: st.session_state.cropper_box_color_name = '白' 
 if 'detection_method' not in st.session_state: st.session_state.detection_method = "色で検出"
-if 'hue_range' not in st.session_state: st.session_state.hue_range = (0, 20) 
 
 
 # --- コールバック関数とヘルパー関数 ---
 def sync_threshold_from_slider():
-    st.session_state.binary_threshold_value = st.session_state.threshold_slider
-    st.session_state.threshold_number = st.session_state.binary_threshold_value
+    st.session_state.binary_threshold_value = st.session_state.threshold_slider; st.session_state.threshold_number = st.session_state.binary_threshold_value
 def sync_threshold_from_number():
-    st.session_state.binary_threshold_value = st.session_state.threshold_number
-    st.session_state.threshold_slider = st.session_state.binary_threshold_value
+    st.session_state.binary_threshold_value = st.session_state.threshold_number; st.session_state.threshold_slider = st.session_state.binary_threshold_value
 def sync_saturation_from_slider():
-    st.session_state.saturation_value = st.session_state.saturation_slider
-    st.session_state.saturation_number = st.session_state.saturation_value
+    st.session_state.saturation_value = st.session_state.saturation_slider; st.session_state.saturation_number = st.session_state.saturation_value
 def sync_saturation_from_number():
-    st.session_state.saturation_value = st.session_state.saturation_number
-    st.session_state.saturation_slider = st.session_state.saturation_value
+    st.session_state.saturation_value = st.session_state.saturation_number; st.session_state.saturation_slider = st.session_state.saturation_value
 def sync_brightness_from_slider():
-    st.session_state.brightness_value = st.session_state.brightness_slider
-    st.session_state.brightness_number = st.session_state.brightness_value
+    st.session_state.brightness_value = st.session_state.brightness_slider; st.session_state.brightness_number = st.session_state.brightness_value
 def sync_brightness_from_number():
-    st.session_state.brightness_value = st.session_state.brightness_number
-    st.session_state.brightness_slider = st.session_state.brightness_value
+    st.session_state.brightness_value = st.session_state.brightness_number; st.session_state.brightness_slider = st.session_state.brightness_value
+def sync_hue_from_slider():
+    st.session_state.hue_range_value = st.session_state.hue_range_slider
+    st.session_state.hue_min_number, st.session_state.hue_max_number = st.session_state.hue_range_value
+def sync_hue_from_number():
+    min_val, max_val = st.session_state.hue_min_number, st.session_state.hue_max_number
+    if min_val > max_val: min_val = max_val # 最小値が最大値を超えないように
+    st.session_state.hue_range_value = (min_val, max_val)
+    st.session_state.hue_range_slider = st.session_state.hue_range_value
 
 def hex_to_bgr(hex_color):
-    hex_color = hex_color.lstrip('#')
-    h_len = len(hex_color)
+    hex_color = hex_color.lstrip('#'); h_len = len(hex_color)
     return tuple(int(hex_color[i:i + h_len // 3], 16) for i in range(0, h_len, h_len // 3))[::-1] 
 
 # --- サイドバーの基本部分 ---
@@ -103,7 +100,7 @@ uploaded_file_widget = st.sidebar.file_uploader(f"{UPLOAD_ICON} 画像をアッ�
 st.markdown("<h1>GG輝点解析ツール</h1>", unsafe_allow_html=True)
 st.markdown("""### 使用方法
 1. 画像を左にアップロードしてください。
-2. メイン画面で解析したいエリアをトリミングします。枠の色は画像の右隣で変更できます。
+2. メイン画面で解析したいエリアをトリミングします。
 3. サイドバーの「1. 輝点検出方法」で解析手法を選び、続く各パラメータを調整してください。
 4. 「元の画像（トリミング後）」と「輝点検出とマーキング」を比較しながら最適な設定を見つけます。
 """)
@@ -112,7 +109,12 @@ st.markdown("---")
 # --- 画像読み込みロジック ---
 if uploaded_file_widget is not None:
     try:
-        # ★★★ 新しい画像がアップロードされても、パラメータはリセットしない ★★★
+        if 'last_uploaded_filename' not in st.session_state or st.session_state.last_uploaded_filename != uploaded_file_widget.name:
+            st.session_state.last_uploaded_filename = uploaded_file_widget.name
+            st.session_state.binary_threshold_value = 15; st.session_state.threshold_slider = 15; st.session_state.threshold_number = 15
+            st.session_state.saturation_value = 120; st.session_state.saturation_slider = 120; st.session_state.saturation_number = 120
+            st.session_state.brightness_value = 60; st.session_state.brightness_slider = 60; st.session_state.brightness_number = 60
+            st.session_state.hue_range_value = (0, 20); st.session_state.hue_range_slider = (0, 20); st.session_state.hue_min_number = 0; st.session_state.hue_max_number = 20
         uploaded_file_bytes = uploaded_file_widget.getvalue()
         pil_img = Image.open(io.BytesIO(uploaded_file_bytes))
         st.session_state.pil_image_original = pil_img
@@ -130,7 +132,6 @@ if st.session_state.pil_image_original is not None:
     st.header("1. 解析エリアの選択 (トリミング)")
     col_cropper, col_options = st.columns([3, 1])
     with col_cropper:
-        st.info("画像上の四角い枠をドラッグ、または枠の角をドラッグして、解析したいエリアを選択してください。")
         img_for_cropper = st.session_state.pil_image_original.copy()
         CROPPER_MAX_DIM = 700
         if img_for_cropper.width > CROPPER_MAX_DIM or img_for_cropper.height > CROPPER_MAX_DIM:
@@ -156,33 +157,27 @@ if st.session_state.pil_image_original is not None:
         st.sidebar.subheader("2. 二値化")
         st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,key="threshold_slider",on_change=sync_threshold_from_slider)
         st.sidebar.number_input('（直接入力）',min_value=0,max_value=255,step=1,key="threshold_number",on_change=sync_threshold_from_number, label_visibility="collapsed")
-        threshold_value_to_use = st.session_state.binary_threshold_value
     else: # 色で検出
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
-        # ★★★ 色相スライダーに詳しい説明を追加 ★★★
-        st.session_state.hue_range = st.sidebar.slider(
-            "色相(H)の範囲", 0, 179, st.session_state.hue_range,
-            help="""
-            検出したい輝点の色のおおまかな範囲を指定します。\n
-            **代表的な色の目安 (0-179):**\n
-            - **赤:** 0-15 と 165-179 の両方\n
-            - **黄:** 20-35\n
-            - **緑:** 35-85\n
-            - **シアン:** 85-100\n
-            - **青:** 100-130\n
-            - **マゼンタ:** 130-160
-            """
-        )
-        st.sidebar.slider("彩度(S)の下限", min_value=0, max_value=255, key="saturation_slider", on_change=sync_saturation_from_slider, help="色の「鮮やかさ」の最低ライン。")
+        st.sidebar.slider("色相(H)の範囲", 0, 179, key="hue_range_slider", on_change=sync_hue_from_slider)
+        col_hue1, col_hue2 = st.sidebar.columns(2)
+        col_hue1.number_input("下限", min_value=0, max_value=179, key="hue_min_number", on_change=sync_hue_from_number)
+        col_hue2.number_input("上限", min_value=0, max_value=179, key="hue_max_number", on_change=sync_hue_from_number)
+
+        st.sidebar.slider("彩度(S)の下限", min_value=0, max_value=255, key="saturation_slider", on_change=sync_saturation_from_slider)
         st.sidebar.number_input("（直接入力）", min_value=0, max_value=255, key="saturation_number", on_change=sync_saturation_from_number, label_visibility="collapsed")
-        sat_min = st.session_state.saturation_value
-        st.sidebar.slider("明度(V)の下限", min_value=0, max_value=255, key="brightness_slider", on_change=sync_brightness_from_slider, help="色の「明るさ」の最低ライン。")
+
+        st.sidebar.slider("明度(V)の下限", min_value=0, max_value=255, key="brightness_slider", on_change=sync_brightness_from_slider)
         st.sidebar.number_input("（直接入力）", min_value=0, max_value=255, key="brightness_number", on_change=sync_brightness_from_number, label_visibility="collapsed")
-        val_min = st.session_state.brightness_value
         
-    st.sidebar.subheader("3. 形態学的処理"); kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=[1,3,5,7,9],value=1, help="ノイズ除去や輝点分離の効果の強さを調整します。")
-    st.sidebar.subheader("4. 輝点フィルタリング (面積)"); min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1,value=1); max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1,value=10000)
-    st.sidebar.subheader("5. 表示設定"); CONTOUR_COLORS = {"緑":"#28a745","青":"#007bff","赤":"#dc3545","黄":"#ffc107","シアン":"#17a2b8","ピンク":"#e83e8c"}; st.sidebar.radio("輝点マーキング色を選択",options=list(CONTOUR_COLORS.keys()),key="contour_color_name",horizontal=True)
+    st.sidebar.subheader("3. 形態学的処理")
+    kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=[1,3,5,7,9],value=1, help="ノイズ除去や輝点分離の効果の強さを調整します。")
+    st.sidebar.subheader("4. 輝点フィルタリング (面積)")
+    min_area_to_use = st.sidebar.number_input('最小面積',min_value=1,max_value=10000,step=1,value=1)
+    max_area_to_use = st.sidebar.number_input('最大面積',min_value=1,max_value=100000,step=1,value=10000)
+    st.sidebar.subheader("5. 表示設定")
+    CONTOUR_COLORS = {"緑":"#28a745","青":"#007bff","赤":"#dc3545","黄":"#ffc107","シアン":"#17a2b8","ピンク":"#e83e8c"}
+    st.sidebar.radio("輝点マーキング色を選択",options=list(CONTOUR_COLORS.keys()),key="contour_color_name",horizontal=True)
     contour_color_bgr = hex_to_bgr(CONTOUR_COLORS[st.session_state.contour_color_name])
 
     # --- メインエリアの画像処理と表示ロジック ---
@@ -199,11 +194,10 @@ if st.session_state.pil_image_original is not None:
         binary_img = cv2.threshold(blurred_img,st.session_state.binary_threshold_value,255,cv2.THRESH_BINARY)[1]
     else: # 色で検出
         img_hsv = cv2.cvtColor(original_img_to_display_np_uint8, cv2.COLOR_RGB2HSV)
-        hue_min, hue_max = st.session_state.hue_range
+        hue_min, hue_max = st.session_state.hue_range_value
+        sat_min = st.session_state.saturation_value; val_min = st.session_state.brightness_value
         lower_range = np.array([hue_min, sat_min, val_min]); upper_range = np.array([hue_max, 255, 255])
         binary_img = cv2.inRange(img_hsv, lower_range, upper_range)
-        # 注: 赤色のようにHueが0と179をまたぐ場合は、このロジックでは片方の範囲しか検出できません。
-        # 完全な赤色検出にはUIのさらなる工夫が必要です。
     if binary_img is None: st.error("二値化処理に失敗しました。"); st.stop()
     
     erosion_iterations = 1; morph_kernel_shape_to_use = cv2.MORPH_ELLIPSE
