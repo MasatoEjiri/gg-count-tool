@@ -40,7 +40,6 @@ def display_count_in_sidebar(placeholder, count_value):
     with placeholder.container(): placeholder.markdown(html, unsafe_allow_html=True)
 
 # --- セッションステートの初期化 ---
-# ★★★ 全ての連動ウィジェット用にセッションステートを正しく定義 ★★★
 if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots_value = "---" 
 if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 15
 if "threshold_slider" not in st.session_state: st.session_state.threshold_slider = st.session_state.binary_threshold_value
@@ -82,7 +81,7 @@ def sync_hue_from_slider():
     st.session_state.hue_min_number, st.session_state.hue_max_number = st.session_state.hue_range_value
 def sync_hue_from_number():
     min_val, max_val = st.session_state.hue_min_number, st.session_state.hue_max_number
-    if min_val > max_val: min_val = max_val # 最小値が最大値を超えないように
+    if min_val > max_val: min_val = max_val 
     st.session_state.hue_range_value = (min_val, max_val)
     st.session_state.hue_range_slider = st.session_state.hue_range_value
 
@@ -159,15 +158,25 @@ if st.session_state.pil_image_original is not None:
         st.sidebar.number_input('（直接入力）',min_value=0,max_value=255,step=1,key="threshold_number",on_change=sync_threshold_from_number, label_visibility="collapsed")
     else: # 色で検出
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
-        st.sidebar.slider("色相(H)の範囲", 0, 179, key="hue_range_slider", on_change=sync_hue_from_slider)
+        # ★★★ ヘルプテキストを復活・修正 ★★★
+        st.sidebar.slider(
+            "色相(H)の範囲", 0, 179, key="hue_range_slider", on_change=sync_hue_from_slider,
+            help="検出したい輝点の色のおおまかな範囲を指定します。\n\n**代表的な色の目安 (0-179):**\n- **赤:** 0-15 と 165-179 の両方\n- **黄:** 20-35\n- **緑:** 35-85\n- **シアン:** 85-100\n- **青:** 100-130\n- **マゼンタ:** 130-160"
+        )
         col_hue1, col_hue2 = st.sidebar.columns(2)
         col_hue1.number_input("下限", min_value=0, max_value=179, key="hue_min_number", on_change=sync_hue_from_number)
         col_hue2.number_input("上限", min_value=0, max_value=179, key="hue_max_number", on_change=sync_hue_from_number)
 
-        st.sidebar.slider("彩度(S)の下限", min_value=0, max_value=255, key="saturation_slider", on_change=sync_saturation_from_slider)
+        st.sidebar.slider(
+            "彩度(S)の下限", min_value=0, max_value=255, key="saturation_slider", on_change=sync_saturation_from_slider,
+            help="色の「鮮やかさ」の最低ライン。値を上げると、白やグレーに近いくすんだ色が除外されます。"
+        )
         st.sidebar.number_input("（直接入力）", min_value=0, max_value=255, key="saturation_number", on_change=sync_saturation_from_number, label_visibility="collapsed")
 
-        st.sidebar.slider("明度(V)の下限", min_value=0, max_value=255, key="brightness_slider", on_change=sync_brightness_from_slider)
+        st.sidebar.slider(
+            "明度(V)の下限", min_value=0, max_value=255, key="brightness_slider", on_change=sync_brightness_from_slider,
+            help="色の「明るさ」の最低ライン。値を上げると、暗い部分にあるノイズが除外されます。"
+        )
         st.sidebar.number_input("（直接入力）", min_value=0, max_value=255, key="brightness_number", on_change=sync_brightness_from_number, label_visibility="collapsed")
         
     st.sidebar.subheader("3. 形態学的処理")
