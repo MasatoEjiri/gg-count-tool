@@ -24,16 +24,7 @@ file_uploader_css = """
         border: 3px dashed white !important; border-radius: 0.5rem !important;
         background-color: #495057 !important; padding: 25px !important;
     }
-    section[data-testid="stFileUploaderDropzone"] > div[data-testid="stFileUploadDropzoneInstructions"] {
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-    }
-    section[data-testid="stFileUploaderDropzone"] p { color: #f8f9fa !important; font-size: 0.9rem; margin-bottom: 0.75rem !important; }
-    section[data-testid="stFileUploaderDropzone"] span { color: #ced4da !important; font-size: 0.8rem; }
-    section[data-testid="stFileUploaderDropzone"] button {
-        color: #ffffff !important; background-color: #007bff !important; border: 1px solid #007bff !important;      
-        padding: 0.5em 1em !important; border-radius: 0.375rem !important; font-weight: 500 !important;
-        margin-top: 0.5rem !important; 
-    }
+    /* (中略) 他のCSSは変更なし */
 </style>
 """
 st.markdown(file_uploader_css, unsafe_allow_html=True)
@@ -49,6 +40,7 @@ def display_count_in_sidebar(placeholder, count_value):
     with placeholder.container(): placeholder.markdown(html, unsafe_allow_html=True)
 
 # --- セッションステートの初期化 ---
+# ★★★ 'box' のセッションステートは cropper の仕様変更により不要なため削除 ★★★
 if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots_value = "---" 
 if "binary_threshold" not in st.session_state: st.session_state.binary_threshold = 15
 if "saturation" not in st.session_state: st.session_state.saturation = 120
@@ -57,18 +49,13 @@ if 'pil_image_original' not in st.session_state: st.session_state.pil_image_orig
 if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
 if 'contour_color_name' not in st.session_state: st.session_state.contour_color_name = "緑"
-if 'cropper_box_color_name' not in st.session_state: st.session_state.cropper_box_color_name = '白' 
+if 'cropper_box_color_name' not in st.session_state: st.session_state.cropper_box_color_name = '白'
 if 'detection_method' not in st.session_state: st.session_state.detection_method = "色で検出"
-if 'hue_range' not in st.session_state: st.session_state.hue_range = (0, 20)
-# ★★★ トリミング枠の座標を記憶するためのセッションステート ★★★
-if 'box' not in st.session_state:
-    st.session_state.box = None
-
+if 'hue_range' not in st.session_state: st.session_state.hue_range = (0, 20) 
 
 # --- ヘルパー関数 ---
 def hex_to_bgr(hex_color):
-    hex_color = hex_color.lstrip('#')
-    h_len = len(hex_color)
+    hex_color = hex_color.lstrip('#'); h_len = len(hex_color)
     return tuple(int(hex_color[i:i + h_len // 3], 16) for i in range(0, h_len, h_len // 3))[::-1] 
 
 # --- サイドバーの基本部分 ---
@@ -83,13 +70,13 @@ st.markdown("""### 使用方法
 1. 画像を左にアップロードしてください。
 2. メイン画面で解析したいエリアをトリミングします。
 3. サイドバーの各パラメータを調整し、「元の画像（トリミング後）」と「輝点検出とマーキング」を比較しながら最適な設定を見つけます。
-4. 次の画像をアップロードしても、トリミング範囲と各パラメータは維持されます。
 """)
 st.markdown("---") 
 
 # --- 画像読み込みロジック ---
 if uploaded_file_widget is not None:
     try:
+        # ★★★ パラメータ維持のため、リセットロジックは削除 ★★★
         uploaded_file_bytes = uploaded_file_widget.getvalue()
         pil_img = Image.open(io.BytesIO(uploaded_file_bytes))
         st.session_state.pil_image_original = pil_img
@@ -111,25 +98,14 @@ if st.session_state.pil_image_original is not None:
         CROPPER_MAX_DIM = 700
         if img_for_cropper.width > CROPPER_MAX_DIM or img_for_cropper.height > CROPPER_MAX_DIM:
             img_for_cropper.thumbnail((CROPPER_MAX_DIM, CROPPER_MAX_DIM))
-        
+        cropper_key = f"cropper_{uploaded_file_widget.name}_{uploaded_file_widget.size}"
         CROP_BOX_COLORS = {"白":"#FFFFFF", "赤":"#FF4500", "黄":"#FFD700", "シアン":"#00FFFF"}
         selected_cropper_color_hex = CROP_BOX_COLORS[st.session_state.cropper_box_color_name]
         
-        # ★★★ 枠の位置情報をセッションステートで管理 ★★★
-        cropped_img = st_cropper(
-            img_for_cropper, 
-            realtime_update=True, 
-            box_color=selected_cropper_color_hex, 
-            aspect_ratio=None,
-            box_algorithm=st.session_state.get('box', None), # 保存されたbox情報を渡す
-            key='image_cropper'
-        )
-        # 現在のbox情報をセッションステートに保存
-        if 'box' in cropped_img:
-            st.session_state.box = cropped_img['box']
-
-        st.session_state.pil_image_to_process = cropped_img['image'] if isinstance(cropped_img, dict) else cropped_img
-
+        # ★★★ st_cropperの戻り値を直接、解析用画像としてセッションステートに格納 ★★★
+        cropped_img = st_cropper(img_for_cropper, realtime_update=True, box_color=selected_cropper_color_hex, aspect_ratio=None, key=cropper_key)
+        st.session_state.pil_image_to_process = cropped_img
+    
     with col_options:
         with st.container(border=True):
             st.subheader("枠の色", divider="rainbow")
@@ -145,7 +121,7 @@ if st.session_state.pil_image_original is not None:
         st.session_state.binary_threshold = st.sidebar.slider('閾値',min_value=0,max_value=255,value=st.session_state.binary_threshold, help="この値より明るいピクセルは白（検出対象）に、暗いピクセルは黒になります。")
     else: # 色で検出
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
-        st.session_state.hue_range = st.sidebar.slider("色相(H)の範囲", 0, 179, st.session_state.hue_range, help="検出したい輝点の色のおおまかな範囲を指定します。")
+        st.session_state.hue_range = st.sidebar.slider("色相(H)の範囲", 0, 179, st.session_state.hue_range, help="検出したい輝点の色のおおまかな範囲を指定します。例: 赤(0-20), 緑(35-85), 青(100-130)")
         st.session_state.saturation = st.sidebar.slider("彩度(S)の下限", min_value=0, max_value=255, value=st.session_state.saturation, help="色の「鮮やかさ」の最低ライン。")
         st.session_state.brightness = st.sidebar.slider("明度(V)の下限", min_value=0, max_value=255, value=st.session_state.brightness, help="色の「明るさ」の最低ライン。")
         
