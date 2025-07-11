@@ -24,7 +24,16 @@ file_uploader_css = """
         border: 3px dashed white !important; border-radius: 0.5rem !important;
         background-color: #495057 !important; padding: 25px !important;
     }
-    /* (中略) 他のCSSは変更なし */
+    section[data-testid="stFileUploaderDropzone"] > div[data-testid="stFileUploadDropzoneInstructions"] {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    section[data-testid="stFileUploaderDropzone"] p { color: #f8f9fa !important; font-size: 0.9rem; margin-bottom: 0.75rem !important; }
+    section[data-testid="stFileUploaderDropzone"] span { color: #ced4da !important; font-size: 0.8rem; }
+    section[data-testid="stFileUploaderDropzone"] button {
+        color: #ffffff !important; background-color: #007bff !important; border: 1px solid #007bff !important;      
+        padding: 0.5em 1em !important; border-radius: 0.375rem !important; font-weight: 500 !important;
+        margin-top: 0.5rem !important; 
+    }
 </style>
 """
 st.markdown(file_uploader_css, unsafe_allow_html=True)
@@ -108,12 +117,7 @@ st.markdown("---")
 # --- 画像読み込みロジック ---
 if uploaded_file_widget is not None:
     try:
-        if 'last_uploaded_filename' not in st.session_state or st.session_state.last_uploaded_filename != uploaded_file_widget.name:
-            st.session_state.last_uploaded_filename = uploaded_file_widget.name
-            st.session_state.binary_threshold_value = 15; st.session_state.threshold_slider = 15; st.session_state.threshold_number = 15
-            st.session_state.saturation_value = 120; st.session_state.saturation_slider = 120; st.session_state.saturation_number = 120
-            st.session_state.brightness_value = 60; st.session_state.brightness_slider = 60; st.session_state.brightness_number = 60
-            st.session_state.hue_range_value = (0, 20); st.session_state.hue_range_slider = (0, 20); st.session_state.hue_min_number = 0; st.session_state.hue_max_number = 20
+        # ★★★ 新しい画像がアップロードされても、パラメータはリセットしない ★★★
         uploaded_file_bytes = uploaded_file_widget.getvalue()
         pil_img = Image.open(io.BytesIO(uploaded_file_bytes))
         st.session_state.pil_image_original = pil_img
@@ -158,7 +162,6 @@ if st.session_state.pil_image_original is not None:
         st.sidebar.number_input('（直接入力）',min_value=0,max_value=255,step=1,key="threshold_number",on_change=sync_threshold_from_number, label_visibility="collapsed")
     else: # 色で検出
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
-        # ★★★ ヘルプテキストを復活・修正 ★★★
         st.sidebar.slider(
             "色相(H)の範囲", 0, 179, key="hue_range_slider", on_change=sync_hue_from_slider,
             help="検出したい輝点の色のおおまかな範囲を指定します。\n\n**代表的な色の目安 (0-179):**\n- **赤:** 0-15 と 165-179 の両方\n- **黄:** 20-35\n- **緑:** 35-85\n- **シアン:** 85-100\n- **青:** 100-130\n- **マゼンタ:** 130-160"
@@ -197,7 +200,7 @@ if st.session_state.pil_image_original is not None:
         original_img_to_display_np_uint8 = np.array(pil_image_rgb).astype(np.uint8)
     except Exception as e: st.error(f"トリミング後の画像の基本変換に失敗: {e}"); st.stop() 
     
-    if detection_method == "明るさで検出":
+    if st.session_state.detection_method == "明るさで検出":
         img_gray = cv2.cvtColor(original_img_to_display_np_uint8, cv2.COLOR_RGB2GRAY)
         blurred_img = cv2.GaussianBlur(img_gray, (1,1),0)
         binary_img = cv2.threshold(blurred_img,st.session_state.binary_threshold_value,255,cv2.THRESH_BINARY)[1]
@@ -230,7 +233,7 @@ if st.session_state.pil_image_original is not None:
         st.image(display_final_marked_image_rgb, caption=f'検出輝点({current_counted_spots}個)', use_container_width=True)
     
     with st.expander("▼ 中間処理の画像を見る"):
-        st.subheader(f"1. {detection_method}による二値化処理後"); st.image(binary_img)
+        st.subheader(f"1. {st.session_state.detection_method}による二値化処理後"); st.image(binary_img)
         st.subheader("2. 形態学的処理後"); st.image(opened_img,caption=f'カーネル: 楕円 {kernel_size_morph_to_use}x{erosion_iterations}回')
 else: 
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
