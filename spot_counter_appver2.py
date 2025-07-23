@@ -50,24 +50,19 @@ def display_count_in_sidebar(placeholder, count_value):
 
 # --- セッションステートの初期化 ---
 if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots_value = "---" 
-# 二値化用
 if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 15
 if "threshold_slider" not in st.session_state: st.session_state.threshold_slider = st.session_state.binary_threshold_value
 if "threshold_number" not in st.session_state: st.session_state.threshold_number = st.session_state.binary_threshold_value
-# 彩度用
 if "saturation_value" not in st.session_state: st.session_state.saturation_value = 120
 if "saturation_slider" not in st.session_state: st.session_state.saturation_slider = st.session_state.saturation_value
 if "saturation_number" not in st.session_state: st.session_state.saturation_number = st.session_state.saturation_value
-# 明度用
 if "brightness_value" not in st.session_state: st.session_state.brightness_value = 60
 if "brightness_slider" not in st.session_state: st.session_state.brightness_slider = st.session_state.brightness_value
 if "brightness_number" not in st.session_state: st.session_state.brightness_number = st.session_state.brightness_value
-# 色相用
 if "hue_range_value" not in st.session_state: st.session_state.hue_range_value = (0, 20)
 if "hue_range_slider" not in st.session_state: st.session_state.hue_range_slider = st.session_state.hue_range_value
 if "hue_min_number" not in st.session_state: st.session_state.hue_min_number = st.session_state.hue_range_value[0]
 if "hue_max_number" not in st.session_state: st.session_state.hue_max_number = st.session_state.hue_range_value[1]
-# その他
 if 'pil_image_original' not in st.session_state: st.session_state.pil_image_original = None
 if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
@@ -175,7 +170,6 @@ if st.session_state.pil_image_original is not None:
         st.sidebar.subheader("2. 二値化")
         st.sidebar.slider('閾値 (スライダーで調整)',min_value=0,max_value=255,step=1,key="threshold_slider",on_change=sync_threshold_from_slider)
         st.sidebar.number_input('（直接入力）',min_value=0,max_value=255,step=1,key="threshold_number",on_change=sync_threshold_from_number, label_visibility="collapsed")
-        threshold_value_to_use = st.session_state.binary_threshold_value
     else: # 色で検出
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
         st.sidebar.slider("色相(H)の範囲", 0, 179, key="hue_range_slider", on_change=sync_hue_from_slider, help="検出したい輝点の色のおおまかな範囲を指定します。")
@@ -185,11 +179,9 @@ if st.session_state.pil_image_original is not None:
 
         st.sidebar.slider("彩度(S)の下限", min_value=0, max_value=255, key="saturation_slider", on_change=sync_saturation_from_slider, help="色の「鮮やかさ」の最低ライン。")
         st.sidebar.number_input("（直接入力）", min_value=0, max_value=255, key="saturation_number", on_change=sync_saturation_from_number, label_visibility="collapsed")
-        sat_min = st.session_state.saturation_value
 
         st.sidebar.slider("明度(V)の下限", min_value=0, max_value=255, key="brightness_slider", on_change=sync_brightness_from_slider, help="色の「明るさ」の最低ライン。")
         st.sidebar.number_input("（直接入力）", min_value=0, max_value=255, key="brightness_number", on_change=sync_brightness_from_number, label_visibility="collapsed")
-        val_min = st.session_state.brightness_value
         
     st.sidebar.subheader("3. 形態学的処理")
     kernel_size_morph_to_use =st.sidebar.select_slider('カーネルサイズ',options=[1,3,5,7,9],value=1, help="ノイズ除去や輝点分離の効果の強さを調整します。")
