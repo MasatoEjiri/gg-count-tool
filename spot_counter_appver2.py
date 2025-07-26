@@ -1,3 +1,40 @@
+あなたは優秀なStreamlitアプリ開発アシスタントです。これから、以前のチャットから引き継いで、ユーザー（クライアント）の要望に応じてPython製の輝点解析ツールの開発を続けます。
+
+## これまでの経緯
+
+ユーザーは蛍光顕微鏡画像から輝点をカウントするStreamlitアプリの開発を依頼しており、長期間の試行錯誤を経て、多くの機能追加とバグ修正を行ってきました。主な変遷は以下の通りです。
+
+初期開発: 基本的な画像処理（二値化、形態学的処理、面積フィルタ）による輝点カウント機能を実装。
+
+ROI選択機能の模索: ユーザーは画像内の特定領域（ROI）をマウスで選択する機能を強く希望。
+
+streamlit-drawable-canvas を試したが、ユーザーの環境で背景画像が表示されない問題が解決できず断念。
+
+streamlit-cropper を導入し、ドラッグ＆ドロップによるROI選択（トリミング）を実現。これが現在の標準機能となっている。
+
+解析精度の向上:
+
+単なる「明るさ（二値化）」だけでなく、「色（HSV色空間）」で輝点を検出する機能を追加。現在、この2つの検出方法はラジオボタンで切り替え可能。
+
+Watershed や Hough Circle Transform といった、より高度な分離アルゴリズムも試したが、パラメータ調整が複雑なため最終的に不採用となった。
+
+UI/UXの改善:
+
+サイドバーの初期表示状態、UI要素の配置（st.columns）、フォントサイズ、ウィジェットの説明文（ヘルプテキスト）など、多岐にわたるUI改善を実施。
+
+パラメータ設定の永続性（新しい画像をアップロードしても設定がリセットされない）を実装。
+
+スライダーと数値入力ボックスを連動させるための、安定したコールバック機構を実装。
+
+## 最終的な合意事項（プランA）
+
+長い開発の末、ユーザーと合意した最終的な安定バージョンを「プランA」と呼んでいます。あなたは、今後すべての修正依頼に対して、この「プランA」をベースとして作業を行う必要があります。絶対に以前のバージョンに戻したり、実装済みの機能を欠落させたりしないでください。
+
+以下に、現在の最新版である「プランA」の完全なソースコードと、それに対応する requirements.txt を記載します。
+
+spot_counter_appver2.py (プランA)
+Python
+
 import streamlit as st
 from PIL import Image
 import numpy as np
@@ -12,10 +49,18 @@ st.set_page_config(page_title="GG輝点解析ツール", layout="wide", initial_
 st.markdown("""
 <style>
     .main .block-container {
-        padding-top: 2rem !important;
+        padding-top: 1rem !important;
+    }
+    /* 「枠の色」のラジオボタンのラベルを非表示にするためのCSS */
+    div[data-testid="stRadio"] > label[data-baseweb="radio"] > div:first-of-type {
+        display: none;
+    }
+    div[data-testid="stRadio"] > div[role="radiogroup"] {
+        align-items: center;
     }
 </style>
 """, unsafe_allow_html=True)
+
 
 # ファイルアップローダーのカスタムCSS
 file_uploader_css = """
@@ -75,29 +120,37 @@ if 'detection_method' not in st.session_state: st.session_state.detection_method
 def sync_threshold_from_slider():
     st.session_state.binary_threshold_value = st.session_state.threshold_slider
     st.session_state.threshold_number = st.session_state.binary_threshold_value
+    st.rerun()
 def sync_threshold_from_number():
     st.session_state.binary_threshold_value = st.session_state.threshold_number
     st.session_state.threshold_slider = st.session_state.binary_threshold_value
+    st.rerun()
 def sync_saturation_from_slider():
     st.session_state.saturation_value = st.session_state.saturation_slider
     st.session_state.saturation_number = st.session_state.saturation_value
+    st.rerun()
 def sync_saturation_from_number():
     st.session_state.saturation_value = st.session_state.saturation_number
     st.session_state.saturation_slider = st.session_state.saturation_value
+    st.rerun()
 def sync_brightness_from_slider():
     st.session_state.brightness_value = st.session_state.brightness_slider
     st.session_state.brightness_number = st.session_state.brightness_value
+    st.rerun()
 def sync_brightness_from_number():
     st.session_state.brightness_value = st.session_state.brightness_number
     st.session_state.brightness_slider = st.session_state.brightness_value
+    st.rerun()
 def sync_hue_from_slider():
     st.session_state.hue_range_value = st.session_state.hue_range_slider
     st.session_state.hue_min_number, st.session_state.hue_max_number = st.session_state.hue_range_value
+    st.rerun()
 def sync_hue_from_number():
     min_val, max_val = st.session_state.hue_min_number, st.session_state.hue_max_number
     if min_val > max_val: min_val = max_val 
     st.session_state.hue_range_value = (min_val, max_val)
     st.session_state.hue_range_slider = st.session_state.hue_range_value
+    st.rerun()
 
 def hex_to_bgr(hex_color):
     hex_color = hex_color.lstrip('#'); h_len = len(hex_color)
@@ -122,12 +175,7 @@ st.markdown("---")
 # --- 画像読み込みロジック ---
 if uploaded_file_widget is not None:
     try:
-        if 'last_uploaded_filename' not in st.session_state or st.session_state.last_uploaded_filename != uploaded_file_widget.name:
-            st.session_state.last_uploaded_filename = uploaded_file_widget.name
-            st.session_state.binary_threshold_value = 15; st.session_state.threshold_slider = 15; st.session_state.threshold_number = 15
-            st.session_state.saturation_value = 120; st.session_state.saturation_slider = 120; st.session_state.saturation_number = 120
-            st.session_state.brightness_value = 60; st.session_state.brightness_slider = 60; st.session_state.brightness_number = 60
-            st.session_state.hue_range_value = (0, 20); st.session_state.hue_range_slider = (0, 20); st.session_state.hue_min_number = 0; st.session_state.hue_max_number = 20
+        # パラメータはリセットしない
         uploaded_file_bytes = uploaded_file_widget.getvalue()
         pil_img = Image.open(io.BytesIO(uploaded_file_bytes))
         st.session_state.pil_image_original = pil_img
@@ -172,15 +220,15 @@ if st.session_state.pil_image_original is not None:
         st.sidebar.number_input('（直接入力）',min_value=0,max_value=255,step=1,key="threshold_number",on_change=sync_threshold_from_number, label_visibility="collapsed")
     else: # 色で検出
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
-        st.sidebar.slider("色相(H)の範囲", 0, 179, key="hue_range_slider", on_change=sync_hue_from_slider, help="検出したい輝点の色のおおまかな範囲を指定します。")
+        st.sidebar.slider("色相(H)の範囲", 0, 179, key="hue_range_slider", on_change=sync_hue_from_slider, help="検出したい輝点の色のおおまかな範囲を指定します。\n\n**代表的な色の目安 (0-179):**\n- **赤:** 0-15 と 165-179\n- **黄:** 20-35\n- **緑:** 35-85\n- **青:** 100-130")
         col_hue1, col_hue2 = st.sidebar.columns(2)
         col_hue1.number_input("下限", min_value=0, max_value=179, key="hue_min_number", on_change=sync_hue_from_number)
         col_hue2.number_input("上限", min_value=0, max_value=179, key="hue_max_number", on_change=sync_hue_from_number)
 
-        st.sidebar.slider("彩度(S)の下限", min_value=0, max_value=255, key="saturation_slider", on_change=sync_saturation_from_slider, help="色の「鮮やかさ」の最低ライン。")
+        st.sidebar.slider("彩度(S)の下限", min_value=0, max_value=255, key="saturation_slider", on_change=sync_saturation_from_slider)
         st.sidebar.number_input("（直接入力）", min_value=0, max_value=255, key="saturation_number", on_change=sync_saturation_from_number, label_visibility="collapsed")
 
-        st.sidebar.slider("明度(V)の下限", min_value=0, max_value=255, key="brightness_slider", on_change=sync_brightness_from_slider, help="色の「明るさ」の最低ライン。")
+        st.sidebar.slider("明度(V)の下限", min_value=0, max_value=255, key="brightness_slider", on_change=sync_brightness_from_slider)
         st.sidebar.number_input("（直接入力）", min_value=0, max_value=255, key="brightness_number", on_change=sync_brightness_from_number, label_visibility="collapsed")
         
     st.sidebar.subheader("3. 形態学的処理")
@@ -240,3 +288,22 @@ else:
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
 
 display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value)
+requirements.txt
+Plaintext
+
+streamlit
+opencv-python-headless
+Pillow
+numpy
+streamlit-cropper
+## ユーザーの好みと注意点
+
+応答性: ユーザーはパラメータを変更した際に、結果が即座に反映されることを期待しています。UIの遅延や、2度押しが必要な動作は厳禁です。
+
+UIの簡潔さ: 複雑なUIを嫌う傾向があります。パラメータの説明は、最初は詳細を求められますが、最終的にはヘルプマーク (?) に格納したり、簡潔な箇条書きにしたりすることを好みます。
+
+安定性: エラーが頻発することを非常に嫌います。新しい機能を導入する際は、既存の機能が壊れない（リグレッションしない）ように、細心の注意を払ってください。
+
+コード表示: 指示がない限り、最終的なスクリプトは<immersive>タグを使った単一のコードブロックで提示してください。
+
+あなたの最初のタスクは、このプロンプトを読み、完全に理解したことを示すことです。その後、ユーザーからの次の指示を待ってください。
