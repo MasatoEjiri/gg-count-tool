@@ -101,47 +101,40 @@ if 'cropper_box_color_name' not in st.session_state: st.session_state.cropper_bo
 if 'detection_method' not in st.session_state: st.session_state.detection_method = "色で検出"
 
 # --- コールバック関数とヘルパー関数 ---
+# ★修正点: 全てのコールバック関数から st.rerun() を削除
 def sync_threshold_from_slider():
     st.session_state.binary_threshold_value = st.session_state.threshold_slider
     st.session_state.threshold_number = st.session_state.binary_threshold_value
-    st.rerun()
 
 def sync_threshold_from_number():
     st.session_state.binary_threshold_value = st.session_state.threshold_number
     st.session_state.threshold_slider = st.session_state.binary_threshold_value
-    st.rerun()
 
 def sync_saturation_from_slider():
     st.session_state.saturation_value = st.session_state.saturation_slider
     st.session_state.saturation_number = st.session_state.saturation_value
-    st.rerun()
 
 def sync_saturation_from_number():
     st.session_state.saturation_value = st.session_state.saturation_number
     st.session_state.saturation_slider = st.session_state.saturation_value
-    st.rerun()
 
 def sync_brightness_from_slider():
     st.session_state.brightness_value = st.session_state.brightness_slider
     st.session_state.brightness_number = st.session_state.brightness_value
-    st.rerun()
 
 def sync_brightness_from_number():
     st.session_state.brightness_value = st.session_state.brightness_number
     st.session_state.brightness_slider = st.session_state.brightness_value
-    st.rerun()
 
 def sync_hue_from_slider():
     st.session_state.hue_range_value = st.session_state.hue_range_slider
     st.session_state.hue_min_number, st.session_state.hue_max_number = st.session_state.hue_range_value
-    st.rerun()
 
 def sync_hue_from_number():
     min_val, max_val = st.session_state.hue_min_number, st.session_state.hue_max_number
     if min_val > max_val: min_val = max_val 
     st.session_state.hue_range_value = (min_val, max_val)
     st.session_state.hue_range_slider = st.session_state.hue_range_value
-    st.rerun()
 
 def hex_to_bgr(hex_color):
     hex_color = hex_color.lstrip('#')
