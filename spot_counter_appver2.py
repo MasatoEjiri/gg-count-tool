@@ -170,14 +170,26 @@ if st.session_state.pil_image_original:
         col_hue1.number_input("下限", min_value=0, max_value=179, key="hue_min_number", on_change=sync_hue_from_number)
         col_hue2.number_input("上限", min_value=0, max_value=179, key="hue_max_number", on_change=sync_hue_from_number)
 
-        st.sidebar.slider("彩度(S)の下限", key="saturation_slider", min_value=0, max_value=255, on_change=sync_saturation_from_slider)
+        st.sidebar.slider(
+            "彩度(S)の下限",
+            key="saturation_slider",
+            min_value=0, max_value=255,
+            on_change=sync_saturation_from_slider,
+            help="色の鮮やかさの最小値を指定します。値を大きくすると、より鮮やかな色のみが検出されます。"
+        )
         st.sidebar.number_input("（直接入力）", key="saturation_number", min_value=0, max_value=255, on_change=sync_saturation_from_number, label_visibility="collapsed")
 
-        st.sidebar.slider("明度(V)の下限", key="brightness_slider", min_value=0, max_value=255, on_change=sync_brightness_from_slider)
+        st.sidebar.slider(
+            "明度(V)の下限",
+            key="brightness_slider",
+            min_value=0, max_value=255,
+            on_change=sync_brightness_from_slider,
+            help="色の明るさの最小値を指定します。値を大きくすると、より明るい色のみが検出されます。"
+        )
         st.sidebar.number_input("（直接入力）", key="brightness_number", min_value=0, max_value=255, on_change=sync_brightness_from_number, label_visibility="collapsed")
 
     st.sidebar.subheader("3. 形態学的処理")
-    st.session_state.kernel_size_morph = st.sidebar.select_slider('カーネルサイズ', options=[1, 3, 5, 7, 9], value=st.session_state.kernel_size_morph)
+    st.session_state.kernel_size_morph = st.sidebar.select_slider('カーネルサイズ', options=[1, 3, 5, 7, 9], value=st.session_state.kernel_size_morph, help="ノイズ除去や輝点分離の効果の強さを調整します。")
 
     st.sidebar.subheader("4. 輝点フィルタリング (面積)")
     st.session_state.min_area_to_use = st.sidebar.number_input('最小面積', 1, 10000, st.session_state.min_area_to_use)
