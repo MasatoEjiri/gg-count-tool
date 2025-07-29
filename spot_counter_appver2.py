@@ -40,6 +40,7 @@ def display_count_in_sidebar(placeholder, count_value):
 
 
 # --- セッションステートの初期化 ---
+# 初回起動時にデフォルト値を設定
 defaults = {
     'current_file_id': None,
     'counted_spots_value': "---",
@@ -60,6 +61,52 @@ for key, value in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = value
 
+# スライダーと数値入力を同期させるためのキーも初期化
+if "threshold_slider" not in st.session_state: st.session_state.threshold_slider = st.session_state.binary_threshold_value
+if "threshold_number" not in st.session_state: st.session_state.threshold_number = st.session_state.binary_threshold_value
+if "saturation_slider" not in st.session_state: st.session_state.saturation_slider = st.session_state.saturation_value
+if "saturation_number" not in st.session_state: st.session_state.saturation_number = st.session_state.saturation_value
+if "brightness_slider" not in st.session_state: st.session_state.brightness_slider = st.session_state.brightness_value
+if "brightness_number" not in st.session_state: st.session_state.brightness_number = st.session_state.brightness_value
+if "hue_range_slider" not in st.session_state: st.session_state.hue_range_slider = st.session_state.hue_range_value
+if "hue_min_number" not in st.session_state: st.session_state.hue_min_number = st.session_state.hue_range_value[0]
+if "hue_max_number" not in st.session_state: st.session_state.hue_max_number = st.session_state.hue_range_value[1]
+
+
+# --- コールバック関数 (st.rerun()は含めない) ---
+def sync_threshold_from_slider():
+    st.session_state.binary_threshold_value = st.session_state.threshold_slider
+    st.session_state.threshold_number = st.session_state.binary_threshold_value
+
+def sync_threshold_from_number():
+    st.session_state.binary_threshold_value = st.session_state.threshold_number
+    st.session_state.threshold_slider = st.session_state.binary_threshold_value
+
+def sync_saturation_from_slider():
+    st.session_state.saturation_value = st.session_state.saturation_slider
+    st.session_state.saturation_number = st.session_state.saturation_value
+
+def sync_saturation_from_number():
+    st.session_state.saturation_value = st.session_state.saturation_number
+    st.session_state.saturation_slider = st.session_state.saturation_value
+
+def sync_brightness_from_slider():
+    st.session_state.brightness_value = st.session_state.brightness_slider
+    st.session_state.brightness_number = st.session_state.brightness_value
+
+def sync_brightness_from_number():
+    st.session_state.brightness_value = st.session_state.brightness_number
+    st.session_state.brightness_slider = st.session_state.brightness_value
+
+def sync_hue_from_slider():
+    st.session_state.hue_range_value = st.session_state.hue_range_slider
+    st.session_state.hue_min_number, st.session_state.hue_max_number = st.session_state.hue_range_value
+
+def sync_hue_from_number():
+    min_val, max_val = st.session_state.hue_min_number, st.session_state.hue_max_number
+    if min_val > max_val: min_val = max_val
+    st.session_state.hue_range_value = (min_val, max_val)
+    st.session_state.hue_range_slider = st.session_state.hue_range_value
 
 def hex_to_bgr(hex_color):
     hex_color = hex_color.lstrip('#')
@@ -106,23 +153,36 @@ if st.session_state.pil_image_original:
         "検出方法", ("色で検出", "明るさで検出"), index=["色で検出", "明るさで検出"].index(st.session_state.detection_method), horizontal=True
     )
     st.sidebar.markdown("---")
-    
+
     if st.session_state.detection_method == "明るさで検出":
         st.sidebar.subheader("2. 二値化")
-        st.session_state.binary_threshold_value = st.sidebar.slider('閾値', 0, 255, st.session_state.binary_threshold_value)
+        st.sidebar.slider('閾値 (スライダーで調整)', key="threshold_slider", min_value=0, max_value=255, on_change=sync_threshold_from_slider)
+        st.sidebar.number_input('（直接入力）', key="threshold_number", min_value=0, max_value=255, on_change=sync_threshold_from_number, label_visibility="collapsed")
     else:
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
-        st.session_state.hue_range_value = st.sidebar.slider("色相(H)の範囲", 0, 179, st.session_state.hue_range_value)
-        st.session_state.saturation_value = st.sidebar.slider("彩度(S)の下限", 0, 255, st.session_state.saturation_value)
-        st.session_state.brightness_value = st.sidebar.slider("明度(V)の下限", 0, 255, st.session_state.brightness_value)
-        
+        st.sidebar.slider(
+            "色相(H)の範囲", 0, 179,
+            key="hue_range_slider",
+            on_change=sync_hue_from_slider,
+            help="検出したい輝点の色のおおまかな範囲を指定します。\n\n**代表的な色の目安 (0-179):**\n- **赤:** 0-15 と 165-179\n- **黄:** 20-35\n- **緑:** 35-85\n- **青:** 100-130"
+        )
+        col_hue1, col_hue2 = st.sidebar.columns(2)
+        col_hue1.number_input("下限", min_value=0, max_value=179, key="hue_min_number", on_change=sync_hue_from_number)
+        col_hue2.number_input("上限", min_value=0, max_value=179, key="hue_max_number", on_change=sync_hue_from_number)
+
+        st.sidebar.slider("彩度(S)の下限", key="saturation_slider", min_value=0, max_value=255, on_change=sync_saturation_from_slider)
+        st.sidebar.number_input("（直接入力）", key="saturation_number", min_value=0, max_value=255, on_change=sync_saturation_from_number, label_visibility="collapsed")
+
+        st.sidebar.slider("明度(V)の下限", key="brightness_slider", min_value=0, max_value=255, on_change=sync_brightness_from_slider)
+        st.sidebar.number_input("（直接入力）", key="brightness_number", min_value=0, max_value=255, on_change=sync_brightness_from_number, label_visibility="collapsed")
+
     st.sidebar.subheader("3. 形態学的処理")
     st.session_state.kernel_size_morph = st.sidebar.select_slider('カーネルサイズ', options=[1, 3, 5, 7, 9], value=st.session_state.kernel_size_morph)
-    
+
     st.sidebar.subheader("4. 輝点フィルタリング (面積)")
     st.session_state.min_area_to_use = st.sidebar.number_input('最小面積', 1, 10000, st.session_state.min_area_to_use)
     st.session_state.max_area_to_use = st.sidebar.number_input('最大面積', 1, 100000, st.session_state.max_area_to_use)
-    
+
     st.sidebar.subheader("5. 表示設定")
     CONTOUR_COLORS = {"緑":"#28a745", "青":"#007bff", "赤":"#dc3545", "黄":"#ffc107", "シアン":"#17a2b8", "ピンク":"#e83e8c"}
     st.session_state.contour_color_name = st.sidebar.radio(
@@ -132,19 +192,17 @@ if st.session_state.pil_image_original:
 
     # --- メインエリアUI ---
     st.header("解析エリアの選択 (トリミング)")
-    
-    # ★★★ 修正点: カラムレイアウトを復活させ、表示のズレを解消 ★★★
     col_cropper, col_options = st.columns([3, 1])
     with col_cropper:
         img_for_cropper = st.session_state.pil_image_original.copy()
         st.session_state.pil_image_to_process = st_cropper(
-            img_for_cropper, 
-            realtime_update=True, 
+            img_for_cropper,
+            realtime_update=True,
             box_color='#007BFF',
             aspect_ratio=None,
             key=f"cropper_{st.session_state.current_file_id}"
         )
-    
+
     with col_options:
         with st.container(border=True):
             st.subheader("枠の色", divider="rainbow")
@@ -158,7 +216,7 @@ if st.session_state.pil_image_original:
 
     st.markdown("---")
     st.header("解析結果の比較")
-    
+
     # --- 画像処理 ---
     try:
         pil_image_rgb = st.session_state.pil_image_to_process.convert("RGB")
@@ -166,7 +224,7 @@ if st.session_state.pil_image_original:
     except Exception as e:
         st.error(f"トリミング画像の変換に失敗: {e}")
         st.stop()
-    
+
     if st.session_state.detection_method == "明るさで検出":
         img_gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
         _, binary_img = cv2.threshold(img_gray, st.session_state.binary_threshold_value, 255, cv2.THRESH_BINARY)
@@ -175,13 +233,13 @@ if st.session_state.pil_image_original:
         lower = np.array([st.session_state.hue_range_value[0], st.session_state.saturation_value, st.session_state.brightness_value])
         upper = np.array([st.session_state.hue_range_value[1], 255, 255])
         binary_img = cv2.inRange(img_hsv, lower, upper)
-    
+
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (st.session_state.kernel_size_morph, st.session_state.kernel_size_morph))
     opened_img = cv2.morphologyEx(binary_img, cv2.MORPH_OPEN, kernel, iterations=1)
-    
+
     contours, _ = cv2.findContours(opened_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    count = 0 
+
+    count = 0
     output_image = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
     for c in contours:
         area = cv2.contourArea(c)
@@ -189,7 +247,7 @@ if st.session_state.pil_image_original:
             count += 1
             cv2.drawContours(output_image, [c], -1, contour_color_bgr, 2)
     st.session_state.counted_spots_value = count
-    
+
     # --- 結果表示 ---
     col1, col2 = st.columns(2)
     col1.subheader("元の画像 (トリミング後)")
@@ -197,7 +255,7 @@ if st.session_state.pil_image_original:
     col2.subheader("輝点検出とマーキング")
     col2.image(cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB), caption=f'検出輝点({count}個)', use_container_width=True)
 
-else: 
+else:
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
     st.session_state.counted_spots_value = "---"
 
