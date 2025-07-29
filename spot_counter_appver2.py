@@ -1,5 +1,4 @@
 import streamlit as st
-st.session_state.clear()
 from PIL import Image
 import numpy as np
 import cv2
@@ -192,10 +191,10 @@ if st.session_state.pil_image_original is not None:
         CROP_BOX_COLORS = {"白":"#FFFFFF", "赤":"#FF4500", "黄":"#FFD700", "シアン":"#00FFFF"}
         selected_cropper_color_hex = CROP_BOX_COLORS[st.session_state.cropper_box_color_name]
         
-        # ★エラー修正: box_height と box_width を削除
+        # ★★★修正点: realtime_updateをFalseにして安定性を向上
         cropped_img = st_cropper(
             img_for_cropper, 
-            realtime_update=True, 
+            realtime_update=False, 
             box_color=selected_cropper_color_hex, 
             aspect_ratio=None, 
             key=cropper_key
