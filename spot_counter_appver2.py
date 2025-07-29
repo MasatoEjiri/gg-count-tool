@@ -1,4 +1,5 @@
 import streamlit as st
+st.session_state.clear()
 from PIL import Image
 import numpy as np
 import cv2
