@@ -14,6 +14,13 @@ st.markdown("""
     .main .block-container {
         padding-top: 1rem !important;
     }
+    /* 「枠の色」のラジオボタンのラベルを非表示にするためのCSS */
+    div[data-testid="stRadio"] > label[data-baseweb="radio"] > div:first-of-type {
+        display: none;
+    }
+    div[data-testid="stRadio"] > div[role="radiogroup"] {
+        align-items: center;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -43,6 +50,7 @@ defaults = {
     'pil_image_original': None,
     'pil_image_to_process': None,
     'contour_color_name': "青",
+    'cropper_box_color_name': "白",
     'detection_method': "色で検出",
     'max_area_to_use': 100,
     'min_area_to_use': 1,
@@ -76,7 +84,6 @@ st.markdown("---")
 
 # --- 画像読み込みロジック ---
 if uploaded_file:
-    # ★★★ 修正点: ファイル名とサイズからIDを生成 ★★★
     file_id = f"{uploaded_file.name}-{uploaded_file.size}"
     if st.session_state.current_file_id != file_id:
         st.session_state.current_file_id = file_id
@@ -126,19 +133,29 @@ if st.session_state.pil_image_original:
     # --- メインエリアUI ---
     st.header("解析エリアの選択 (トリミング)")
     
-    img_for_cropper = st.session_state.pil_image_original.copy()
-    CROPPER_MAX_DIM = 700
-    if img_for_cropper.width > CROPPER_MAX_DIM or img_for_cropper.height > CROPPER_MAX_DIM:
-        img_for_cropper.thumbnail((CROPPER_MAX_DIM, CROPPER_MAX_DIM))
+    # ★★★ 修正点: カラムレイアウトを復活させ、表示のズレを解消 ★★★
+    col_cropper, col_options = st.columns([3, 1])
+    with col_cropper:
+        img_for_cropper = st.session_state.pil_image_original.copy()
+        st.session_state.pil_image_to_process = st_cropper(
+            img_for_cropper, 
+            realtime_update=True, 
+            box_color='#007BFF',
+            aspect_ratio=None,
+            key=f"cropper_{st.session_state.current_file_id}"
+        )
     
-    st.session_state.pil_image_to_process = st_cropper(
-        img_for_cropper, 
-        realtime_update=True, 
-        box_color='#007BFF', 
-        aspect_ratio=None,
-        key=f"cropper_{st.session_state.current_file_id}"
-    )
-    
+    with col_options:
+        with st.container(border=True):
+            st.subheader("枠の色", divider="rainbow")
+            CROP_BOX_COLORS = {"白":"#FFFFFF", "赤":"#FF4500", "黄":"#FFD700", "シアン":"#00FFFF"}
+            st.session_state.cropper_box_color_name = st.radio(
+                "トリミング枠の色を選択",
+                options=list(CROP_BOX_COLORS.keys()),
+                index=list(CROP_BOX_COLORS.keys()).index(st.session_state.cropper_box_color_name),
+                label_visibility="collapsed"
+            )
+
     st.markdown("---")
     st.header("解析結果の比較")
     
