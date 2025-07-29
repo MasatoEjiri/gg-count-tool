@@ -78,18 +78,18 @@ def display_count_in_sidebar(placeholder, count_value):
     with placeholder.container():
         placeholder.markdown(html_code, unsafe_allow_html=True)
 
-# --- セッションステートの初期化 ---
+# --- セッションステートの初期化 (★デフォルト値変更) ---
 if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots_value = "---"
 if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 15
 if "threshold_slider" not in st.session_state: st.session_state.threshold_slider = st.session_state.binary_threshold_value
 if "threshold_number" not in st.session_state: st.session_state.threshold_number = st.session_state.binary_threshold_value
-if "saturation_value" not in st.session_state: st.session_state.saturation_value = 120
+if "saturation_value" not in st.session_state: st.session_state.saturation_value = 200 # ★変更: 120 -> 200
 if "saturation_slider" not in st.session_state: st.session_state.saturation_slider = st.session_state.saturation_value
 if "saturation_number" not in st.session_state: st.session_state.saturation_number = st.session_state.saturation_value
-if "brightness_value" not in st.session_state: st.session_state.brightness_value = 60
+if "brightness_value" not in st.session_state: st.session_state.brightness_value = 60 # 変更なし (元々60)
 if "brightness_slider" not in st.session_state: st.session_state.brightness_slider = st.session_state.brightness_value
 if "brightness_number" not in st.session_state: st.session_state.brightness_number = st.session_state.brightness_value
-if "hue_range_value" not in st.session_state: st.session_state.hue_range_value = (0, 20)
+if "hue_range_value" not in st.session_state: st.session_state.hue_range_value = (0, 15) # ★変更: (0, 20) -> (0, 15)
 if "hue_range_slider" not in st.session_state: st.session_state.hue_range_slider = st.session_state.hue_range_value
 if "hue_min_number" not in st.session_state: st.session_state.hue_min_number = st.session_state.hue_range_value[0]
 if "hue_max_number" not in st.session_state: st.session_state.hue_max_number = st.session_state.hue_range_value[1]
@@ -100,8 +100,7 @@ if 'contour_color_name' not in st.session_state: st.session_state.contour_color_
 if 'cropper_box_color_name' not in st.session_state: st.session_state.cropper_box_color_name = '白'
 if 'detection_method' not in st.session_state: st.session_state.detection_method = "色で検出"
 
-# --- コールバック関数とヘルパー関数 ---
-# ★修正点: 全てのコールバック関数から st.rerun() を削除
+# --- コールバック関数とヘルパー関数 (★st.rerun() を削除) ---
 def sync_threshold_from_slider():
     st.session_state.binary_threshold_value = st.session_state.threshold_slider
     st.session_state.threshold_number = st.session_state.binary_threshold_value
@@ -158,10 +157,10 @@ st.markdown("""
 """)
 st.markdown("---")
 
-# --- 画像読み込みロジック ---
+# --- 画像読み込みロジック (設定は引き継がれる) ---
 if uploaded_file_widget is not None:
     try:
-        # パラメータはリセットしない
+        # 新しい画像を読み込んでもパラメータはリセットしない
         uploaded_file_bytes = uploaded_file_widget.getvalue()
         pil_img = Image.open(io.BytesIO(uploaded_file_bytes))
         st.session_state.pil_image_original = pil_img
