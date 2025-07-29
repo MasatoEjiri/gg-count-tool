@@ -83,24 +83,25 @@ if 'counted_spots_value' not in st.session_state: st.session_state.counted_spots
 if "binary_threshold_value" not in st.session_state: st.session_state.binary_threshold_value = 15
 if "threshold_slider" not in st.session_state: st.session_state.threshold_slider = st.session_state.binary_threshold_value
 if "threshold_number" not in st.session_state: st.session_state.threshold_number = st.session_state.binary_threshold_value
-if "saturation_value" not in st.session_state: st.session_state.saturation_value = 200 # ★変更: 120 -> 200
+if "saturation_value" not in st.session_state: st.session_state.saturation_value = 200
 if "saturation_slider" not in st.session_state: st.session_state.saturation_slider = st.session_state.saturation_value
 if "saturation_number" not in st.session_state: st.session_state.saturation_number = st.session_state.saturation_value
-if "brightness_value" not in st.session_state: st.session_state.brightness_value = 60 # 変更なし (元々60)
+if "brightness_value" not in st.session_state: st.session_state.brightness_value = 60
 if "brightness_slider" not in st.session_state: st.session_state.brightness_slider = st.session_state.brightness_value
 if "brightness_number" not in st.session_state: st.session_state.brightness_number = st.session_state.brightness_value
-if "hue_range_value" not in st.session_state: st.session_state.hue_range_value = (0, 15) # ★変更: (0, 20) -> (0, 15)
+if "hue_range_value" not in st.session_state: st.session_state.hue_range_value = (0, 25) # ★変更: (0, 15) -> (0, 25)
 if "hue_range_slider" not in st.session_state: st.session_state.hue_range_slider = st.session_state.hue_range_value
 if "hue_min_number" not in st.session_state: st.session_state.hue_min_number = st.session_state.hue_range_value[0]
 if "hue_max_number" not in st.session_state: st.session_state.hue_max_number = st.session_state.hue_range_value[1]
 if 'pil_image_original' not in st.session_state: st.session_state.pil_image_original = None
 if 'pil_image_to_process' not in st.session_state: st.session_state.pil_image_to_process = None
 if 'image_source_caption' not in st.session_state: st.session_state.image_source_caption = "アップロードされた画像"
-if 'contour_color_name' not in st.session_state: st.session_state.contour_color_name = "緑"
+if 'contour_color_name' not in st.session_state: st.session_state.contour_color_name = "青" # ★変更: "緑" -> "青"
 if 'cropper_box_color_name' not in st.session_state: st.session_state.cropper_box_color_name = '白'
 if 'detection_method' not in st.session_state: st.session_state.detection_method = "色で検出"
+if 'max_area_to_use' not in st.session_state: st.session_state.max_area_to_use = 100 # ★追加: 最大面積のデフォルト値
 
-# --- コールバック関数とヘルパー関数 (★st.rerun() を削除) ---
+# --- コールバック関数とヘルパー関数 ---
 def sync_threshold_from_slider():
     st.session_state.binary_threshold_value = st.session_state.threshold_slider
     st.session_state.threshold_number = st.session_state.binary_threshold_value
@@ -157,10 +158,9 @@ st.markdown("""
 """)
 st.markdown("---")
 
-# --- 画像読み込みロジック (設定は引き継がれる) ---
+# --- 画像読み込みロジック ---
 if uploaded_file_widget is not None:
     try:
-        # 新しい画像を読み込んでもパラメータはリセットしない
         uploaded_file_bytes = uploaded_file_widget.getvalue()
         pil_img = Image.open(io.BytesIO(uploaded_file_bytes))
         st.session_state.pil_image_original = pil_img
@@ -191,12 +191,15 @@ if st.session_state.pil_image_original is not None:
         CROP_BOX_COLORS = {"白":"#FFFFFF", "赤":"#FF4500", "黄":"#FFD700", "シアン":"#00FFFF"}
         selected_cropper_color_hex = CROP_BOX_COLORS[st.session_state.cropper_box_color_name]
         
+        # ★変更: デフォルトのトリミング枠を大きくする
         cropped_img = st_cropper(
             img_for_cropper, 
             realtime_update=True, 
             box_color=selected_cropper_color_hex, 
             aspect_ratio=None, 
-            key=cropper_key
+            key=cropper_key,
+            box_height=400, # 初期ボックスの高さを指定
+            box_width=400   # 初期ボックスの幅を指定
         )
         st.session_state.pil_image_to_process = cropped_img
     
@@ -285,7 +288,8 @@ if st.session_state.pil_image_original is not None:
     )
     st.sidebar.subheader("4. 輝点フィルタリング (面積)")
     min_area_to_use = st.sidebar.number_input('最小面積', min_value=1, max_value=10000, step=1, value=1)
-    max_area_to_use = st.sidebar.number_input('最大面積', min_value=1, max_value=100000, step=1, value=10000)
+    # ★変更: 最大面積のデフォルト値をセッションステートから読み込む
+    max_area_to_use = st.sidebar.number_input('最大面積', min_value=1, max_value=100000, step=1, key='max_area_to_use')
     
     st.sidebar.subheader("5. 表示設定")
     CONTOUR_COLORS = {"緑":"#28a745", "青":"#007bff", "赤":"#dc3545", "黄":"#ffc107", "シアン":"#17a2b8", "ピンク":"#e83e8c"}
@@ -342,7 +346,8 @@ if st.session_state.pil_image_original is not None:
             area = cv2.contourArea(contour)
             if min_area_to_use <= area <= max_area_to_use:
                 current_counted_spots += 1
-                cv2.drawContours(output_image_contours_display, [contour], -1, contour_color_bgr, 1) 
+                # ★変更: マーキングの線の太さを2にする
+                cv2.drawContours(output_image_contours_display, [contour], -1, contour_color_bgr, 2) 
     
     st.session_state.counted_spots_value = current_counted_spots 
     
