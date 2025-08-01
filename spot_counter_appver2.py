@@ -139,11 +139,11 @@ else:
 
 # --- メイン処理 ---
 if st.session_state.pil_image_original:
-    # --- サイドバーUI (★数値入力欄を復活) ---
+    # --- サイドバーUI ---
     st.sidebar.subheader("1. 輝点検出方法")
     st.sidebar.radio("検出方法", ("色で検出", "明るさで検出"), key='detection_method', horizontal=True)
     st.sidebar.markdown("---")
-    
+
     if st.session_state.detection_method == "明るさで検出":
         st.sidebar.subheader("2. 二値化")
         st.sidebar.slider('閾値', 0, 255, key='threshold_slider', on_change=sync_threshold_from_slider)
@@ -155,19 +155,22 @@ if st.session_state.pil_image_original:
         c1.number_input("下限", 0, 179, key='hue_min_number', on_change=sync_hue_from_number)
         c2.number_input("上限", 0, 179, key='hue_max_number', on_change=sync_hue_from_number)
 
-        st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation_slider', on_change=sync_saturation_from_slider, help="色の鮮やかさの最小値を指定します。")
+        # ★★★ 修正点: ヘルプテキストをより具体的に ★★★
+        st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation_slider', on_change=sync_saturation_from_slider,
+                          help="色の「鮮やかさ」の最小値を指定します。\n- **値を上げる**: よりハッキリした色のみを検出\n- **値を下げる**: グレーに近い、くすんだ色も検出")
         st.sidebar.number_input('（値）', 0, 255, key='saturation_number', on_change=sync_saturation_from_number, label_visibility="collapsed")
-        
-        st.sidebar.slider("明度(V)の下限", 0, 255, key='brightness_slider', on_change=sync_brightness_from_slider, help="色の明るさの最小値を指定します。")
+
+        st.sidebar.slider("明度(V)の下限", 0, 255, key='brightness_slider', on_change=sync_brightness_from_slider,
+                          help="色の「明るさ」の最小値を指定します。\n- **値を上げる**: より明るい輝点のみを検出\n- **値を下げる**: 暗い輝点も検出")
         st.sidebar.number_input('（値）', 0, 255, key='brightness_number', on_change=sync_brightness_from_number, label_visibility="collapsed")
-        
+
     st.sidebar.subheader("3. 形態学的処理")
     st.sidebar.select_slider('カーネルサイズ', options=[1, 3, 5, 7, 9], key='kernel_size', help="ノイズ除去や輝点分離の効果の強さを調整します。")
-    
+
     st.sidebar.subheader("4. 輝点フィルタリング (面積)")
     st.sidebar.number_input('最小面積', 1, 10000, key='min_area')
     st.sidebar.number_input('最大面積', 1, 100000, key='max_area')
-    
+
     st.sidebar.subheader("5. 表示設定")
     CONTOUR_COLORS = {"緑":"#28a745", "青":"#007bff", "赤":"#dc3545", "黄":"#ffc107", "シアン":"#17a2b8", "ピンク":"#e83e8c"}
     st.sidebar.radio("輝点マーキング色", list(CONTOUR_COLORS.keys()), key='contour_color', horizontal=True)
@@ -175,19 +178,19 @@ if st.session_state.pil_image_original:
 
     # --- メインエリアUI ---
     st.header("解析エリアの選択 (トリミング)")
-    
+
     # オリジナル画像に対して直接トリミングを行う
     st.session_state.pil_image_to_process = st_cropper(
         st.session_state.pil_image_original,
-        realtime_update=True, 
-        box_color='#007BFF', 
+        realtime_update=True,
+        box_color='#007BFF',
         aspect_ratio=None,
         key=f"cropper_{st.session_state.current_file_id}"
     )
-    
+
     st.markdown("---")
     st.header("解析結果の比較")
-    
+
     # --- 画像処理 ---
     try:
         pil_image_rgb = st.session_state.pil_image_to_process.convert("RGB")
@@ -195,7 +198,7 @@ if st.session_state.pil_image_original:
     except Exception as e:
         st.error(f"トリミング画像の変換に失敗: {e}")
         st.stop()
-    
+
     if st.session_state.detection_method == "明るさで検出":
         img_gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
         _, binary_img = cv2.threshold(img_gray, st.session_state.binary_threshold, 255, cv2.THRESH_BINARY)
@@ -204,13 +207,13 @@ if st.session_state.pil_image_original:
         lower = np.array([st.session_state.hue_range[0], st.session_state.saturation, st.session_state.brightness])
         upper = np.array([st.session_state.hue_range[1], 255, 255])
         binary_img = cv2.inRange(img_hsv, lower, upper)
-    
+
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (st.session_state.kernel_size, st.session_state.kernel_size))
     opened_img = cv2.morphologyEx(binary_img, cv2.MORPH_OPEN, kernel, iterations=1)
-    
+
     contours, _ = cv2.findContours(opened_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    count = 0 
+
+    count = 0
     output_image = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
     for c in contours:
         area = cv2.contourArea(c)
@@ -218,7 +221,7 @@ if st.session_state.pil_image_original:
             count += 1
             cv2.drawContours(output_image, [c], -1, contour_color_bgr, 2)
     st.session_state.counted_spots_value = count
-    
+
     # --- 結果表示 ---
     col1, col2 = st.columns(2)
     col1.subheader("元の画像 (トリミング後)")
@@ -226,7 +229,7 @@ if st.session_state.pil_image_original:
     col2.subheader("輝点検出とマーキング")
     col2.image(cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB), caption=f'検出輝点({count}個)', use_container_width=True)
 
-else: 
+else:
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
     st.session_state.counted_spots_value = "---"
 
