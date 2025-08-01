@@ -32,7 +32,8 @@ def display_count_in_sidebar(placeholder, count_value):
     placeholder.markdown(html_code, unsafe_allow_html=True)
 
 
-# --- セッションステートの初期化（シンプル版） ---
+# --- セッションステートの初期化 ---
+# 初回起動時にデフォルト値を設定
 defaults = {
     'current_file_id': None,
     'counted_spots_value': "---",
@@ -52,6 +53,52 @@ for key, value in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = value
 
+# スライダーと数値入力を同期させるためのウィジェット用キーも初期化
+if "threshold_slider" not in st.session_state: st.session_state.threshold_slider = st.session_state.binary_threshold
+if "threshold_number" not in st.session_state: st.session_state.threshold_number = st.session_state.binary_threshold
+if "saturation_slider" not in st.session_state: st.session_state.saturation_slider = st.session_state.saturation
+if "saturation_number" not in st.session_state: st.session_state.saturation_number = st.session_state.saturation
+if "brightness_slider" not in st.session_state: st.session_state.brightness_slider = st.session_state.brightness
+if "brightness_number" not in st.session_state: st.session_state.brightness_number = st.session_state.brightness
+if "hue_range_slider" not in st.session_state: st.session_state.hue_range_slider = st.session_state.hue_range
+if "hue_min_number" not in st.session_state: st.session_state.hue_min_number = st.session_state.hue_range[0]
+if "hue_max_number" not in st.session_state: st.session_state.hue_max_number = st.session_state.hue_range[1]
+
+
+# --- コールバック関数 (st.rerun()は含めない) ---
+def sync_threshold_from_slider():
+    st.session_state.binary_threshold = st.session_state.threshold_slider
+    st.session_state.threshold_number = st.session_state.threshold_slider
+
+def sync_threshold_from_number():
+    st.session_state.binary_threshold = st.session_state.threshold_number
+    st.session_state.threshold_slider = st.session_state.threshold_number
+
+def sync_saturation_from_slider():
+    st.session_state.saturation = st.session_state.saturation_slider
+    st.session_state.saturation_number = st.session_state.saturation_slider
+
+def sync_saturation_from_number():
+    st.session_state.saturation = st.session_state.saturation_number
+    st.session_state.saturation_slider = st.session_state.saturation_number
+
+def sync_brightness_from_slider():
+    st.session_state.brightness = st.session_state.brightness_slider
+    st.session_state.brightness_number = st.session_state.brightness_slider
+
+def sync_brightness_from_number():
+    st.session_state.brightness = st.session_state.brightness_number
+    st.session_state.brightness_slider = st.session_state.brightness_number
+
+def sync_hue_from_slider():
+    st.session_state.hue_range = st.session_state.hue_range_slider
+    st.session_state.hue_min_number, st.session_state.hue_max_number = st.session_state.hue_range_slider
+
+def sync_hue_from_number():
+    min_val, max_val = st.session_state.hue_min_number, st.session_state.hue_max_number
+    if min_val > max_val: min_val = max_val
+    st.session_state.hue_range = (min_val, max_val)
+    st.session_state.hue_range_slider = (min_val, max_val)
 
 def hex_to_bgr(hex_color):
     hex_color = hex_color.lstrip('#')
@@ -92,19 +139,27 @@ else:
 
 # --- メイン処理 ---
 if st.session_state.pil_image_original:
-    # --- サイドバーUI (★コールバックを廃止し、直接keyでセッションに紐付け) ---
+    # --- サイドバーUI (★数値入力欄を復活) ---
     st.sidebar.subheader("1. 輝点検出方法")
     st.sidebar.radio("検出方法", ("色で検出", "明るさで検出"), key='detection_method', horizontal=True)
     st.sidebar.markdown("---")
     
     if st.session_state.detection_method == "明るさで検出":
         st.sidebar.subheader("2. 二値化")
-        st.sidebar.slider('閾値', 0, 255, key='binary_threshold')
+        st.sidebar.slider('閾値', 0, 255, key='threshold_slider', on_change=sync_threshold_from_slider)
+        st.sidebar.number_input('（値）', 0, 255, key='threshold_number', on_change=sync_threshold_from_number, label_visibility="collapsed")
     else:
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
-        st.sidebar.slider("色相(H)の範囲", 0, 179, key='hue_range', help="検出したい輝点の色のおおまかな範囲を指定します。\n\n**代表的な色の目安 (0-179):**\n- **赤:** 0-15 と 165-179\n- **黄:** 20-35\n- **緑:** 35-85\n- **青:** 100-130")
-        st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation', help="色の鮮やかさの最小値を指定します。")
-        st.sidebar.slider("明度(V)の下限", 0, 255, key='brightness', help="色の明るさの最小値を指定します。")
+        st.sidebar.slider("色相(H)の範囲", 0, 179, key='hue_range_slider', on_change=sync_hue_from_slider, help="検出したい輝点の色のおおまかな範囲を指定します。\n\n**代表的な色の目安 (0-179):**\n- **赤:** 0-15 と 165-179\n- **黄:** 20-35\n- **緑:** 35-85\n- **青:** 100-130")
+        c1, c2 = st.sidebar.columns(2)
+        c1.number_input("下限", 0, 179, key='hue_min_number', on_change=sync_hue_from_number)
+        c2.number_input("上限", 0, 179, key='hue_max_number', on_change=sync_hue_from_number)
+
+        st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation_slider', on_change=sync_saturation_from_slider, help="色の鮮やかさの最小値を指定します。")
+        st.sidebar.number_input('（値）', 0, 255, key='saturation_number', on_change=sync_saturation_from_number, label_visibility="collapsed")
+        
+        st.sidebar.slider("明度(V)の下限", 0, 255, key='brightness_slider', on_change=sync_brightness_from_slider, help="色の明るさの最小値を指定します。")
+        st.sidebar.number_input('（値）', 0, 255, key='brightness_number', on_change=sync_brightness_from_number, label_visibility="collapsed")
         
     st.sidebar.subheader("3. 形態学的処理")
     st.sidebar.select_slider('カーネルサイズ', options=[1, 3, 5, 7, 9], key='kernel_size', help="ノイズ除去や輝点分離の効果の強さを調整します。")
