@@ -128,27 +128,22 @@ if st.session_state.pil_image_original:
         st.sidebar.slider('閾値', 0, 255, key='binary_threshold')
     else:
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
+        # ★★★ 修正点: 色の選択肢を4色に限定 ★★★
         HUE_PRESETS = {
             "赤": {"range": ((0, 10), (160, 179)), "color": "#FF4B4B"},
             "黄": {"range": (20, 35), "color": "#FFD700"},
             "緑": {"range": (35, 85), "color": "#28a745"},
-            "シアン": {"range": (85, 100), "color": "#00FFFF"},
             "青": {"range": (100, 130), "color": "#007bff"},
-            "マゼンタ": {"range": (130, 160), "color": "#E83E8C"},
         }
 
         st.sidebar.write("**輝点の色** (複数選択可)")
 
-        # ★★★ 修正点: 2列レイアウトでコンパクトに表示 ★★★
         cols = st.sidebar.columns(2)
         color_items = list(HUE_PRESETS.items())
         current_selections = []
 
         for i, (color_name, props) in enumerate(color_items):
-            # iを2で割った余りで、左右どちらのカラムに配置するかを決める
             col = cols[i % 2]
-            
-            # 各カラム内に、ラベルとチェックボックスを横並びにするためのコンテナを作成
             container = col.container()
             c1, c2 = container.columns([0.8, 0.2])
             c1.markdown(f'<div class="color-checkbox-container"><div class="color-label"><div class="color-box" style="background-color: {props["color"]};"></div><span>{color_name}</span></div></div>', unsafe_allow_html=True)
@@ -157,7 +152,6 @@ if st.session_state.pil_image_original:
             if is_selected:
                 current_selections.append(color_name)
         
-        # ユーザーの選択をセッションステートに反映
         st.session_state.selected_hue_names = current_selections
 
         st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation', help="色の「鮮やかさ」の最小値を指定します。")
