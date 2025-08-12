@@ -150,6 +150,10 @@ if st.session_state.get('pil_image_original'):
 
     with col2:
         st.subheader("輝点検出とマーキング")
+        
+        # ★★★ 診断コード ★★★
+        st.warning(f"DEBUG: 現在の彩度 = {st.session_state.saturation}")
+        
         try:
             img_np = np.array(pil_image_to_process.convert("RGB"))
         except Exception as e:
@@ -191,19 +195,9 @@ if st.session_state.get('pil_image_original'):
                 cv2.drawContours(output_image, [c], -1, contour_color_bgr, 2)
         
         st.image(cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB), use_container_width=True)
-        
-        # ★★★ 修正点: 検出輝点数の表示スタイルから枠線と影を削除 ★★★
         caption_html = f"""
-        <div style="
-            text-align: center; 
-            background-image: linear-gradient(45deg, #007bff, #E83E8C); 
-            padding: 10px;
-            border-radius: 10px; 
-            color: white; 
-            font-size: 20px; 
-            font-weight: bold; 
-            margin-top: 10px;
-        ">
+        <div style="text-align: center; background-image: linear-gradient(45deg, #007bff, #E83E8C); padding: 10px;
+            border-radius: 10px; color: white; font-size: 20px; font-weight: bold; margin-top: 10px;">
             検出輝点: {count}個
         </div>
         """
