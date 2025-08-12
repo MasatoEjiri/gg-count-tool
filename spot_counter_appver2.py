@@ -35,41 +35,19 @@ st.markdown("""
 # --- セッションステートの初期化 ---
 def initialize_session_state():
     defaults = {
-        'binary_threshold': 15, 'saturation': 200, 'brightness': 60,
+        'binary_threshold': 15, 'saturation_range': (0, 255), 'brightness': 60,
         'selected_hue_names': ["赤"], 'contour_color': "青",
         'detection_method': "色で検出", 'max_area': 10000,
         'min_area': 1, 'kernel_size': 1,
+        'use_watershed': False # ★Watershed機能のON/OFF
     }
     for key, value in defaults.items():
         st.session_state[key] = value
-
-    # ウィジェット連携用のキーも初期化
-    st.session_state.saturation_slider = st.session_state.saturation
-    st.session_state.saturation_number = st.session_state.saturation
-    st.session_state.brightness_slider = st.session_state.brightness
-    st.session_state.brightness_number = st.session_state.brightness
 
 def hex_to_bgr(hex_color):
     hex_color = hex_color.lstrip('#')
     h_len = len(hex_color)
     return tuple(int(hex_color[i:i + h_len // 3], 16) for i in range(0, h_len, h_len // 3))[::-1]
-
-# ★★★ 修正点: 彩度・明度のコールバック関数を復活 ★★★
-def sync_saturation_from_slider():
-    st.session_state.saturation = st.session_state.saturation_slider
-    st.session_state.saturation_number = st.session_state.saturation_slider
-
-def sync_saturation_from_number():
-    st.session_state.saturation = st.session_state.saturation_number
-    st.session_state.saturation_slider = st.session_state.saturation_number
-
-def sync_brightness_from_slider():
-    st.session_state.brightness = st.session_state.brightness_slider
-    st.session_state.brightness_number = st.session_state.brightness_slider
-
-def sync_brightness_from_number():
-    st.session_state.brightness = st.session_state.brightness_number
-    st.session_state.brightness_slider = st.session_state.brightness_number
 
 
 # --- UI ---
@@ -135,16 +113,14 @@ if st.session_state.get('pil_image_original'):
                 current_selections.append(color_name)
         st.session_state.selected_hue_names = current_selections
 
-        # ★★★ 修正点: 彩度・明度に数値入力欄を復活 ★★★
-        st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation_slider', on_change=sync_saturation_from_slider, help="色の「鮮やかさ」の最小値を指定します。")
-        st.sidebar.number_input('（値）', 0, 255, key='saturation_number', on_change=sync_saturation_from_number, label_visibility="collapsed")
-
-        st.sidebar.slider("明度(V)の下限", 0, 255, key='brightness_slider', on_change=sync_brightness_from_slider, help="色の「明るさ」の最小値を指定します。")
-        st.sidebar.number_input('（値）', 0, 255, key='brightness_number', on_change=sync_brightness_from_number, label_visibility="collapsed")
-
+        st.sidebar.slider("彩度(S)の範囲", 0, 255, key='saturation_range', help="色の「鮮やかさ」の範囲を指定します。白飛びした輝点を検出するには、範囲の下限を0に近づけてください。")
+        st.sidebar.slider("明度(V)の下限", 0, 255, key='brightness', help="色の「明るさ」の最小値を指定します。")
 
     st.sidebar.subheader("3. 形態学的処理")
     st.sidebar.select_slider('カーネルサイズ', options=[1, 3, 5, 7, 9], key='kernel_size', help="ノイズ除去や輝点分離の効果の強さを調整します。")
+    # ★★★ 修正点: WatershedアルゴリズムのON/OFFチェックボックスを追加 ★★★
+    st.sidebar.checkbox("Watershedによる分離を試す", key='use_watershed', help="輝点が密集している場合に、このチェックを入れると分離精度が向上することがあります。")
+
 
     st.sidebar.subheader("4. 輝点フィルタリング (面積)")
     st.sidebar.number_input('最小面積', 1, 10000, key='min_area')
@@ -193,9 +169,7 @@ if st.session_state.get('pil_image_original'):
             _, binary_img = cv2.threshold(img_gray, st.session_state.binary_threshold, 255, cv2.THRESH_BINARY)
         else:
             img_hsv = cv2.cvtColor(img_np, cv2.COLOR_RGB2HSV)
-            # ★★★ 修正点: 彩度の上限を255で固定 ★★★
-            sat_min = st.session_state.saturation
-            sat_max = 255
+            sat_min, sat_max = st.session_state.saturation_range
             val = st.session_state.brightness
             final_mask = np.zeros(img_hsv.shape[:2], dtype=np.uint8)
             if st.session_state.selected_hue_names:
@@ -215,7 +189,32 @@ if st.session_state.get('pil_image_original'):
 
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (st.session_state.kernel_size, st.session_state.kernel_size))
         opened_img = cv2.morphologyEx(binary_img, cv2.MORPH_OPEN, kernel, iterations=1)
-        contours, _ = cv2.findContours(opened_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # ★★★ 修正点: Watershedアルゴリズムのロジック ★★★
+        if st.session_state.use_watershed:
+            # 確実な背景
+            sure_bg = cv2.dilate(opened_img, kernel, iterations=3)
+            # 距離変換
+            dist_transform = cv2.distanceTransform(opened_img, cv2.DIST_L2, 5)
+            # 確実な前景
+            _, sure_fg = cv2.threshold(dist_transform, 0.5 * dist_transform.max(), 255, 0)
+            sure_fg = np.uint8(sure_fg)
+            # 不明領域
+            unknown = cv2.subtract(sure_bg, sure_fg)
+            # マーカー作成
+            _, markers = cv2.connectedComponents(sure_fg)
+            markers = markers + 1
+            markers[unknown == 255] = 0
+            # Watershed適用
+            markers = cv2.watershed(cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR), markers)
+            
+            # Watershedの結果から輪郭抽出用のバイナリ画像を作成
+            binary_for_contours = np.zeros_like(opened_img)
+            binary_for_contours[markers > 1] = 255 # ラベル1は背景なので除外
+        else:
+            binary_for_contours = opened_img
+
+        contours, _ = cv2.findContours(binary_for_contours, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         count = 0
         output_image = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
