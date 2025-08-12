@@ -143,64 +143,89 @@ if st.session_state.pil_image_original:
     st.sidebar.number_input('最大面積', 1, 100000, key='max_area')
 
     st.sidebar.subheader("5. 表示設定")
-    CONTOUR_COLORS = {"緑":"#28a745", "青":"#007bff", "赤":"#dc3545", "黄":"#ffc107", "シアン":"#17a2b8", "ピンク":"#e83e8c"}
+    CONTOUR_COLORS = {"緑":"#28a745", "青":"#007bff", "赤":"#dc3545", "黄":"#ffc107"}
     st.sidebar.radio("輝点マーキング色", list(CONTOUR_COLORS.keys()), key='contour_color', horizontal=True)
     contour_color_bgr = hex_to_bgr(CONTOUR_COLORS[st.session_state.contour_color])
 
-    # ★★★ 修正点: メインエリアのレイアウトを2分割に変更 ★★★
+    # --- メインエリアのレイアウト ---
     col1, col2 = st.columns(2)
 
     with col1:
         st.subheader("解析エリアの選択")
-        st.session_state.pil_image_to_process = st_cropper(
-            st.session_state.pil_image_original, realtime_update=True, box_color='#007BFF',
-            aspect_ratio=None, key=f"cropper_{st.session_state.current_file_id}"
+        
+        # ★★★ 修正点: 画像を縮小して表示し、座標を補正して切り抜く ★★★
+        img_original = st.session_state.pil_image_original.copy()
+        
+        # 1. 表示用の画像を準備（横幅600pxに縮小）
+        display_width = 600
+        scaling_factor = 1.0
+        img_for_display = img_original
+        if img_original.width > display_width:
+            scaling_factor = img_original.width / display_width
+            new_height = int(img_original.height / scaling_factor)
+            img_for_display = img_original.resize((display_width, new_height), Image.Resampling.LANCZOS)
+        
+        # 2. 縮小画像でクロッパーを使い、座標(box)を取得
+        box = st_cropper(
+            img_for_display, realtime_update=True, box_color='#007BFF',
+            aspect_ratio=None, return_type='box', key=f"cropper_{st.session_state.current_file_id}"
         )
 
-    # --- 画像処理 ---
-    try:
-        pil_image_rgb = st.session_state.pil_image_to_process.convert("RGB")
-        img_np = np.array(pil_image_rgb)
-    except Exception as e:
-        st.error(f"トリミング画像の変換に失敗: {e}")
-        st.stop()
+        # 3. 取得した座標を、元の画像のスケールに補正
+        left = int(box['left'] * scaling_factor)
+        top = int(box['top'] * scaling_factor)
+        right = int((box['left'] + box['width']) * scaling_factor)
+        bottom = int((box['top'] + box['height']) * scaling_factor)
 
-    if st.session_state.detection_method == "明るさで検出":
-        img_gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-        _, binary_img = cv2.threshold(img_gray, st.session_state.binary_threshold, 255, cv2.THRESH_BINARY)
-    else:
-        img_hsv = cv2.cvtColor(img_np, cv2.COLOR_RGB2HSV)
-        sat, val = st.session_state.saturation, st.session_state.brightness
-        final_mask = np.zeros(img_hsv.shape[:2], dtype=np.uint8)
-        if st.session_state.selected_hue_names:
-            for color_name in st.session_state.selected_hue_names:
-                hue_data = HUE_PRESETS[color_name]["range"]
-                if isinstance(hue_data[0], tuple):
-                    lower1, upper1 = np.array([hue_data[0][0], sat, val]), np.array([hue_data[0][1], 255, 255])
-                    mask1 = cv2.inRange(img_hsv, lower1, upper1)
-                    lower2, upper2 = np.array([hue_data[1][0], sat, val]), np.array([hue_data[1][1], 255, 255])
-                    mask2 = cv2.inRange(img_hsv, lower2, upper2)
-                    color_mask = cv2.bitwise_or(mask1, mask2)
-                else:
-                    lower, upper = np.array([hue_data[0], sat, val]), np.array([hue_data[1], 255, 255])
-                    color_mask = cv2.inRange(img_hsv, lower, upper)
-                final_mask = cv2.bitwise_or(final_mask, color_mask)
-        binary_img = final_mask
+        # 4. 補正した座標で、元の画像を切り抜く
+        st.session_state.pil_image_to_process = img_original.crop((left, top, right, bottom))
 
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (st.session_state.kernel_size, st.session_state.kernel_size))
-    opened_img = cv2.morphologyEx(binary_img, cv2.MORPH_OPEN, kernel, iterations=1)
-    contours, _ = cv2.findContours(opened_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    count = 0
-    output_image = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
-    for c in contours:
-        area = cv2.contourArea(c)
-        if st.session_state.min_area <= area <= st.session_state.max_area:
-            count += 1
-            cv2.drawContours(output_image, [c], -1, contour_color_bgr, 2)
-    
+    # --- 画像処理と結果表示 ---
     with col2:
         st.subheader("輝点検出とマーキング")
+        
+        try:
+            pil_image_rgb = st.session_state.pil_image_to_process.convert("RGB")
+            img_np = np.array(pil_image_rgb)
+        except Exception as e:
+            st.error(f"トリミング画像の変換に失敗: {e}")
+            st.stop()
+
+        if st.session_state.detection_method == "明るさで検出":
+            img_gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+            _, binary_img = cv2.threshold(img_gray, st.session_state.binary_threshold, 255, cv2.THRESH_BINARY)
+        else:
+            img_hsv = cv2.cvtColor(img_np, cv2.COLOR_RGB2HSV)
+            sat, val = st.session_state.saturation, st.session_state.brightness
+            final_mask = np.zeros(img_hsv.shape[:2], dtype=np.uint8)
+            if st.session_state.selected_hue_names:
+                for color_name in st.session_state.selected_hue_names:
+                    hue_data = HUE_PRESETS[color_name]["range"]
+                    if isinstance(hue_data[0], tuple):
+                        lower1, upper1 = np.array([hue_data[0][0], sat, val]), np.array([hue_data[0][1], 255, 255])
+                        mask1 = cv2.inRange(img_hsv, lower1, upper1)
+                        lower2, upper2 = np.array([hue_data[1][0], sat, val]), np.array([hue_data[1][1], 255, 255])
+                        mask2 = cv2.inRange(img_hsv, lower2, upper2)
+                        color_mask = cv2.bitwise_or(mask1, mask2)
+                    else:
+                        lower, upper = np.array([hue_data[0], sat, val]), np.array([hue_data[1], 255, 255])
+                        color_mask = cv2.inRange(img_hsv, lower, upper)
+                    final_mask = cv2.bitwise_or(final_mask, color_mask)
+            binary_img = final_mask
+
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (st.session_state.kernel_size, st.session_state.kernel_size))
+        opened_img = cv2.morphologyEx(binary_img, cv2.MORPH_OPEN, kernel, iterations=1)
+        contours, _ = cv2.findContours(opened_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        count = 0
+        output_image = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+        for c in contours:
+            area = cv2.contourArea(c)
+            if st.session_state.min_area <= area <= st.session_state.max_area:
+                count += 1
+                cv2.drawContours(output_image, [c], -1, contour_color_bgr, 2)
+        
         st.image(cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB), use_container_width=True)
         caption_html = f"""
         <div style="text-align: center; background-image: linear-gradient(45deg, #007bff, #E83E8C); padding: 10px;
