@@ -33,58 +33,25 @@ def display_count_in_sidebar(placeholder, count_value):
 
 
 # --- セッションステートの初期化 ---
-# 初回起動時にデフォルト値を設定
+# ★★★ 修正点: シンプルで堅牢な初期化方式に変更 ★★★
 defaults = {
     'current_file_id': None,
     'counted_spots_value': "---",
     'binary_threshold': 15,
-    'saturation': 200,
-    'brightness': 60,
-    'selected_hue_name': "赤", # ★変更：色相は名前で管理
+    'saturation': 200,          # デフォルト値を200に再設定
+    'brightness': 60,           # デフォルト値を60に再設定
+    'selected_hue_name': "赤",
     'pil_image_original': None,
     'pil_image_to_process': None,
     'contour_color': "青",
     'detection_method': "色で検出",
-    'max_area': 100,
+    'max_area': 1000,           # デフォルト値を1000に再設定
     'min_area': 1,
     'kernel_size': 1,
 }
 for key, value in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = value
-
-# スライダーと数値入力を同期させるためのウィジェット用キーも初期化
-if "threshold_slider" not in st.session_state: st.session_state.threshold_slider = st.session_state.binary_threshold
-if "threshold_number" not in st.session_state: st.session_state.threshold_number = st.session_state.binary_threshold
-if "saturation_slider" not in st.session_state: st.session_state.saturation_slider = st.session_state.saturation
-if "saturation_number" not in st.session_state: st.session_state.saturation_number = st.session_state.saturation
-if "brightness_slider" not in st.session_state: st.session_state.brightness_slider = st.session_state.brightness
-if "brightness_number" not in st.session_state: st.session_state.brightness_number = st.session_state.brightness
-
-# --- コールバック関数 (★色相(Hue)関連を削除) ---
-def sync_threshold_from_slider():
-    st.session_state.binary_threshold = st.session_state.threshold_slider
-    st.session_state.threshold_number = st.session_state.threshold_slider
-
-def sync_threshold_from_number():
-    st.session_state.binary_threshold = st.session_state.threshold_number
-    st.session_state.threshold_slider = st.session_state.threshold_number
-
-def sync_saturation_from_slider():
-    st.session_state.saturation = st.session_state.saturation_slider
-    st.session_state.saturation_number = st.session_state.saturation_slider
-
-def sync_saturation_from_number():
-    st.session_state.saturation = st.session_state.saturation_number
-    st.session_state.saturation_slider = st.session_state.saturation_number
-
-def sync_brightness_from_slider():
-    st.session_state.brightness = st.session_state.brightness_slider
-    st.session_state.brightness_number = st.session_state.brightness_slider
-
-def sync_brightness_from_number():
-    st.session_state.brightness = st.session_state.brightness_number
-    st.session_state.brightness_slider = st.session_state.brightness_number
 
 def hex_to_bgr(hex_color):
     hex_color = hex_color.lstrip('#')
@@ -125,35 +92,24 @@ else:
 
 # --- メイン処理 ---
 if st.session_state.pil_image_original:
-    # --- サイドバーUI ---
+    # --- サイドバーUI (コールバックを完全撤廃) ---
     st.sidebar.subheader("1. 輝点検出方法")
     st.sidebar.radio("検出方法", ("色で検出", "明るさで検出"), key='detection_method', horizontal=True)
     st.sidebar.markdown("---")
 
     if st.session_state.detection_method == "明るさで検出":
         st.sidebar.subheader("2. 二値化")
-        st.sidebar.slider('閾値', 0, 255, key='threshold_slider', on_change=sync_threshold_from_slider)
-        st.sidebar.number_input('（値）', 0, 255, key='threshold_number', on_change=sync_threshold_from_number, label_visibility="collapsed")
+        st.sidebar.slider('閾値', 0, 255, key='binary_threshold')
     else:
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
-        # ★★★ 修正点: 色相(H)のUIをセレクトボックスに変更 ★★★
         HUE_PRESETS = {
-            "赤": ((0, 10), (160, 179)),
-            "黄": (20, 35),
-            "緑": (35, 85),
-            "シアン": (85, 100),
-            "青": (100, 130),
-            "マゼンタ": (130, 160),
+            "赤": ((0, 10), (160, 179)), "黄": (20, 35), "緑": (35, 85),
+            "シアン": (85, 100), "青": (100, 130), "マゼンタ": (130, 160),
         }
-        st.selectbox("基準色を選択", HUE_PRESETS.keys(), key='selected_hue_name')
-
-        st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation_slider', on_change=sync_saturation_from_slider,
-                          help="色の「鮮やかさ」の最小値を指定します。\n- **値を上げる**: よりハッキリした色のみを検出\n- **値を下げる**: グレーに近い、くすんだ色も検出")
-        st.sidebar.number_input('（値）', 0, 255, key='saturation_number', on_change=sync_saturation_from_number, label_visibility="collapsed")
-
-        st.sidebar.slider("明度(V)の下限", 0, 255, key='brightness_slider', on_change=sync_brightness_from_slider,
-                          help="色の「明るさ」の最小値を指定します。\n- **値を上げる**: より明るい輝点のみを検出\n- **値を下げる**: 暗い輝点も検出")
-        st.sidebar.number_input('（値）', 0, 255, key='brightness_number', on_change=sync_brightness_from_number, label_visibility="collapsed")
+        # ★★★ 修正点: 基準色の選択をサイドバーに移動 ★★★
+        st.sidebar.selectbox("基準色を選択", HUE_PRESETS.keys(), key='selected_hue_name')
+        st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation', help="色の「鮮やかさ」の最小値を指定します。")
+        st.sidebar.slider("明度(V)の下限", 0, 255, key='brightness', help="色の「明るさ」の最小値を指定します。")
 
     st.sidebar.subheader("3. 形態学的処理")
     st.sidebar.select_slider('カーネルサイズ', options=[1, 3, 5, 7, 9], key='kernel_size', help="ノイズ除去や輝点分離の効果の強さを調整します。")
@@ -189,26 +145,19 @@ if st.session_state.pil_image_original:
         img_gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
         _, binary_img = cv2.threshold(img_gray, st.session_state.binary_threshold, 255, cv2.THRESH_BINARY)
     else:
-        # ★★★ 修正点: 選択された色名に応じて二値化処理を変更 ★★★
         img_hsv = cv2.cvtColor(img_np, cv2.COLOR_RGB2HSV)
         sat = st.session_state.saturation
         val = st.session_state.brightness
-        
         hue_range = HUE_PRESETS[st.session_state.selected_hue_name]
-        
-        if st.session_state.selected_hue_name == "赤":
-            # 赤は範囲が2つあるため、それぞれのマスクを作成して結合
+        if isinstance(hue_range[0], tuple): # 赤の場合
             lower1 = np.array([hue_range[0][0], sat, val])
             upper1 = np.array([hue_range[0][1], 255, 255])
             mask1 = cv2.inRange(img_hsv, lower1, upper1)
-            
             lower2 = np.array([hue_range[1][0], sat, val])
             upper2 = np.array([hue_range[1][1], 255, 255])
             mask2 = cv2.inRange(img_hsv, lower2, upper2)
-            
             binary_img = cv2.bitwise_or(mask1, mask2)
-        else:
-            # その他の色は範囲が1つ
+        else: # その他の色
             lower = np.array([hue_range[0], sat, val])
             upper = np.array([hue_range[1], 255, 255])
             binary_img = cv2.inRange(img_hsv, lower, upper)
