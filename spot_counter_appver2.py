@@ -33,22 +33,30 @@ st.markdown("""
 
 
 # --- セッションステートの初期化 ---
-def initialize_session_state():
-    defaults = {
-        'binary_threshold': 15, 'saturation': 200, 'brightness': 60,
-        'selected_hue_names': ["赤"], 'contour_color': "青",
-        'detection_method': "色で検出", 'max_area': 10000,
-        'min_area': 1, 'kernel_size': 1,
-        'use_image_enhancement': False
-    }
-    for key, value in defaults.items():
+# ★★★ 修正点: パラメータを永続化するため、初回のみ初期化するように変更 ★★★
+defaults = {
+    'binary_threshold': 15, 'saturation': 200, 'brightness': 60,
+    'selected_hue_names': ["赤"], 'contour_color': "青",
+    'detection_method': "色で検出", 'max_area': 10000,
+    'min_area': 1, 'kernel_size': 1,
+    'use_image_enhancement': False,
+    'pil_image_original': None,
+    'current_file_id': None,
+}
+for key, value in defaults.items():
+    if key not in st.session_state:
         st.session_state[key] = value
 
-    # ウィジェット連携用のキーも初期化
+# ウィジェット連携用のキーも初回のみ初期化
+if 'saturation_slider' not in st.session_state:
     st.session_state.saturation_slider = st.session_state.saturation
+if 'saturation_number' not in st.session_state:
     st.session_state.saturation_number = st.session_state.saturation
+if 'brightness_slider' not in st.session_state:
     st.session_state.brightness_slider = st.session_state.brightness
+if 'brightness_number' not in st.session_state:
     st.session_state.brightness_number = st.session_state.brightness
+
 
 def hex_to_bgr(hex_color):
     hex_color = hex_color.lstrip('#')
@@ -85,24 +93,24 @@ uploaded_file = st.sidebar.file_uploader("画像をアップロード", type=['t
 st.markdown('<h1 style="font-size: 2.5rem; margin-top: 0;">GG輝点解析ツール</h1>', unsafe_allow_html=True)
 st.markdown("""
 ### 使用方法
-1.  画像を左にアップロードしてください。（新しい画像をアップするとパラメータは初期化されます）
+1.  画像を左にアップロードしてください。
 2.  左の画像上で解析したいエリアをトリミングします。
 3.  サイドバーの各パラメータを調整すると、右の結果がリアルタイムで更新されます。
 """)
 st.markdown("---")
 
 # --- 画像読み込みロジック ---
+# ★★★ 修正点: パラメータをリセットする処理を削除 ★★★
 if uploaded_file:
     file_id = f"{uploaded_file.name}-{uploaded_file.size}"
-    if st.session_state.get('current_file_id') != file_id:
-        initialize_session_state()
+    # 常に新しい画像を読み込むが、パラメータはリセットしない
+    try:
+        bytes_data = uploaded_file.getvalue()
+        st.session_state['pil_image_original'] = Image.open(io.BytesIO(bytes_data))
         st.session_state['current_file_id'] = file_id
-        try:
-            bytes_data = uploaded_file.getvalue()
-            st.session_state['pil_image_original'] = Image.open(io.BytesIO(bytes_data))
-        except Exception as e:
-            st.sidebar.error(f"画像の読み込みに失敗: {e}")
-            st.session_state['pil_image_original'] = None
+    except Exception as e:
+        st.sidebar.error(f"画像の読み込みに失敗: {e}")
+        st.session_state['pil_image_original'] = None
 else:
     st.session_state['pil_image_original'] = None
     st.session_state['current_file_id'] = None
@@ -201,7 +209,7 @@ if st.session_state.get('pil_image_original'):
             # 2. 鮮明化
             blurred = cv2.GaussianBlur(img_gamma_corrected, (0, 0), 3)
             img_sharpened = cv2.addWeighted(img_gamma_corrected, 1.5, blurred, -0.5, 0)
-            # ★★★ 修正点: 明るさを10%向上 ★★★
+            # 3. 明るさ向上
             img_to_analyze = cv2.convertScaleAbs(img_sharpened, alpha=1.0, beta=10)
         
         img_to_analyze_rgb = cv2.cvtColor(img_to_analyze, cv2.COLOR_BGR2RGB)
