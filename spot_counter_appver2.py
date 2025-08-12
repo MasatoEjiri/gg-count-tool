@@ -39,6 +39,7 @@ def initialize_session_state():
         'selected_hue_names': ["赤"], 'contour_color': "青",
         'detection_method': "色で検出", 'max_area': 10000,
         'min_area': 1, 'kernel_size': 1,
+        'use_sharpening': False # ★鮮明化処理のON/OFF
     }
     for key, value in defaults.items():
         st.session_state[key] = value
@@ -54,7 +55,6 @@ def hex_to_bgr(hex_color):
     h_len = len(hex_color)
     return tuple(int(hex_color[i:i + h_len // 3], 16) for i in range(0, h_len, h_len // 3))[::-1]
 
-# ★★★ 修正点: 彩度・明度のコールバック関数を再設定 ★★★
 def sync_saturation_from_slider():
     st.session_state.saturation = st.session_state.saturation_slider
     st.session_state.saturation_number = st.session_state.saturation_slider
@@ -135,22 +135,23 @@ if st.session_state.get('pil_image_original'):
                 current_selections.append(color_name)
         st.session_state.selected_hue_names = current_selections
 
-        # ★★★ 修正点: 彩度・明度の数値入力欄を復活 ★★★
         st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation_slider', on_change=sync_saturation_from_slider, help="色の「鮮やかさ」の最小値を指定します。")
         st.sidebar.number_input('（値）', 0, 255, key='saturation_number', on_change=sync_saturation_from_number, label_visibility="collapsed")
 
         st.sidebar.slider("明度(V)の下限", 0, 255, key='brightness_slider', on_change=sync_brightness_from_slider, help="色の「明るさ」の最小値を指定します。")
         st.sidebar.number_input('（値）', 0, 255, key='brightness_number', on_change=sync_brightness_from_number, label_visibility="collapsed")
 
-
-    st.sidebar.subheader("3. 形態学的処理")
+    # ★★★ 修正点: 鮮明化処理のチェックボックスを追加 ★★★
+    st.sidebar.subheader("3. 前処理")
+    st.sidebar.checkbox("鮮明化処理を行う", key='use_sharpening', help="輝点の輪郭を強調し、検出精度が向上する場合があります。")
+    st.sidebar.subheader("4. 形態学的処理")
     st.sidebar.select_slider('カーネルサイズ', options=[1, 3, 5, 7, 9], key='kernel_size', help="ノイズ除去や輝点分離の効果の強さを調整します。")
 
-    st.sidebar.subheader("4. 輝点フィルタリング (面積)")
+    st.sidebar.subheader("5. 輝点フィルタリング (面積)")
     st.sidebar.number_input('最小面積', 1, 10000, key='min_area')
     st.sidebar.number_input('最大面積', 1, 100000, key='max_area')
 
-    st.sidebar.subheader("5. 表示設定")
+    st.sidebar.subheader("6. 表示設定")
     CONTOUR_COLORS = {"緑":"#28a745", "青":"#007bff", "赤":"#dc3545", "黄":"#ffc107"}
     st.sidebar.radio("輝点マーキング色", list(CONTOUR_COLORS.keys()), key='contour_color', horizontal=True)
     contour_color_bgr = hex_to_bgr(CONTOUR_COLORS[st.session_state.contour_color])
@@ -188,12 +189,21 @@ if st.session_state.get('pil_image_original'):
             st.error(f"トリミング画像の変換に失敗: {e}")
             st.stop()
 
+        # ★★★ 修正点: 鮮明化処理のロジック ★★★
+        img_to_analyze = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+        if st.session_state.use_sharpening:
+            # アンシャープマスキング
+            blurred = cv2.GaussianBlur(img_to_analyze, (0, 0), 3)
+            img_to_analyze = cv2.addWeighted(img_to_analyze, 1.5, blurred, -0.5, 0)
+        
+        # BGRからRGBに再変換して後続処理へ
+        img_to_analyze_rgb = cv2.cvtColor(img_to_analyze, cv2.COLOR_BGR2RGB)
+
         if st.session_state.detection_method == "明るさで検出":
-            img_gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+            img_gray = cv2.cvtColor(img_to_analyze_rgb, cv2.COLOR_RGB2GRAY)
             _, binary_img = cv2.threshold(img_gray, st.session_state.binary_threshold, 255, cv2.THRESH_BINARY)
         else:
-            img_hsv = cv2.cvtColor(img_np, cv2.COLOR_RGB2HSV)
-            # ★★★ 修正点: 彩度の上限を255で固定 ★★★
+            img_hsv = cv2.cvtColor(img_to_analyze_rgb, cv2.COLOR_RGB2HSV)
             sat_min = st.session_state.saturation
             sat_max = 255
             val = st.session_state.brightness
@@ -216,11 +226,10 @@ if st.session_state.get('pil_image_original'):
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (st.session_state.kernel_size, st.session_state.kernel_size))
         opened_img = cv2.morphologyEx(binary_img, cv2.MORPH_OPEN, kernel, iterations=1)
         
-        # ★★★ 修正点: Watershedを削除し、元の輪郭検出に戻す ★★★
         contours, _ = cv2.findContours(opened_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         count = 0
-        output_image = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+        output_image = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR) # マーキングは元の鮮明でない画像に行う
         for c in contours:
             area = cv2.contourArea(c)
             if st.session_state.min_area <= area <= st.session_state.max_area:
@@ -237,8 +246,13 @@ if st.session_state.get('pil_image_original'):
         st.markdown(caption_html, unsafe_allow_html=True)
     
     st.markdown("---")
-    st.subheader("元の画像 (トリミング後)")
-    st.image(img_np, use_container_width=True)
+    # 鮮明化処理ONの場合は、処理後の画像も表示して比較しやすくする
+    if st.session_state.use_sharpening:
+        st.subheader("元の画像 (鮮明化処理後)")
+        st.image(img_to_analyze_rgb, use_container_width=True)
+    else:
+        st.subheader("元の画像 (トリミング後)")
+        st.image(img_np, use_container_width=True)
 
 else:
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
