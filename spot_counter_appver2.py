@@ -190,9 +190,9 @@ if st.session_state.get('pil_image_original'):
 
         img_to_analyze = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
         if st.session_state.use_sharpening:
-            # ★★★ 修正点: 鮮明化処理を強化 ★★★
+            # ★★★ 修正点: 鮮明化処理を元の強度に戻す ★★★
             blurred = cv2.GaussianBlur(img_to_analyze, (0, 0), 3)
-            img_to_analyze = cv2.addWeighted(img_to_analyze, 2.5, blurred, -1.5, 0)
+            img_to_analyze = cv2.addWeighted(img_to_analyze, 1.5, blurred, -0.5, 0)
         
         img_to_analyze_rgb = cv2.cvtColor(img_to_analyze, cv2.COLOR_BGR2RGB)
 
