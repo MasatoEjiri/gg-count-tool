@@ -133,7 +133,6 @@ if st.session_state.get('pil_image_original'):
         st.subheader("解析エリアの選択")
         img_original = st.session_state.pil_image_original.copy()
         
-        # ★★★ 修正点: 表示画像の横幅を安定していた400pxに戻す ★★★
         display_width = 400
         scaling_factor = 1.0
         img_for_display = img_original
@@ -204,5 +203,10 @@ if st.session_state.get('pil_image_original'):
         </div>
         """
         st.markdown(caption_html, unsafe_allow_html=True)
+        
+        # ★★★ 修正点: 解析前の元画像（トリミング後）を結果の下に表示 ★★★
+        st.subheader("元の画像 (トリミング後)")
+        st.image(img_np, use_container_width=True)
+
 else:
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
