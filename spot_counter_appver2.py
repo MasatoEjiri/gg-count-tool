@@ -11,64 +11,37 @@ st.set_page_config(page_title="GG輝点解析ツール", layout="wide", initial_
 # --- カスタムCSS ---
 st.markdown("""
 <style>
-    /* メイン画面上部の余白を調整 */
-    .main .block-container {
-        padding-top: 1rem !important;
-    }
-    /* ファイルアップローダーのスタイルを点線で設定 */
+    .main .block-container { padding-top: 1rem !important; }
     section[data-testid="stFileUploaderDropzone"] {
         border: 3px dotted white !important;
         border-radius: 0.5rem !important;
         background-color: #495057 !important;
     }
-    /* カラーチェックボックス用のスタイル */
     .color-checkbox-container {
-        display: flex;
-        align-items: center;
-        padding: 5px 8px;
-        border-radius: 5px;
-        margin-bottom: 8px;
-        border: 1px solid #555;
+        display: flex; align-items: center; padding: 5px 8px;
+        border-radius: 5px; margin-bottom: 8px; border: 1px solid #555;
         background-color: #444;
     }
-    .color-label {
-        display: flex;
-        align-items: center;
-    }
-    .color-box {
-        width: 18px;
-        height: 18px;
-        margin-right: 8px;
-        border: 1px solid #fff;
-    }
+    .color-label { display: flex; align-items: center; }
+    .color-box { width: 18px; height: 18px; margin-right: 8px; border: 1px solid #fff; }
 </style>
 """, unsafe_allow_html=True)
 
-
 # --- セッションステートの初期化 ---
-defaults = {
-    'current_file_id': None,
-    'binary_threshold': 15,
-    'saturation': 200,
-    'brightness': 60,
-    'selected_hue_names': ["赤"],
-    'pil_image_original': None,
-    'pil_image_to_process': None,
-    'contour_color': "青",
-    'detection_method': "色で検出",
-    'max_area': 1000,
-    'min_area': 1,
-    'kernel_size': 1,
-}
-for key, value in defaults.items():
-    if key not in st.session_state:
+def initialize_session_state():
+    defaults = {
+        'binary_threshold': 15, 'saturation': 200, 'brightness': 60,
+        'selected_hue_names': ["赤"], 'contour_color': "青",
+        'detection_method': "色で検出", 'max_area': 1000,
+        'min_area': 1, 'kernel_size': 1,
+    }
+    for key, value in defaults.items():
         st.session_state[key] = value
 
 def hex_to_bgr(hex_color):
     hex_color = hex_color.lstrip('#')
     h_len = len(hex_color)
     return tuple(int(hex_color[i:i + h_len // 3], 16) for i in range(0, h_len, h_len // 3))[::-1]
-
 
 # --- UI ---
 st.sidebar.header("解析パラメータ設定")
@@ -77,30 +50,30 @@ uploaded_file = st.sidebar.file_uploader("画像をアップロード", type=['t
 st.markdown("<h1>GG輝点解析ツール</h1>", unsafe_allow_html=True)
 st.markdown("""
 ### 使用方法
-1.  画像を左にアップロードしてください。
+1.  画像を左にアップロードしてください。（新しい画像をアップするとパラメータは初期化されます）
 2.  左の画像上で解析したいエリアをトリミングします。
 3.  サイドバーの各パラメータを調整すると、右の結果がリアルタイムで更新されます。
 """)
 st.markdown("---")
 
-# --- 画像読み込みロジック ---
+# --- 画像読み込みロジック (★新しい画像がアップされたら、セッションを初期化) ---
 if uploaded_file:
     file_id = f"{uploaded_file.name}-{uploaded_file.size}"
-    if st.session_state.current_file_id != file_id:
-        st.session_state.current_file_id = file_id
+    if st.session_state.get('current_file_id') != file_id:
+        initialize_session_state()
+        st.session_state['current_file_id'] = file_id
         try:
             bytes_data = uploaded_file.getvalue()
-            st.session_state.pil_image_original = Image.open(io.BytesIO(bytes_data))
+            st.session_state['pil_image_original'] = Image.open(io.BytesIO(bytes_data))
         except Exception as e:
             st.sidebar.error(f"画像の読み込みに失敗: {e}")
-            st.session_state.pil_image_original = None
+            st.session_state['pil_image_original'] = None
 else:
-    st.session_state.pil_image_original = None
-    st.session_state.current_file_id = None
-
+    st.session_state['pil_image_original'] = None
+    st.session_state['current_file_id'] = None
 
 # --- メイン処理 ---
-if st.session_state.pil_image_original:
+if st.session_state.get('pil_image_original'):
     # --- サイドバーUI ---
     st.sidebar.subheader("1. 輝点検出方法")
     st.sidebar.radio("検出方法", ("色で検出", "明るさで検出"), key='detection_method', horizontal=True)
@@ -152,12 +125,10 @@ if st.session_state.pil_image_original:
 
     with col1:
         st.subheader("解析エリアの選択")
-        
-        # ★★★ 修正点: 画像を縮小して表示し、座標を補正して切り抜く ★★★
         img_original = st.session_state.pil_image_original.copy()
         
-        # 1. 表示用の画像を準備（横幅600pxに縮小）
-        display_width = 600
+        # ★★★ 修正点: 表示画像の横幅をさらに小さく設定 ★★★
+        display_width = 400
         scaling_factor = 1.0
         img_for_display = img_original
         if img_original.width > display_width:
@@ -165,29 +136,21 @@ if st.session_state.pil_image_original:
             new_height = int(img_original.height / scaling_factor)
             img_for_display = img_original.resize((display_width, new_height), Image.Resampling.LANCZOS)
         
-        # 2. 縮小画像でクロッパーを使い、座標(box)を取得
         box = st_cropper(
             img_for_display, realtime_update=True, box_color='#007BFF',
             aspect_ratio=None, return_type='box', key=f"cropper_{st.session_state.current_file_id}"
         )
 
-        # 3. 取得した座標を、元の画像のスケールに補正
         left = int(box['left'] * scaling_factor)
         top = int(box['top'] * scaling_factor)
         right = int((box['left'] + box['width']) * scaling_factor)
         bottom = int((box['top'] + box['height']) * scaling_factor)
+        pil_image_to_process = img_original.crop((left, top, right, bottom))
 
-        # 4. 補正した座標で、元の画像を切り抜く
-        st.session_state.pil_image_to_process = img_original.crop((left, top, right, bottom))
-
-
-    # --- 画像処理と結果表示 ---
     with col2:
         st.subheader("輝点検出とマーキング")
-        
         try:
-            pil_image_rgb = st.session_state.pil_image_to_process.convert("RGB")
-            img_np = np.array(pil_image_rgb)
+            img_np = np.array(pil_image_to_process.convert("RGB"))
         except Exception as e:
             st.error(f"トリミング画像の変換に失敗: {e}")
             st.stop()
@@ -234,6 +197,5 @@ if st.session_state.pil_image_original:
         </div>
         """
         st.markdown(caption_html, unsafe_allow_html=True)
-
 else:
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
