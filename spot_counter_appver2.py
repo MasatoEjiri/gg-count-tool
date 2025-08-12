@@ -30,7 +30,6 @@ st.markdown("""
 
 
 # --- セッションステートの初期化 ---
-# ★★★ 修正点: 最もシンプルで堅牢な初期化方式に変更 ★★★
 defaults = {
     'binary_threshold': 15, 'saturation': 200, 'brightness': 60,
     'selected_hue_names': ["赤"], 'contour_color': "青",
@@ -43,9 +42,10 @@ for key, value in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = value
 
+# ★★★ 修正点: 色コード変換ロジックのバグを修正 ★★★
 def hex_to_bgr(hex_color):
     hex_color = hex_color.lstrip('#')
-    return tuple(int(hex_color[i:i+2], 16) for i in (1, 3, 5))[::-1]
+    return tuple(int(hex_color[i:i+2], 16) for i in (4, 2, 0))
 
 def adjust_gamma(image, gamma=1.0):
     invGamma = 1.0 / gamma
@@ -107,7 +107,6 @@ if st.session_state.pil_image_original:
                     current_selections.append(color_name)
         st.session_state.selected_hue_names = current_selections
         
-        # ★★★ 修正点: 数値入力欄をなくし、スライダーのみに変更 ★★★
         st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation', help="色の「鮮やかさ」の最小値を指定します。")
         st.sidebar.slider("明度(V)の下限", 0, 255, key='brightness', help="色の「明るさ」の最小値を指定します。")
 
@@ -119,7 +118,8 @@ if st.session_state.pil_image_original:
     st.sidebar.number_input('最小面積', 1, 10000, key='min_area')
     st.sidebar.number_input('最大面積', 1, 100000, key='max_area')
     st.sidebar.subheader("6. 表示設定")
-    CONTOUR_COLORS = {"緑":"#28a745", "青":"#007bff", "赤":"#dc3545", "黄":"#ffc107"}
+    # ★★★ 修正点: 青を先頭にしてデフォルト選択と見た目を一致させる ★★★
+    CONTOUR_COLORS = {"青":"#007bff", "緑":"#28a745", "赤":"#dc3545", "黄":"#ffc107"}
     st.sidebar.radio("輝点マーキング色", list(CONTOUR_COLORS.keys()), key='contour_color', horizontal=True)
     contour_color_bgr = hex_to_bgr(CONTOUR_COLORS[st.session_state.contour_color])
 
