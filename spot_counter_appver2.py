@@ -39,7 +39,7 @@ def initialize_session_state():
         'selected_hue_names': ["赤"], 'contour_color': "青",
         'detection_method': "色で検出", 'max_area': 10000,
         'min_area': 1, 'kernel_size': 1,
-        'use_sharpening': False
+        'use_contrast': False # ★コントラスト処理のON/OFF
     }
     for key, value in defaults.items():
         st.session_state[key] = value
@@ -142,7 +142,8 @@ if st.session_state.get('pil_image_original'):
         st.sidebar.number_input('（値）', 0, 255, key='brightness_number', on_change=sync_brightness_from_number, label_visibility="collapsed")
 
     st.sidebar.subheader("3. 前処理")
-    st.sidebar.checkbox("鮮明化・コントラスト向上", key='use_sharpening', help="輝点の輪郭を強調し、検出精度が向上する場合があります。")
+    # ★★★ 修正点: チェックボックスのラベルとヘルプテキストを変更 ★★★
+    st.sidebar.checkbox("コントラストを向上 (40%)", key='use_contrast', help="輝点と背景の明暗差を強調し、検出精度が向上する場合があります。")
     st.sidebar.subheader("4. 形態学的処理")
     st.sidebar.select_slider('カーネルサイズ', options=[1, 3, 5, 7, 9], key='kernel_size', help="ノイズ除去や輝点分離の効果の強さを調整します。")
 
@@ -189,13 +190,10 @@ if st.session_state.get('pil_image_original'):
             st.stop()
 
         img_to_analyze = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
-        if st.session_state.use_sharpening:
-            # ★★★ 修正点: コントラストを20%向上させる処理を追加 ★★★
-            # 1. コントラスト向上
-            img_contrasted = cv2.addWeighted(img_to_analyze, 1.2, np.zeros(img_to_analyze.shape, img_to_analyze.dtype), 0, 0)
-            # 2. 鮮明化 (アンシャープマスキング)
-            blurred = cv2.GaussianBlur(img_contrasted, (0, 0), 3)
-            img_to_analyze = cv2.addWeighted(img_contrasted, 1.5, blurred, -0.5, 0)
+        # ★★★ 修正点: 鮮明化を削除し、コントラスト向上処理に変更 ★★★
+        if st.session_state.use_contrast:
+            # コントラストを1.4倍（40%増）に
+            img_to_analyze = cv2.addWeighted(img_to_analyze, 1.4, np.zeros(img_to_analyze.shape, img_to_analyze.dtype), 0, 0)
         
         img_to_analyze_rgb = cv2.cvtColor(img_to_analyze, cv2.COLOR_BGR2RGB)
 
@@ -246,8 +244,9 @@ if st.session_state.get('pil_image_original'):
         st.markdown(caption_html, unsafe_allow_html=True)
     
     st.markdown("---")
-    if st.session_state.use_sharpening:
-        st.subheader("元の画像 (前処理後)")
+    # ★★★ 修正点: 表示する画像のラベルを変更 ★★★
+    if st.session_state.use_contrast:
+        st.subheader("元の画像 (コントラスト向上後)")
         st.image(img_to_analyze_rgb, use_container_width=True)
     else:
         st.subheader("元の画像 (トリミング後)")
