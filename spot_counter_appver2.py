@@ -25,9 +25,9 @@ st.markdown("""
     .color-checkbox-container {
         display: flex;
         align-items: center;
-        padding: 5px 8px; /* パディングを調整 */
+        padding: 5px 8px;
         border-radius: 5px;
-        margin-bottom: 8px; /* マージンを調整 */
+        margin-bottom: 8px;
         border: 1px solid #555;
         background-color: #444;
     }
@@ -36,7 +36,7 @@ st.markdown("""
         align-items: center;
     }
     .color-box {
-        width: 18px;  /* サイズを少し調整 */
+        width: 18px;
         height: 18px;
         margin-right: 8px;
         border: 1px solid #fff;
@@ -45,24 +45,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# --- 結果表示関数 ---
-def display_count_in_sidebar(placeholder, count_value):
-    label_text = "【解析結果】輝点数"
-    value_text = str(count_value)
-    bg="#495057"; lf="white"; vf="white"
-    html_code = f"""
-    <div style="border-radius:8px; padding:15px; text-align:center; background-color:{bg}; margin-bottom:15px; color:{lf};">
-        <p style="font-size:16px; margin-bottom:5px; font-weight:bold;">{label_text}</p>
-        <p style="font-size:48px; font-weight:bold; margin-top:0px; color:{vf}; line-height:1.1;">{value_text}</p>
-    </div>
-    """
-    placeholder.markdown(html_code, unsafe_allow_html=True)
-
-
 # --- セッションステートの初期化 ---
 defaults = {
     'current_file_id': None,
-    'counted_spots_value': "---",
     'binary_threshold': 15,
     'saturation': 200,
     'brightness': 60,
@@ -86,7 +71,6 @@ def hex_to_bgr(hex_color):
 
 
 # --- UI ---
-result_placeholder_sidebar = st.sidebar.empty()
 st.sidebar.header("解析パラメータ設定")
 uploaded_file = st.sidebar.file_uploader("画像をアップロード", type=['tif', 'tiff', 'png', 'jpg', 'jpeg'])
 
@@ -94,9 +78,8 @@ st.markdown("<h1>GG輝点解析ツール</h1>", unsafe_allow_html=True)
 st.markdown("""
 ### 使用方法
 1.  画像を左にアップロードしてください。
-2.  メイン画面で解析したいエリアをトリミングします。
-3.  サイドバーの各パラメータを調整します。
-4.  すべての操作は解析結果に即時反映されます。
+2.  左の画像上で解析したいエリアをトリミングします。
+3.  サイドバーの各パラメータを調整すると、右の結果がリアルタイムで更新されます。
 """)
 st.markdown("---")
 
@@ -128,16 +111,13 @@ if st.session_state.pil_image_original:
         st.sidebar.slider('閾値', 0, 255, key='binary_threshold')
     else:
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
-        # ★★★ 修正点: 色の選択肢を4色に限定 ★★★
         HUE_PRESETS = {
             "赤": {"range": ((0, 10), (160, 179)), "color": "#FF4B4B"},
             "黄": {"range": (20, 35), "color": "#FFD700"},
             "緑": {"range": (35, 85), "color": "#28a745"},
             "青": {"range": (100, 130), "color": "#007bff"},
         }
-
         st.sidebar.write("**輝点の色** (複数選択可)")
-
         cols = st.sidebar.columns(2)
         color_items = list(HUE_PRESETS.items())
         current_selections = []
@@ -148,10 +128,8 @@ if st.session_state.pil_image_original:
             c1, c2 = container.columns([0.8, 0.2])
             c1.markdown(f'<div class="color-checkbox-container"><div class="color-label"><div class="color-box" style="background-color: {props["color"]};"></div><span>{color_name}</span></div></div>', unsafe_allow_html=True)
             is_selected = c2.checkbox("", value=(color_name in st.session_state.selected_hue_names), key=f"cb_{color_name}", label_visibility="collapsed")
-            
             if is_selected:
                 current_selections.append(color_name)
-        
         st.session_state.selected_hue_names = current_selections
 
         st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation', help="色の「鮮やかさ」の最小値を指定します。")
@@ -169,15 +147,15 @@ if st.session_state.pil_image_original:
     st.sidebar.radio("輝点マーキング色", list(CONTOUR_COLORS.keys()), key='contour_color', horizontal=True)
     contour_color_bgr = hex_to_bgr(CONTOUR_COLORS[st.session_state.contour_color])
 
-    # --- メインエリアUI ---
-    st.header("解析エリアの選択 (トリミング)")
-    st.session_state.pil_image_to_process = st_cropper(
-        st.session_state.pil_image_original, realtime_update=True, box_color='#007BFF',
-        aspect_ratio=None, key=f"cropper_{st.session_state.current_file_id}"
-    )
+    # ★★★ 修正点: メインエリアのレイアウトを2分割に変更 ★★★
+    col1, col2 = st.columns(2)
 
-    st.markdown("---")
-    st.header("解析結果の比較")
+    with col1:
+        st.subheader("解析エリアの選択")
+        st.session_state.pil_image_to_process = st_cropper(
+            st.session_state.pil_image_original, realtime_update=True, box_color='#007BFF',
+            aspect_ratio=None, key=f"cropper_{st.session_state.current_file_id}"
+        )
 
     # --- 画像処理 ---
     try:
@@ -192,20 +170,18 @@ if st.session_state.pil_image_original:
         _, binary_img = cv2.threshold(img_gray, st.session_state.binary_threshold, 255, cv2.THRESH_BINARY)
     else:
         img_hsv = cv2.cvtColor(img_np, cv2.COLOR_RGB2HSV)
-        sat = st.session_state.saturation
-        val = st.session_state.brightness
-        
+        sat, val = st.session_state.saturation, st.session_state.brightness
         final_mask = np.zeros(img_hsv.shape[:2], dtype=np.uint8)
         if st.session_state.selected_hue_names:
             for color_name in st.session_state.selected_hue_names:
                 hue_data = HUE_PRESETS[color_name]["range"]
-                if isinstance(hue_data[0], tuple): # 赤の場合
+                if isinstance(hue_data[0], tuple):
                     lower1, upper1 = np.array([hue_data[0][0], sat, val]), np.array([hue_data[0][1], 255, 255])
                     mask1 = cv2.inRange(img_hsv, lower1, upper1)
                     lower2, upper2 = np.array([hue_data[1][0], sat, val]), np.array([hue_data[1][1], 255, 255])
                     mask2 = cv2.inRange(img_hsv, lower2, upper2)
                     color_mask = cv2.bitwise_or(mask1, mask2)
-                else: # その他の色
+                else:
                     lower, upper = np.array([hue_data[0], sat, val]), np.array([hue_data[1], 255, 255])
                     color_mask = cv2.inRange(img_hsv, lower, upper)
                 final_mask = cv2.bitwise_or(final_mask, color_mask)
@@ -213,7 +189,6 @@ if st.session_state.pil_image_original:
 
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (st.session_state.kernel_size, st.session_state.kernel_size))
     opened_img = cv2.morphologyEx(binary_img, cv2.MORPH_OPEN, kernel, iterations=1)
-
     contours, _ = cv2.findContours(opened_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     count = 0
@@ -223,25 +198,17 @@ if st.session_state.pil_image_original:
         if st.session_state.min_area <= area <= st.session_state.max_area:
             count += 1
             cv2.drawContours(output_image, [c], -1, contour_color_bgr, 2)
-    st.session_state.counted_spots_value = count
-
-    # --- 結果表示 ---
-    col1, col2 = st.columns(2)
-    col1.subheader("元の画像 (トリミング後)")
-    col1.image(img_np, use_container_width=True)
-    col2.subheader("輝点検出とマーキング")
-    col2.image(cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB), use_container_width=True)
-
-    caption_html = f"""
-    <div style="text-align: center; background-image: linear-gradient(45deg, #007bff, #E83E8C); padding: 10px;
-        border-radius: 10px; color: white; font-size: 20px; font-weight: bold; margin-top: 10px;">
-        検出輝点: {count}個
-    </div>
-    """
-    col2.markdown(caption_html, unsafe_allow_html=True)
+    
+    with col2:
+        st.subheader("輝点検出とマーキング")
+        st.image(cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB), use_container_width=True)
+        caption_html = f"""
+        <div style="text-align: center; background-image: linear-gradient(45deg, #007bff, #E83E8C); padding: 10px;
+            border-radius: 10px; color: white; font-size: 20px; font-weight: bold; margin-top: 10px;">
+            検出輝点: {count}個
+        </div>
+        """
+        st.markdown(caption_html, unsafe_allow_html=True)
 
 else:
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
-    st.session_state.counted_spots_value = "---"
-
-display_count_in_sidebar(result_placeholder_sidebar, st.session_state.counted_spots_value)
