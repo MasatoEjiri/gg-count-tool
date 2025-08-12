@@ -8,11 +8,34 @@ from streamlit_cropper import st_cropper
 # ページ設定 (一番最初に呼び出す)
 st.set_page_config(page_title="GG輝点解析ツール", layout="wide", initial_sidebar_state="expanded")
 
-# メイン画面上部の余白を調整
+# --- カスタムCSS ---
 st.markdown("""
 <style>
+    /* メイン画面上部の余白を調整 */
     .main .block-container {
         padding-top: 1rem !important;
+    }
+    /* ★★★ 修正点: ファイルアップローダーのスタイルを点線で再設定 ★★★ */
+    section[data-testid="stFileUploaderDropzone"] {
+        border: 3px dotted white !important;
+        border-radius: 0.5rem !important;
+        background-color: #495057 !important;
+    }
+    /* カラーチェックボックス用のスタイル */
+    .color-checkbox {
+        display: flex;
+        align-items: center;
+        padding: 5px;
+        border-radius: 5px;
+        margin-bottom: 5px;
+        border: 1px solid #555;
+        background-color: #444;
+    }
+    .color-box {
+        width: 20px;
+        height: 20px;
+        margin-right: 10px;
+        border: 1px solid #fff;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -33,19 +56,18 @@ def display_count_in_sidebar(placeholder, count_value):
 
 
 # --- セッションステートの初期化 ---
-# 初回起動時にデフォルト値を設定
 defaults = {
     'current_file_id': None,
     'counted_spots_value': "---",
     'binary_threshold': 15,
-    'saturation': 200,          # ★デフォルト値を200に設定
-    'brightness': 60,           # ★デフォルト値を60に設定
-    'selected_hue_names': ["赤"], # ★複数選択可能なリスト形式に変更
+    'saturation': 200,
+    'brightness': 60,
+    'selected_hue_names': ["赤"],
     'pil_image_original': None,
     'pil_image_to_process': None,
     'contour_color': "青",
     'detection_method': "色で検出",
-    'max_area': 1000,           # ★デフォルト値を1000に設定
+    'max_area': 1000,
     'min_area': 1,
     'kernel_size': 1,
 }
@@ -102,12 +124,34 @@ if st.session_state.pil_image_original:
         st.sidebar.slider('閾値', 0, 255, key='binary_threshold')
     else:
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
+        # ★★★ 修正点: カラーボックス付きのチェックボックスUI ★★★
         HUE_PRESETS = {
-            "赤": ((0, 10), (160, 179)), "黄": (20, 35), "緑": (35, 85),
-            "シアン": (85, 100), "青": (100, 130), "マゼンタ": (130, 160),
+            "赤": {"range": ((0, 10), (160, 179)), "color": "#FF4B4B"},
+            "黄": {"range": (20, 35), "color": "#FFD700"},
+            "緑": {"range": (35, 85), "color": "#28a745"},
+            "シアン": {"range": (85, 100), "color": "#00FFFF"},
+            "青": {"range": (100, 130), "color": "#007bff"},
+            "マゼンタ": {"range": (130, 160), "color": "#E83E8C"},
         }
-        # ★★★ 修正点: UIを複数選択可能なマルチセレクトに変更 ★★★
-        st.sidebar.multiselect("輝点の色", HUE_PRESETS.keys(), key='selected_hue_names')
+
+        st.sidebar.write("**輝点の色** (複数選択可)")
+        selected_colors = []
+        for color_name, props in HUE_PRESETS.items():
+            st.markdown(
+                f"""
+                <div class="color-checkbox">
+                    <div class="color-box" style="background-color: {props['color']};"></div>
+                    <span>{color_name}</span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            # st.checkboxのラベルを非表示にし、横に配置
+            if st.checkbox(f"select_{color_name}", value=color_name in st.session_state.selected_hue_names, label_visibility="collapsed"):
+                if color_name not in selected_colors:
+                    selected_colors.append(color_name)
+        st.session_state.selected_hue_names = selected_colors
+
         st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation', help="色の「鮮やかさ」の最小値を指定します。")
         st.sidebar.slider("明度(V)の下限", 0, 255, key='brightness', help="色の「明るさ」の最小値を指定します。")
 
@@ -149,21 +193,20 @@ if st.session_state.pil_image_original:
         sat = st.session_state.saturation
         val = st.session_state.brightness
         
-        # ★★★ 修正点: 複数選択された色のマスクを合成 ★★★
         final_mask = np.zeros(img_hsv.shape[:2], dtype=np.uint8)
         for color_name in st.session_state.selected_hue_names:
-            hue_range = HUE_PRESETS[color_name]
-            if isinstance(hue_range[0], tuple): # 赤の場合
-                lower1 = np.array([hue_range[0][0], sat, val])
-                upper1 = np.array([hue_range[0][1], 255, 255])
+            hue_data = HUE_PRESETS[color_name]["range"]
+            if isinstance(hue_data[0], tuple): # 赤の場合
+                lower1 = np.array([hue_data[0][0], sat, val])
+                upper1 = np.array([hue_data[0][1], 255, 255])
                 mask1 = cv2.inRange(img_hsv, lower1, upper1)
-                lower2 = np.array([hue_range[1][0], sat, val])
-                upper2 = np.array([hue_range[1][1], 255, 255])
+                lower2 = np.array([hue_data[1][0], sat, val])
+                upper2 = np.array([hue_data[1][1], 255, 255])
                 mask2 = cv2.inRange(img_hsv, lower2, upper2)
                 color_mask = cv2.bitwise_or(mask1, mask2)
             else: # その他の色
-                lower = np.array([hue_range[0], sat, val])
-                upper = np.array([hue_range[1], 255, 255])
+                lower = np.array([hue_data[0], sat, val])
+                upper = np.array([hue_data[1], 255, 255])
                 color_mask = cv2.inRange(img_hsv, lower, upper)
             final_mask = cv2.bitwise_or(final_mask, color_mask)
         binary_img = final_mask
@@ -187,7 +230,24 @@ if st.session_state.pil_image_original:
     col1.subheader("元の画像 (トリミング後)")
     col1.image(img_np, use_container_width=True)
     col2.subheader("輝点検出とマーキング")
-    col2.image(cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB), caption=f'検出輝点({count}個)', use_container_width=True)
+    col2.image(cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB), use_container_width=True)
+
+    # ★★★ 修正点: 検出数のキャプションを派手にする ★★★
+    caption_html = f"""
+    <div style="
+        text-align: center;
+        background-image: linear-gradient(45deg, #007bff, #E83E8C);
+        padding: 10px;
+        border-radius: 10px;
+        color: white;
+        font-size: 20px;
+        font-weight: bold;
+        margin-top: 10px;
+    ">
+        検出輝点: {count}個
+    </div>
+    """
+    col2.markdown(caption_html, unsafe_allow_html=True)
 
 else:
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
