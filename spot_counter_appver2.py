@@ -31,10 +31,15 @@ st.markdown("""
 # --- セッションステートの初期化 ---
 def initialize_session_state():
     defaults = {
-        'binary_threshold': 15, 'saturation': 200, 'brightness': 60,
-        'selected_hue_names': ["赤"], 'contour_color': "青",
-        'detection_method': "色で検出", 'max_area': 1000,
-        'min_area': 1, 'kernel_size': 1,
+        'binary_threshold': 15,
+        'saturation_range': (0, 255), # ★★★ 修正点: 彩度を範囲で管理 ★★★
+        'brightness': 60,
+        'selected_hue_names': ["赤"],
+        'contour_color': "青",
+        'detection_method': "色で検出",
+        'max_area': 1000,
+        'min_area': 1,
+        'kernel_size': 1,
     }
     for key, value in defaults.items():
         st.session_state[key] = value
@@ -108,7 +113,8 @@ if st.session_state.get('pil_image_original'):
                 current_selections.append(color_name)
         st.session_state.selected_hue_names = current_selections
 
-        st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation', help="色の「鮮やかさ」の最小値を指定します。")
+        # ★★★ 修正点: 彩度(S)を範囲スライダーに変更 ★★★
+        st.sidebar.slider("彩度(S)の範囲", 0, 255, key='saturation_range', help="色の「鮮やかさ」の範囲を指定します。白飛びした輝点を検出するには、範囲の下限を0に近づけてください。")
         st.sidebar.slider("明度(V)の下限", 0, 255, key='brightness', help="色の「明るさ」の最小値を指定します。")
 
     st.sidebar.subheader("3. 形態学的処理")
@@ -150,10 +156,6 @@ if st.session_state.get('pil_image_original'):
 
     with col2:
         st.subheader("輝点検出とマーキング")
-        
-        # ★★★ 診断コード ★★★
-        st.warning(f"DEBUG: 現在の彩度 = {st.session_state.saturation}")
-        
         try:
             img_np = np.array(pil_image_to_process.convert("RGB"))
         except Exception as e:
@@ -165,19 +167,22 @@ if st.session_state.get('pil_image_original'):
             _, binary_img = cv2.threshold(img_gray, st.session_state.binary_threshold, 255, cv2.THRESH_BINARY)
         else:
             img_hsv = cv2.cvtColor(img_np, cv2.COLOR_RGB2HSV)
-            sat, val = st.session_state.saturation, st.session_state.brightness
+            # ★★★ 修正点: 彩度の範囲を使ってマスクを生成 ★★★
+            sat_min, sat_max = st.session_state.saturation_range
+            val = st.session_state.brightness
+            
             final_mask = np.zeros(img_hsv.shape[:2], dtype=np.uint8)
             if st.session_state.selected_hue_names:
                 for color_name in st.session_state.selected_hue_names:
                     hue_data = HUE_PRESETS[color_name]["range"]
                     if isinstance(hue_data[0], tuple):
-                        lower1, upper1 = np.array([hue_data[0][0], sat, val]), np.array([hue_data[0][1], 255, 255])
+                        lower1, upper1 = np.array([hue_data[0][0], sat_min, val]), np.array([hue_data[0][1], sat_max, 255])
                         mask1 = cv2.inRange(img_hsv, lower1, upper1)
-                        lower2, upper2 = np.array([hue_data[1][0], sat, val]), np.array([hue_data[1][1], 255, 255])
+                        lower2, upper2 = np.array([hue_data[1][0], sat_min, val]), np.array([hue_data[1][1], sat_max, 255])
                         mask2 = cv2.inRange(img_hsv, lower2, upper2)
                         color_mask = cv2.bitwise_or(mask1, mask2)
                     else:
-                        lower, upper = np.array([hue_data[0], sat, val]), np.array([hue_data[1], 255, 255])
+                        lower, upper = np.array([hue_data[0], sat_min, val]), np.array([hue_data[1], sat_max, 255])
                         color_mask = cv2.inRange(img_hsv, lower, upper)
                     final_mask = cv2.bitwise_or(final_mask, color_mask)
             binary_img = final_mask
