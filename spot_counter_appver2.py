@@ -33,19 +33,19 @@ def display_count_in_sidebar(placeholder, count_value):
 
 
 # --- セッションステートの初期化 ---
-# ★★★ 修正点: シンプルで堅牢な初期化方式に変更 ★★★
+# 初回起動時にデフォルト値を設定
 defaults = {
     'current_file_id': None,
     'counted_spots_value': "---",
     'binary_threshold': 15,
-    'saturation': 200,          # デフォルト値を200に再設定
-    'brightness': 60,           # デフォルト値を60に再設定
-    'selected_hue_name': "赤",
+    'saturation': 200,          # ★デフォルト値を200に設定
+    'brightness': 60,           # ★デフォルト値を60に設定
+    'selected_hue_names': ["赤"], # ★複数選択可能なリスト形式に変更
     'pil_image_original': None,
     'pil_image_to_process': None,
     'contour_color': "青",
     'detection_method': "色で検出",
-    'max_area': 1000,           # デフォルト値を1000に再設定
+    'max_area': 1000,           # ★デフォルト値を1000に設定
     'min_area': 1,
     'kernel_size': 1,
 }
@@ -92,7 +92,7 @@ else:
 
 # --- メイン処理 ---
 if st.session_state.pil_image_original:
-    # --- サイドバーUI (コールバックを完全撤廃) ---
+    # --- サイドバーUI ---
     st.sidebar.subheader("1. 輝点検出方法")
     st.sidebar.radio("検出方法", ("色で検出", "明るさで検出"), key='detection_method', horizontal=True)
     st.sidebar.markdown("---")
@@ -106,8 +106,8 @@ if st.session_state.pil_image_original:
             "赤": ((0, 10), (160, 179)), "黄": (20, 35), "緑": (35, 85),
             "シアン": (85, 100), "青": (100, 130), "マゼンタ": (130, 160),
         }
-        # ★★★ 修正点: 基準色の選択をサイドバーに移動 ★★★
-        st.sidebar.selectbox("基準色を選択", HUE_PRESETS.keys(), key='selected_hue_name')
+        # ★★★ 修正点: UIを複数選択可能なマルチセレクトに変更 ★★★
+        st.sidebar.multiselect("輝点の色", HUE_PRESETS.keys(), key='selected_hue_names')
         st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation', help="色の「鮮やかさ」の最小値を指定します。")
         st.sidebar.slider("明度(V)の下限", 0, 255, key='brightness', help="色の「明るさ」の最小値を指定します。")
 
@@ -148,19 +148,25 @@ if st.session_state.pil_image_original:
         img_hsv = cv2.cvtColor(img_np, cv2.COLOR_RGB2HSV)
         sat = st.session_state.saturation
         val = st.session_state.brightness
-        hue_range = HUE_PRESETS[st.session_state.selected_hue_name]
-        if isinstance(hue_range[0], tuple): # 赤の場合
-            lower1 = np.array([hue_range[0][0], sat, val])
-            upper1 = np.array([hue_range[0][1], 255, 255])
-            mask1 = cv2.inRange(img_hsv, lower1, upper1)
-            lower2 = np.array([hue_range[1][0], sat, val])
-            upper2 = np.array([hue_range[1][1], 255, 255])
-            mask2 = cv2.inRange(img_hsv, lower2, upper2)
-            binary_img = cv2.bitwise_or(mask1, mask2)
-        else: # その他の色
-            lower = np.array([hue_range[0], sat, val])
-            upper = np.array([hue_range[1], 255, 255])
-            binary_img = cv2.inRange(img_hsv, lower, upper)
+        
+        # ★★★ 修正点: 複数選択された色のマスクを合成 ★★★
+        final_mask = np.zeros(img_hsv.shape[:2], dtype=np.uint8)
+        for color_name in st.session_state.selected_hue_names:
+            hue_range = HUE_PRESETS[color_name]
+            if isinstance(hue_range[0], tuple): # 赤の場合
+                lower1 = np.array([hue_range[0][0], sat, val])
+                upper1 = np.array([hue_range[0][1], 255, 255])
+                mask1 = cv2.inRange(img_hsv, lower1, upper1)
+                lower2 = np.array([hue_range[1][0], sat, val])
+                upper2 = np.array([hue_range[1][1], 255, 255])
+                mask2 = cv2.inRange(img_hsv, lower2, upper2)
+                color_mask = cv2.bitwise_or(mask1, mask2)
+            else: # その他の色
+                lower = np.array([hue_range[0], sat, val])
+                upper = np.array([hue_range[1], 255, 255])
+                color_mask = cv2.inRange(img_hsv, lower, upper)
+            final_mask = cv2.bitwise_or(final_mask, color_mask)
+        binary_img = final_mask
 
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (st.session_state.kernel_size, st.session_state.kernel_size))
     opened_img = cv2.morphologyEx(binary_img, cv2.MORPH_OPEN, kernel, iterations=1)
