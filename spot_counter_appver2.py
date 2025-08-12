@@ -127,6 +127,7 @@ if st.session_state.get('pil_image_original'):
     st.sidebar.radio("輝点マーキング色", list(CONTOUR_COLORS.keys()), key='contour_color', horizontal=True)
     contour_color_bgr = hex_to_bgr(CONTOUR_COLORS[st.session_state.contour_color])
 
+    # --- 上段レイアウト ---
     col1, col2 = st.columns([2, 3])
 
     with col1:
@@ -203,10 +204,11 @@ if st.session_state.get('pil_image_original'):
         </div>
         """
         st.markdown(caption_html, unsafe_allow_html=True)
-        
-        # ★★★ 修正点: 解析前の元画像（トリミング後）を結果の下に表示 ★★★
-        st.subheader("元の画像 (トリミング後)")
-        st.image(img_np, use_container_width=True)
+    
+    # ★★★ 修正点: 下段に元画像（トリミング後）を大きく表示 ★★★
+    st.markdown("---")
+    st.subheader("元の画像 (トリミング後)")
+    st.image(img_np, use_container_width=True)
 
 else:
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
