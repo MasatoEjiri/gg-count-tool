@@ -39,7 +39,7 @@ def initialize_session_state():
         'selected_hue_names': ["赤"], 'contour_color': "青",
         'detection_method': "色で検出", 'max_area': 10000,
         'min_area': 1, 'kernel_size': 1,
-        'use_ppt_contrast': False # ★PowerPoint風コントラスト補正
+        'use_gamma_correction': False # ★ガンマ補正
     }
     for key, value in defaults.items():
         st.session_state[key] = value
@@ -54,6 +54,13 @@ def hex_to_bgr(hex_color):
     hex_color = hex_color.lstrip('#')
     h_len = len(hex_color)
     return tuple(int(hex_color[i:i + h_len // 3], 16) for i in range(0, h_len, h_len // 3))[::-1]
+
+# ★★★ 修正点: ガンマ補正を適用する関数 ★★★
+def adjust_gamma(image, gamma=1.0):
+    invGamma = 1.0 / gamma
+    table = np.array([((i / 255.0) ** invGamma) * 255
+        for i in np.arange(0, 256)]).astype("uint8")
+    return cv2.LUT(image, table)
 
 def sync_saturation_from_slider():
     st.session_state.saturation = st.session_state.saturation_slider
@@ -142,8 +149,7 @@ if st.session_state.get('pil_image_original'):
         st.sidebar.number_input('（値）', 0, 255, key='brightness_number', on_change=sync_brightness_from_number, label_visibility="collapsed")
 
     st.sidebar.subheader("3. 前処理")
-    # ★★★ 修正点: チェックボックスのラベルとヘルプテキストを変更 ★★★
-    st.sidebar.checkbox("PowerPoint風コントラスト補正", key='use_ppt_contrast', help="PowerPointのコントラスト調整に近い効果を再現し、明暗を強調します。")
+    st.sidebar.checkbox("ガンマ補正でコントラスト調整", key='use_gamma_correction', help="PowerPointのコントラスト調整に近い効果で、画像の濃淡をはっきりさせます。")
     st.sidebar.subheader("4. 形態学的処理")
     st.sidebar.select_slider('カーネルサイズ', options=[1, 3, 5, 7, 9], key='kernel_size', help="ノイズ除去や輝点分離の効果の強さを調整します。")
 
@@ -190,12 +196,10 @@ if st.session_state.get('pil_image_original'):
             st.stop()
 
         img_to_analyze = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
-        # ★★★ 修正点: PowerPoint風のコントラスト調整ロジック ★★★
-        if st.session_state.use_ppt_contrast:
-            # alphaでコントラストを調整(>1.0)、betaで明るさを調整(<0)
-            alpha = 2.0  # コントラストを2倍に
-            beta = -100   # 全体の明るさを下げる
-            img_to_analyze = cv2.convertScaleAbs(img_to_analyze, alpha=alpha, beta=beta)
+        # ★★★ 修正点: ガンマ補正を適用 ★★★
+        if st.session_state.use_gamma_correction:
+            # ガンマ値を小さくすると画像が明るくなる。PPTの効果を再現するには0.5程度が適当
+            img_to_analyze = adjust_gamma(img_to_analyze, gamma=0.5)
         
         img_to_analyze_rgb = cv2.cvtColor(img_to_analyze, cv2.COLOR_BGR2RGB)
 
@@ -246,7 +250,7 @@ if st.session_state.get('pil_image_original'):
         st.markdown(caption_html, unsafe_allow_html=True)
     
     st.markdown("---")
-    if st.session_state.use_ppt_contrast:
+    if st.session_state.use_gamma_correction:
         st.subheader("元の画像 (前処理後)")
         st.image(img_to_analyze_rgb, use_container_width=True)
     else:
