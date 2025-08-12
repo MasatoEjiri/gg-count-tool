@@ -24,8 +24,18 @@ st.markdown("""
     }
     .color-label { display: flex; align-items: center; }
     .color-box { width: 18px; height: 18px; margin-right: 8px; border: 1px solid #fff; }
+    
+    /* ★★★ 修正点: 結果表示エリアを派手に囲むスタイル ★★★ */
+    .result-container {
+        border: 3px solid #007bff;
+        border-radius: 15px;
+        padding: 1rem;
+        box-shadow: 0 0 20px rgba(0, 123, 255, 0.6);
+        background-color: #212529; /* 背景色を少し変えて際立たせる */
+    }
 </style>
 """, unsafe_allow_html=True)
+
 
 # --- セッションステートの初期化 ---
 def initialize_session_state():
@@ -43,6 +53,7 @@ def hex_to_bgr(hex_color):
     h_len = len(hex_color)
     return tuple(int(hex_color[i:i + h_len // 3], 16) for i in range(0, h_len, h_len // 3))[::-1]
 
+
 # --- UI ---
 st.sidebar.header("解析パラメータ設定")
 uploaded_file = st.sidebar.file_uploader("画像をアップロード", type=['tif', 'tiff', 'png', 'jpg', 'jpeg'])
@@ -56,7 +67,7 @@ st.markdown("""
 """)
 st.markdown("---")
 
-# --- 画像読み込みロジック (★新しい画像がアップされたら、セッションを初期化) ---
+# --- 画像読み込みロジック ---
 if uploaded_file:
     file_id = f"{uploaded_file.name}-{uploaded_file.size}"
     if st.session_state.get('current_file_id') != file_id:
@@ -71,6 +82,7 @@ if uploaded_file:
 else:
     st.session_state['pil_image_original'] = None
     st.session_state['current_file_id'] = None
+
 
 # --- メイン処理 ---
 if st.session_state.get('pil_image_original'):
@@ -120,14 +132,13 @@ if st.session_state.get('pil_image_original'):
     st.sidebar.radio("輝点マーキング色", list(CONTOUR_COLORS.keys()), key='contour_color', horizontal=True)
     contour_color_bgr = hex_to_bgr(CONTOUR_COLORS[st.session_state.contour_color])
 
-    # --- メインエリアのレイアウト ---
-    col1, col2 = st.columns(2)
+    # ★★★ 修正点: メインエリアのレイアウト比率を変更 ★★★
+    col1, col2 = st.columns([2, 3])
 
     with col1:
         st.subheader("解析エリアの選択")
         img_original = st.session_state.pil_image_original.copy()
         
-        # ★★★ 修正点: 表示画像の横幅をさらに小さく設定 ★★★
         display_width = 400
         scaling_factor = 1.0
         img_for_display = img_original
@@ -148,6 +159,8 @@ if st.session_state.get('pil_image_original'):
         pil_image_to_process = img_original.crop((left, top, right, bottom))
 
     with col2:
+        # ★★★ 修正点: 結果エリアをカスタムDIVで囲む ★★★
+        st.markdown('<div class="result-container">', unsafe_allow_html=True)
         st.subheader("輝点検出とマーキング")
         try:
             img_np = np.array(pil_image_to_process.convert("RGB"))
@@ -197,5 +210,7 @@ if st.session_state.get('pil_image_original'):
         </div>
         """
         st.markdown(caption_html, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
 else:
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
