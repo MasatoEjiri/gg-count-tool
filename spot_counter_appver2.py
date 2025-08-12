@@ -35,7 +35,7 @@ st.markdown("""
 # --- セッションステートの初期化 ---
 def initialize_session_state():
     defaults = {
-        'binary_threshold': 15, 'saturation_range': (0, 255), 'brightness': 60,
+        'binary_threshold': 15, 'saturation': 200, 'brightness': 60,
         'selected_hue_names': ["赤"], 'contour_color': "青",
         'detection_method': "色で検出", 'max_area': 10000,
         'min_area': 1, 'kernel_size': 1,
@@ -43,10 +43,33 @@ def initialize_session_state():
     for key, value in defaults.items():
         st.session_state[key] = value
 
+    # ウィジェット連携用のキーも初期化
+    st.session_state.saturation_slider = st.session_state.saturation
+    st.session_state.saturation_number = st.session_state.saturation
+    st.session_state.brightness_slider = st.session_state.brightness
+    st.session_state.brightness_number = st.session_state.brightness
+
 def hex_to_bgr(hex_color):
     hex_color = hex_color.lstrip('#')
     h_len = len(hex_color)
     return tuple(int(hex_color[i:i + h_len // 3], 16) for i in range(0, h_len, h_len // 3))[::-1]
+
+# ★★★ 修正点: 彩度・明度のコールバック関数を復活 ★★★
+def sync_saturation_from_slider():
+    st.session_state.saturation = st.session_state.saturation_slider
+    st.session_state.saturation_number = st.session_state.saturation_slider
+
+def sync_saturation_from_number():
+    st.session_state.saturation = st.session_state.saturation_number
+    st.session_state.saturation_slider = st.session_state.saturation_number
+
+def sync_brightness_from_slider():
+    st.session_state.brightness = st.session_state.brightness_slider
+    st.session_state.brightness_number = st.session_state.brightness_slider
+
+def sync_brightness_from_number():
+    st.session_state.brightness = st.session_state.brightness_number
+    st.session_state.brightness_slider = st.session_state.brightness_number
 
 
 # --- UI ---
@@ -112,8 +135,13 @@ if st.session_state.get('pil_image_original'):
                 current_selections.append(color_name)
         st.session_state.selected_hue_names = current_selections
 
-        st.sidebar.slider("彩度(S)の範囲", 0, 255, key='saturation_range', help="色の「鮮やかさ」の範囲を指定します。白飛びした輝点を検出するには、範囲の下限を0に近づけてください。")
-        st.sidebar.slider("明度(V)の下限", 0, 255, key='brightness', help="色の「明るさ」の最小値を指定します。")
+        # ★★★ 修正点: 彩度・明度に数値入力欄を復活 ★★★
+        st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation_slider', on_change=sync_saturation_from_slider, help="色の「鮮やかさ」の最小値を指定します。")
+        st.sidebar.number_input('（値）', 0, 255, key='saturation_number', on_change=sync_saturation_from_number, label_visibility="collapsed")
+
+        st.sidebar.slider("明度(V)の下限", 0, 255, key='brightness_slider', on_change=sync_brightness_from_slider, help="色の「明るさ」の最小値を指定します。")
+        st.sidebar.number_input('（値）', 0, 255, key='brightness_number', on_change=sync_brightness_from_number, label_visibility="collapsed")
+
 
     st.sidebar.subheader("3. 形態学的処理")
     st.sidebar.select_slider('カーネルサイズ', options=[1, 3, 5, 7, 9], key='kernel_size', help="ノイズ除去や輝点分離の効果の強さを調整します。")
@@ -127,7 +155,6 @@ if st.session_state.get('pil_image_original'):
     st.sidebar.radio("輝点マーキング色", list(CONTOUR_COLORS.keys()), key='contour_color', horizontal=True)
     contour_color_bgr = hex_to_bgr(CONTOUR_COLORS[st.session_state.contour_color])
 
-    # --- 上段レイアウト ---
     col1, col2 = st.columns([2, 3])
 
     with col1:
@@ -166,7 +193,9 @@ if st.session_state.get('pil_image_original'):
             _, binary_img = cv2.threshold(img_gray, st.session_state.binary_threshold, 255, cv2.THRESH_BINARY)
         else:
             img_hsv = cv2.cvtColor(img_np, cv2.COLOR_RGB2HSV)
-            sat_min, sat_max = st.session_state.saturation_range
+            # ★★★ 修正点: 彩度の上限を255で固定 ★★★
+            sat_min = st.session_state.saturation
+            sat_max = 255
             val = st.session_state.brightness
             final_mask = np.zeros(img_hsv.shape[:2], dtype=np.uint8)
             if st.session_state.selected_hue_names:
@@ -205,7 +234,6 @@ if st.session_state.get('pil_image_original'):
         """
         st.markdown(caption_html, unsafe_allow_html=True)
     
-    # ★★★ 修正点: 下段に元画像（トリミング後）を大きく表示 ★★★
     st.markdown("---")
     st.subheader("元の画像 (トリミング後)")
     st.image(img_np, use_container_width=True)
