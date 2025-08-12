@@ -40,7 +40,7 @@ defaults = {
     'binary_threshold': 15,
     'saturation': 200,
     'brightness': 60,
-    'hue_range': (0, 25),
+    'selected_hue_name': "赤", # ★変更：色相は名前で管理
     'pil_image_original': None,
     'pil_image_to_process': None,
     'contour_color': "青",
@@ -60,12 +60,8 @@ if "saturation_slider" not in st.session_state: st.session_state.saturation_slid
 if "saturation_number" not in st.session_state: st.session_state.saturation_number = st.session_state.saturation
 if "brightness_slider" not in st.session_state: st.session_state.brightness_slider = st.session_state.brightness
 if "brightness_number" not in st.session_state: st.session_state.brightness_number = st.session_state.brightness
-if "hue_range_slider" not in st.session_state: st.session_state.hue_range_slider = st.session_state.hue_range
-if "hue_min_number" not in st.session_state: st.session_state.hue_min_number = st.session_state.hue_range[0]
-if "hue_max_number" not in st.session_state: st.session_state.hue_max_number = st.session_state.hue_range[1]
 
-
-# --- コールバック関数 (st.rerun()は含めない) ---
+# --- コールバック関数 (★色相(Hue)関連を削除) ---
 def sync_threshold_from_slider():
     st.session_state.binary_threshold = st.session_state.threshold_slider
     st.session_state.threshold_number = st.session_state.threshold_slider
@@ -89,16 +85,6 @@ def sync_brightness_from_slider():
 def sync_brightness_from_number():
     st.session_state.brightness = st.session_state.brightness_number
     st.session_state.brightness_slider = st.session_state.brightness_number
-
-def sync_hue_from_slider():
-    st.session_state.hue_range = st.session_state.hue_range_slider
-    st.session_state.hue_min_number, st.session_state.hue_max_number = st.session_state.hue_range_slider
-
-def sync_hue_from_number():
-    min_val, max_val = st.session_state.hue_min_number, st.session_state.hue_max_number
-    if min_val > max_val: min_val = max_val
-    st.session_state.hue_range = (min_val, max_val)
-    st.session_state.hue_range_slider = (min_val, max_val)
 
 def hex_to_bgr(hex_color):
     hex_color = hex_color.lstrip('#')
@@ -150,12 +136,17 @@ if st.session_state.pil_image_original:
         st.sidebar.number_input('（値）', 0, 255, key='threshold_number', on_change=sync_threshold_from_number, label_visibility="collapsed")
     else:
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
-        st.sidebar.slider("色相(H)の範囲", 0, 179, key='hue_range_slider', on_change=sync_hue_from_slider, help="検出したい輝点の色のおおまかな範囲を指定します。\n\n**代表的な色の目安 (0-179):**\n- **赤:** 0-15 と 165-179\n- **黄:** 20-35\n- **緑:** 35-85\n- **青:** 100-130")
-        c1, c2 = st.sidebar.columns(2)
-        c1.number_input("下限", 0, 179, key='hue_min_number', on_change=sync_hue_from_number)
-        c2.number_input("上限", 0, 179, key='hue_max_number', on_change=sync_hue_from_number)
+        # ★★★ 修正点: 色相(H)のUIをセレクトボックスに変更 ★★★
+        HUE_PRESETS = {
+            "赤": ((0, 10), (160, 179)),
+            "黄": (20, 35),
+            "緑": (35, 85),
+            "シアン": (85, 100),
+            "青": (100, 130),
+            "マゼンタ": (130, 160),
+        }
+        st.selectbox("基準色を選択", HUE_PRESETS.keys(), key='selected_hue_name')
 
-        # ★★★ 修正点: ヘルプテキストをより具体的に ★★★
         st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation_slider', on_change=sync_saturation_from_slider,
                           help="色の「鮮やかさ」の最小値を指定します。\n- **値を上げる**: よりハッキリした色のみを検出\n- **値を下げる**: グレーに近い、くすんだ色も検出")
         st.sidebar.number_input('（値）', 0, 255, key='saturation_number', on_change=sync_saturation_from_number, label_visibility="collapsed")
@@ -178,14 +169,9 @@ if st.session_state.pil_image_original:
 
     # --- メインエリアUI ---
     st.header("解析エリアの選択 (トリミング)")
-
-    # オリジナル画像に対して直接トリミングを行う
     st.session_state.pil_image_to_process = st_cropper(
-        st.session_state.pil_image_original,
-        realtime_update=True,
-        box_color='#007BFF',
-        aspect_ratio=None,
-        key=f"cropper_{st.session_state.current_file_id}"
+        st.session_state.pil_image_original, realtime_update=True, box_color='#007BFF',
+        aspect_ratio=None, key=f"cropper_{st.session_state.current_file_id}"
     )
 
     st.markdown("---")
@@ -203,10 +189,29 @@ if st.session_state.pil_image_original:
         img_gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
         _, binary_img = cv2.threshold(img_gray, st.session_state.binary_threshold, 255, cv2.THRESH_BINARY)
     else:
+        # ★★★ 修正点: 選択された色名に応じて二値化処理を変更 ★★★
         img_hsv = cv2.cvtColor(img_np, cv2.COLOR_RGB2HSV)
-        lower = np.array([st.session_state.hue_range[0], st.session_state.saturation, st.session_state.brightness])
-        upper = np.array([st.session_state.hue_range[1], 255, 255])
-        binary_img = cv2.inRange(img_hsv, lower, upper)
+        sat = st.session_state.saturation
+        val = st.session_state.brightness
+        
+        hue_range = HUE_PRESETS[st.session_state.selected_hue_name]
+        
+        if st.session_state.selected_hue_name == "赤":
+            # 赤は範囲が2つあるため、それぞれのマスクを作成して結合
+            lower1 = np.array([hue_range[0][0], sat, val])
+            upper1 = np.array([hue_range[0][1], 255, 255])
+            mask1 = cv2.inRange(img_hsv, lower1, upper1)
+            
+            lower2 = np.array([hue_range[1][0], sat, val])
+            upper2 = np.array([hue_range[1][1], 255, 255])
+            mask2 = cv2.inRange(img_hsv, lower2, upper2)
+            
+            binary_img = cv2.bitwise_or(mask1, mask2)
+        else:
+            # その他の色は範囲が1つ
+            lower = np.array([hue_range[0], sat, val])
+            upper = np.array([hue_range[1], 255, 255])
+            binary_img = cv2.inRange(img_hsv, lower, upper)
 
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (st.session_state.kernel_size, st.session_state.kernel_size))
     opened_img = cv2.morphologyEx(binary_img, cv2.MORPH_OPEN, kernel, iterations=1)
