@@ -192,7 +192,7 @@ if st.session_state.get('pil_image_original'):
         
         st.image(cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB), use_container_width=True)
         
-        # ★★★ 修正点: 検出輝点数の表示スタイルに枠線と影を追加 ★★★
+        # ★★★ 修正点: 検出輝点数の表示スタイルから枠線と影を削除 ★★★
         caption_html = f"""
         <div style="
             text-align: center; 
@@ -203,8 +203,6 @@ if st.session_state.get('pil_image_original'):
             font-size: 20px; 
             font-weight: bold; 
             margin-top: 10px;
-            border: 3px solid #007bff;
-            box-shadow: 0 0 20px rgba(0, 123, 255, 0.6);
         ">
             検出輝点: {count}個
         </div>
