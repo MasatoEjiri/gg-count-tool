@@ -12,6 +12,11 @@ st.set_page_config(page_title="GG輝点解析ツール", layout="wide", initial_
 st.markdown("""
 <style>
     .main .block-container { padding-top: 1rem !important; }
+    /* ★★★ 修正点: タイトルの上の余白をなくす ★★★ */
+    h1 {
+        margin-top: 0px !important;
+        padding-top: 0px !important;
+    }
     section[data-testid="stFileUploaderDropzone"] {
         border: 3px dotted white !important;
         border-radius: 0.5rem !important;
@@ -31,15 +36,11 @@ st.markdown("""
 # --- セッションステートの初期化 ---
 def initialize_session_state():
     defaults = {
-        'binary_threshold': 15,
-        'saturation_range': (0, 255), # ★★★ 修正点: 彩度を範囲で管理 ★★★
-        'brightness': 60,
-        'selected_hue_names': ["赤"],
-        'contour_color': "青",
+        'binary_threshold': 15, 'saturation_range': (0, 255), 'brightness': 60,
+        'selected_hue_names': ["赤"], 'contour_color': "青",
         'detection_method': "色で検出",
-        'max_area': 1000,
-        'min_area': 1,
-        'kernel_size': 1,
+        'max_area': 10000, # ★★★ 修正点: デフォルト値を10000に変更 ★★★
+        'min_area': 1, 'kernel_size': 1,
     }
     for key, value in defaults.items():
         st.session_state[key] = value
@@ -54,7 +55,8 @@ def hex_to_bgr(hex_color):
 st.sidebar.header("解析パラメータ設定")
 uploaded_file = st.sidebar.file_uploader("画像をアップロード", type=['tif', 'tiff', 'png', 'jpg', 'jpeg'])
 
-st.markdown("<h1>GG輝点解析ツール</h1>", unsafe_allow_html=True)
+# ★★★ 修正点: タイトルのフォントサイズを小さくする ★★★
+st.markdown('<h1 style="font-size: 2.5rem; margin-top: 0;">GG輝点解析ツール</h1>', unsafe_allow_html=True)
 st.markdown("""
 ### 使用方法
 1.  画像を左にアップロードしてください。（新しい画像をアップするとパラメータは初期化されます）
@@ -113,7 +115,6 @@ if st.session_state.get('pil_image_original'):
                 current_selections.append(color_name)
         st.session_state.selected_hue_names = current_selections
 
-        # ★★★ 修正点: 彩度(S)を範囲スライダーに変更 ★★★
         st.sidebar.slider("彩度(S)の範囲", 0, 255, key='saturation_range', help="色の「鮮やかさ」の範囲を指定します。白飛びした輝点を検出するには、範囲の下限を0に近づけてください。")
         st.sidebar.slider("明度(V)の下限", 0, 255, key='brightness', help="色の「明るさ」の最小値を指定します。")
 
@@ -135,7 +136,8 @@ if st.session_state.get('pil_image_original'):
         st.subheader("解析エリアの選択")
         img_original = st.session_state.pil_image_original.copy()
         
-        display_width = 400
+        # ★★★ 修正点: 表示画像の横幅を大きくする ★★★
+        display_width = 500
         scaling_factor = 1.0
         img_for_display = img_original
         if img_original.width > display_width:
@@ -167,10 +169,8 @@ if st.session_state.get('pil_image_original'):
             _, binary_img = cv2.threshold(img_gray, st.session_state.binary_threshold, 255, cv2.THRESH_BINARY)
         else:
             img_hsv = cv2.cvtColor(img_np, cv2.COLOR_RGB2HSV)
-            # ★★★ 修正点: 彩度の範囲を使ってマスクを生成 ★★★
             sat_min, sat_max = st.session_state.saturation_range
             val = st.session_state.brightness
-            
             final_mask = np.zeros(img_hsv.shape[:2], dtype=np.uint8)
             if st.session_state.selected_hue_names:
                 for color_name in st.session_state.selected_hue_names:
