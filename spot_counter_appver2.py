@@ -25,10 +25,9 @@ st.markdown("""
     .color-checkbox-container {
         display: flex;
         align-items: center;
-        justify-content: space-between; /* ラベルとチェックボックスを両端に配置 */
-        padding: 5px;
+        padding: 5px 8px; /* パディングを調整 */
         border-radius: 5px;
-        margin-bottom: 5px;
+        margin-bottom: 8px; /* マージンを調整 */
         border: 1px solid #555;
         background-color: #444;
     }
@@ -37,9 +36,9 @@ st.markdown("""
         align-items: center;
     }
     .color-box {
-        width: 20px;
-        height: 20px;
-        margin-right: 10px;
+        width: 18px;  /* サイズを少し調整 */
+        height: 18px;
+        margin-right: 8px;
         border: 1px solid #fff;
     }
 </style>
@@ -138,38 +137,27 @@ if st.session_state.pil_image_original:
             "マゼンタ": {"range": (130, 160), "color": "#E83E8C"},
         }
 
-        # ★★★ 修正点: カラーボックス付きUIをサイドバーに正しく配置 ★★★
         st.sidebar.write("**輝点の色** (複数選択可)")
-        
-        # 選択された色を一時的に保持するリスト
+
+        # ★★★ 修正点: 2列レイアウトでコンパクトに表示 ★★★
+        cols = st.sidebar.columns(2)
+        color_items = list(HUE_PRESETS.items())
         current_selections = []
-        
-        for color_name, props in HUE_PRESETS.items():
-            # コンテナをサイドバー内に作成し、その中にHTMLとチェックボックスを配置
-            container = st.sidebar.container()
-            with container:
-                 # HTMLとチェックボックスを横並びにするためカラムを使用
-                col1, col2 = st.columns([0.8, 0.2])
-                with col1:
-                    col1.markdown(
-                        f"""
-                        <div class="color-checkbox-container">
-                            <div class="color-label">
-                                <div class="color-box" style="background-color: {props['color']};"></div>
-                                <span>{color_name}</span>
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-                with col2:
-                    # チェックボックスの状態をセッションステートから読み込み、キーをユニークにする
-                    is_selected = col2.checkbox("", value=(color_name in st.session_state.selected_hue_names), key=f"cb_{color_name}", label_visibility="collapsed")
+
+        for i, (color_name, props) in enumerate(color_items):
+            # iを2で割った余りで、左右どちらのカラムに配置するかを決める
+            col = cols[i % 2]
+            
+            # 各カラム内に、ラベルとチェックボックスを横並びにするためのコンテナを作成
+            container = col.container()
+            c1, c2 = container.columns([0.8, 0.2])
+            c1.markdown(f'<div class="color-checkbox-container"><div class="color-label"><div class="color-box" style="background-color: {props["color"]};"></div><span>{color_name}</span></div></div>', unsafe_allow_html=True)
+            is_selected = c2.checkbox("", value=(color_name in st.session_state.selected_hue_names), key=f"cb_{color_name}", label_visibility="collapsed")
             
             if is_selected:
                 current_selections.append(color_name)
         
-        # 毎回の実行でセッションステートを更新する
+        # ユーザーの選択をセッションステートに反映
         st.session_state.selected_hue_names = current_selections
 
         st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation', help="色の「鮮やかさ」の最小値を指定します。")
