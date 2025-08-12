@@ -39,7 +39,7 @@ def initialize_session_state():
         'selected_hue_names': ["赤"], 'contour_color': "青",
         'detection_method': "色で検出", 'max_area': 10000,
         'min_area': 1, 'kernel_size': 1,
-        'use_image_enhancement': False # ★画質最適化のON/OFF
+        'use_image_enhancement': False
     }
     for key, value in defaults.items():
         st.session_state[key] = value
@@ -148,8 +148,7 @@ if st.session_state.get('pil_image_original'):
         st.sidebar.number_input('（値）', 0, 255, key='brightness_number', on_change=sync_brightness_from_number, label_visibility="collapsed")
 
     st.sidebar.subheader("3. 前処理")
-    # ★★★ 修正点: チェックボックスのラベルとヘルプテキストを変更 ★★★
-    st.sidebar.checkbox("画質を最適化", key='use_image_enhancement', help="ガンマ補正と鮮明化を同時に行い、輝点の検出精度を向上させます。")
+    st.sidebar.checkbox("画質を最適化", key='use_image_enhancement', help="ガンマ補正・鮮明化・明るさの向上を同時に行い、輝点の検出精度を向上させます。")
     st.sidebar.subheader("4. 形態学的処理")
     st.sidebar.select_slider('カーネルサイズ', options=[1, 3, 5, 7, 9], key='kernel_size', help="ノイズ除去や輝点分離の効果の強さを調整します。")
 
@@ -196,13 +195,14 @@ if st.session_state.get('pil_image_original'):
             st.stop()
 
         img_to_analyze = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
-        # ★★★ 修正点: ガンマ補正と鮮明化を同時に適用 ★★★
         if st.session_state.use_image_enhancement:
             # 1. ガンマ補正
             img_gamma_corrected = adjust_gamma(img_to_analyze, gamma=0.5)
-            # 2. 鮮明化 (アンシャープマスキング)
+            # 2. 鮮明化
             blurred = cv2.GaussianBlur(img_gamma_corrected, (0, 0), 3)
-            img_to_analyze = cv2.addWeighted(img_gamma_corrected, 1.5, blurred, -0.5, 0)
+            img_sharpened = cv2.addWeighted(img_gamma_corrected, 1.5, blurred, -0.5, 0)
+            # ★★★ 修正点: 明るさを10%向上 ★★★
+            img_to_analyze = cv2.convertScaleAbs(img_sharpened, alpha=1.0, beta=10)
         
         img_to_analyze_rgb = cv2.cvtColor(img_to_analyze, cv2.COLOR_BGR2RGB)
 
