@@ -39,7 +39,7 @@ def initialize_session_state():
         'selected_hue_names': ["赤"], 'contour_color': "青",
         'detection_method': "色で検出", 'max_area': 10000,
         'min_area': 1, 'kernel_size': 1,
-        'use_clahe': False # ★CLAHE処理のON/OFF
+        'use_ppt_contrast': False # ★PowerPoint風コントラスト補正
     }
     for key, value in defaults.items():
         st.session_state[key] = value
@@ -143,7 +143,7 @@ if st.session_state.get('pil_image_original'):
 
     st.sidebar.subheader("3. 前処理")
     # ★★★ 修正点: チェックボックスのラベルとヘルプテキストを変更 ★★★
-    st.sidebar.checkbox("コントラストを最適化 (CLAHE)", key='use_clahe', help="画像の暗い部分と明るい部分、それぞれでコントラストを最適化し、輝点と背景の境界を鮮明にします。")
+    st.sidebar.checkbox("PowerPoint風コントラスト補正", key='use_ppt_contrast', help="PowerPointのコントラスト調整に近い効果を再現し、明暗を強調します。")
     st.sidebar.subheader("4. 形態学的処理")
     st.sidebar.select_slider('カーネルサイズ', options=[1, 3, 5, 7, 9], key='kernel_size', help="ノイズ除去や輝点分離の効果の強さを調整します。")
 
@@ -190,14 +190,12 @@ if st.session_state.get('pil_image_original'):
             st.stop()
 
         img_to_analyze = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
-        # ★★★ 修正点: CLAHE（適応的ヒストグラム平坦化）処理に変更 ★★★
-        if st.session_state.use_clahe:
-            lab = cv2.cvtColor(img_to_analyze, cv2.COLOR_BGR2LAB)
-            l, a, b = cv2.split(lab)
-            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-            cl = clahe.apply(l)
-            limg = cv2.merge((cl,a,b))
-            img_to_analyze = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+        # ★★★ 修正点: PowerPoint風のコントラスト調整ロジック ★★★
+        if st.session_state.use_ppt_contrast:
+            # alphaでコントラストを調整(>1.0)、betaで明るさを調整(<0)
+            alpha = 2.0  # コントラストを2倍に
+            beta = -100   # 全体の明るさを下げる
+            img_to_analyze = cv2.convertScaleAbs(img_to_analyze, alpha=alpha, beta=beta)
         
         img_to_analyze_rgb = cv2.cvtColor(img_to_analyze, cv2.COLOR_BGR2RGB)
 
@@ -248,7 +246,7 @@ if st.session_state.get('pil_image_original'):
         st.markdown(caption_html, unsafe_allow_html=True)
     
     st.markdown("---")
-    if st.session_state.use_clahe:
+    if st.session_state.use_ppt_contrast:
         st.subheader("元の画像 (前処理後)")
         st.image(img_to_analyze_rgb, use_container_width=True)
     else:
