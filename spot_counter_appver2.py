@@ -12,7 +12,6 @@ st.set_page_config(page_title="GG輝点解析ツール", layout="wide", initial_
 st.markdown("""
 <style>
     .main .block-container { padding-top: 1rem !important; }
-    /* ★★★ 修正点: タイトルの上の余白をなくす ★★★ */
     h1 {
         margin-top: 0px !important;
         padding-top: 0px !important;
@@ -38,8 +37,7 @@ def initialize_session_state():
     defaults = {
         'binary_threshold': 15, 'saturation_range': (0, 255), 'brightness': 60,
         'selected_hue_names': ["赤"], 'contour_color': "青",
-        'detection_method': "色で検出",
-        'max_area': 10000, # ★★★ 修正点: デフォルト値を10000に変更 ★★★
+        'detection_method': "色で検出", 'max_area': 10000,
         'min_area': 1, 'kernel_size': 1,
     }
     for key, value in defaults.items():
@@ -55,7 +53,6 @@ def hex_to_bgr(hex_color):
 st.sidebar.header("解析パラメータ設定")
 uploaded_file = st.sidebar.file_uploader("画像をアップロード", type=['tif', 'tiff', 'png', 'jpg', 'jpeg'])
 
-# ★★★ 修正点: タイトルのフォントサイズを小さくする ★★★
 st.markdown('<h1 style="font-size: 2.5rem; margin-top: 0;">GG輝点解析ツール</h1>', unsafe_allow_html=True)
 st.markdown("""
 ### 使用方法
@@ -136,8 +133,8 @@ if st.session_state.get('pil_image_original'):
         st.subheader("解析エリアの選択")
         img_original = st.session_state.pil_image_original.copy()
         
-        # ★★★ 修正点: 表示画像の横幅を大きくする ★★★
-        display_width = 500
+        # ★★★ 修正点: 表示画像の横幅を安定していた400pxに戻す ★★★
+        display_width = 400
         scaling_factor = 1.0
         img_for_display = img_original
         if img_original.width > display_width:
