@@ -39,7 +39,7 @@ def initialize_session_state():
         'selected_hue_names': ["赤"], 'contour_color': "青",
         'detection_method': "色で検出", 'max_area': 10000,
         'min_area': 1, 'kernel_size': 1,
-        'use_sharpening': False # ★鮮明化処理のON/OFF
+        'use_sharpening': False
     }
     for key, value in defaults.items():
         st.session_state[key] = value
@@ -141,7 +141,6 @@ if st.session_state.get('pil_image_original'):
         st.sidebar.slider("明度(V)の下限", 0, 255, key='brightness_slider', on_change=sync_brightness_from_slider, help="色の「明るさ」の最小値を指定します。")
         st.sidebar.number_input('（値）', 0, 255, key='brightness_number', on_change=sync_brightness_from_number, label_visibility="collapsed")
 
-    # ★★★ 修正点: 鮮明化処理のチェックボックスを追加 ★★★
     st.sidebar.subheader("3. 前処理")
     st.sidebar.checkbox("鮮明化処理を行う", key='use_sharpening', help="輝点の輪郭を強調し、検出精度が向上する場合があります。")
     st.sidebar.subheader("4. 形態学的処理")
@@ -189,14 +188,12 @@ if st.session_state.get('pil_image_original'):
             st.error(f"トリミング画像の変換に失敗: {e}")
             st.stop()
 
-        # ★★★ 修正点: 鮮明化処理のロジック ★★★
         img_to_analyze = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
         if st.session_state.use_sharpening:
-            # アンシャープマスキング
+            # ★★★ 修正点: 鮮明化処理を強化 ★★★
             blurred = cv2.GaussianBlur(img_to_analyze, (0, 0), 3)
-            img_to_analyze = cv2.addWeighted(img_to_analyze, 1.5, blurred, -0.5, 0)
+            img_to_analyze = cv2.addWeighted(img_to_analyze, 2.5, blurred, -1.5, 0)
         
-        # BGRからRGBに再変換して後続処理へ
         img_to_analyze_rgb = cv2.cvtColor(img_to_analyze, cv2.COLOR_BGR2RGB)
 
         if st.session_state.detection_method == "明るさで検出":
@@ -229,7 +226,7 @@ if st.session_state.get('pil_image_original'):
         contours, _ = cv2.findContours(opened_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         count = 0
-        output_image = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR) # マーキングは元の鮮明でない画像に行う
+        output_image = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
         for c in contours:
             area = cv2.contourArea(c)
             if st.session_state.min_area <= area <= st.session_state.max_area:
@@ -246,7 +243,6 @@ if st.session_state.get('pil_image_original'):
         st.markdown(caption_html, unsafe_allow_html=True)
     
     st.markdown("---")
-    # 鮮明化処理ONの場合は、処理後の画像も表示して比較しやすくする
     if st.session_state.use_sharpening:
         st.subheader("元の画像 (鮮明化処理後)")
         st.image(img_to_analyze_rgb, use_container_width=True)
