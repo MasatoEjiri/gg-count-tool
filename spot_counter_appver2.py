@@ -15,21 +15,26 @@ st.markdown("""
     .main .block-container {
         padding-top: 1rem !important;
     }
-    /* ★★★ 修正点: ファイルアップローダーのスタイルを点線で再設定 ★★★ */
+    /* ファイルアップローダーのスタイルを点線で設定 */
     section[data-testid="stFileUploaderDropzone"] {
         border: 3px dotted white !important;
         border-radius: 0.5rem !important;
         background-color: #495057 !important;
     }
     /* カラーチェックボックス用のスタイル */
-    .color-checkbox {
+    .color-checkbox-container {
         display: flex;
         align-items: center;
+        justify-content: space-between; /* ラベルとチェックボックスを両端に配置 */
         padding: 5px;
         border-radius: 5px;
         margin-bottom: 5px;
         border: 1px solid #555;
         background-color: #444;
+    }
+    .color-label {
+        display: flex;
+        align-items: center;
     }
     .color-box {
         width: 20px;
@@ -124,7 +129,6 @@ if st.session_state.pil_image_original:
         st.sidebar.slider('閾値', 0, 255, key='binary_threshold')
     else:
         st.sidebar.subheader("2. 色の範囲設定 (HSV)")
-        # ★★★ 修正点: カラーボックス付きのチェックボックスUI ★★★
         HUE_PRESETS = {
             "赤": {"range": ((0, 10), (160, 179)), "color": "#FF4B4B"},
             "黄": {"range": (20, 35), "color": "#FFD700"},
@@ -134,23 +138,39 @@ if st.session_state.pil_image_original:
             "マゼンタ": {"range": (130, 160), "color": "#E83E8C"},
         }
 
+        # ★★★ 修正点: カラーボックス付きUIをサイドバーに正しく配置 ★★★
         st.sidebar.write("**輝点の色** (複数選択可)")
-        selected_colors = []
+        
+        # 選択された色を一時的に保持するリスト
+        current_selections = []
+        
         for color_name, props in HUE_PRESETS.items():
-            st.markdown(
-                f"""
-                <div class="color-checkbox">
-                    <div class="color-box" style="background-color: {props['color']};"></div>
-                    <span>{color_name}</span>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-            # st.checkboxのラベルを非表示にし、横に配置
-            if st.checkbox(f"select_{color_name}", value=color_name in st.session_state.selected_hue_names, label_visibility="collapsed"):
-                if color_name not in selected_colors:
-                    selected_colors.append(color_name)
-        st.session_state.selected_hue_names = selected_colors
+            # コンテナをサイドバー内に作成し、その中にHTMLとチェックボックスを配置
+            container = st.sidebar.container()
+            with container:
+                 # HTMLとチェックボックスを横並びにするためカラムを使用
+                col1, col2 = st.columns([0.8, 0.2])
+                with col1:
+                    col1.markdown(
+                        f"""
+                        <div class="color-checkbox-container">
+                            <div class="color-label">
+                                <div class="color-box" style="background-color: {props['color']};"></div>
+                                <span>{color_name}</span>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                with col2:
+                    # チェックボックスの状態をセッションステートから読み込み、キーをユニークにする
+                    is_selected = col2.checkbox("", value=(color_name in st.session_state.selected_hue_names), key=f"cb_{color_name}", label_visibility="collapsed")
+            
+            if is_selected:
+                current_selections.append(color_name)
+        
+        # 毎回の実行でセッションステートを更新する
+        st.session_state.selected_hue_names = current_selections
 
         st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation', help="色の「鮮やかさ」の最小値を指定します。")
         st.sidebar.slider("明度(V)の下限", 0, 255, key='brightness', help="色の「明るさ」の最小値を指定します。")
@@ -194,21 +214,19 @@ if st.session_state.pil_image_original:
         val = st.session_state.brightness
         
         final_mask = np.zeros(img_hsv.shape[:2], dtype=np.uint8)
-        for color_name in st.session_state.selected_hue_names:
-            hue_data = HUE_PRESETS[color_name]["range"]
-            if isinstance(hue_data[0], tuple): # 赤の場合
-                lower1 = np.array([hue_data[0][0], sat, val])
-                upper1 = np.array([hue_data[0][1], 255, 255])
-                mask1 = cv2.inRange(img_hsv, lower1, upper1)
-                lower2 = np.array([hue_data[1][0], sat, val])
-                upper2 = np.array([hue_data[1][1], 255, 255])
-                mask2 = cv2.inRange(img_hsv, lower2, upper2)
-                color_mask = cv2.bitwise_or(mask1, mask2)
-            else: # その他の色
-                lower = np.array([hue_data[0], sat, val])
-                upper = np.array([hue_data[1], 255, 255])
-                color_mask = cv2.inRange(img_hsv, lower, upper)
-            final_mask = cv2.bitwise_or(final_mask, color_mask)
+        if st.session_state.selected_hue_names:
+            for color_name in st.session_state.selected_hue_names:
+                hue_data = HUE_PRESETS[color_name]["range"]
+                if isinstance(hue_data[0], tuple): # 赤の場合
+                    lower1, upper1 = np.array([hue_data[0][0], sat, val]), np.array([hue_data[0][1], 255, 255])
+                    mask1 = cv2.inRange(img_hsv, lower1, upper1)
+                    lower2, upper2 = np.array([hue_data[1][0], sat, val]), np.array([hue_data[1][1], 255, 255])
+                    mask2 = cv2.inRange(img_hsv, lower2, upper2)
+                    color_mask = cv2.bitwise_or(mask1, mask2)
+                else: # その他の色
+                    lower, upper = np.array([hue_data[0], sat, val]), np.array([hue_data[1], 255, 255])
+                    color_mask = cv2.inRange(img_hsv, lower, upper)
+                final_mask = cv2.bitwise_or(final_mask, color_mask)
         binary_img = final_mask
 
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (st.session_state.kernel_size, st.session_state.kernel_size))
@@ -232,18 +250,9 @@ if st.session_state.pil_image_original:
     col2.subheader("輝点検出とマーキング")
     col2.image(cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB), use_container_width=True)
 
-    # ★★★ 修正点: 検出数のキャプションを派手にする ★★★
     caption_html = f"""
-    <div style="
-        text-align: center;
-        background-image: linear-gradient(45deg, #007bff, #E83E8C);
-        padding: 10px;
-        border-radius: 10px;
-        color: white;
-        font-size: 20px;
-        font-weight: bold;
-        margin-top: 10px;
-    ">
+    <div style="text-align: center; background-image: linear-gradient(45deg, #007bff, #E83E8C); padding: 10px;
+        border-radius: 10px; color: white; font-size: 20px; font-weight: bold; margin-top: 10px;">
         検出輝点: {count}個
     </div>
     """
