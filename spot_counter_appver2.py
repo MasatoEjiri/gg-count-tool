@@ -38,28 +38,23 @@ HUE_PRESETS = {
 CONTOUR_COLORS = {"青":"#007bff", "緑":"#28a745", "赤":"#dc3545", "黄":"#ffc107"}
 
 # --- セッションステート管理 ---
-def get_defaults():
-    return {
-        'binary_threshold': 15, 'saturation': 200, 'brightness': 60,
-        'selected_hue_names': ["赤"], 'contour_color': "青",
-        'detection_method': "色で検出", 'max_area': 10000, 'min_area': 1, 'kernel_size': 1,
-        'use_image_enhancement': False, 'use_cropper': True
-    }
+# 必須のキーとデフォルト値のリスト
+REQUIRED_KEYS = {
+    'binary_threshold': 15, 'saturation': 200, 'brightness': 60,
+    'selected_hue_names': ["赤"], 'contour_color': "青",
+    'detection_method': "色で検出", 'max_area': 10000, 'min_area': 1, 'kernel_size': 1,
+    'use_image_enhancement': False, 'use_cropper': True,
+    'saturation_slider': 200, 'saturation_number': 200,
+    'brightness_slider': 60, 'brightness_number': 60,
+    'binary_threshold_slider': 15, 'binary_threshold_number': 15
+}
 
+# セッションステートをチェックし、不足しているキーがあればすべて再初期化
 def check_and_initialize_state():
-    defaults = get_defaults()
-    # 必須キーが一つでも欠けていたら、すべてを初期化する
-    for key in defaults.keys():
+    for key in REQUIRED_KEYS:
         if key not in st.session_state:
-            for k, v in defaults.items():
+            for k, v in REQUIRED_KEYS.items():
                 st.session_state[k] = v
-            # 連携キーも初期化
-            st.session_state.saturation_slider = defaults['saturation']
-            st.session_state.saturation_number = defaults['saturation']
-            st.session_state.brightness_slider = defaults['brightness']
-            st.session_state.brightness_number = defaults['brightness']
-            st.session_state.binary_threshold_slider = defaults['binary_threshold']
-            st.session_state.binary_threshold_number = defaults['binary_threshold']
             return
 
 check_and_initialize_state()
@@ -88,12 +83,11 @@ uploaded_file = st.sidebar.file_uploader("画像をアップロード", type=['t
 
 st.markdown('<h1 style="font-size: 2.5rem; margin-top: 0;">GG輝点解析ツール</h1>', unsafe_allow_html=True)
 
-# --- 画像読み込み / 初期化 ---
+# --- 画像読み込み ---
 if uploaded_file:
-    file_id = f"{uploaded_file.name}-{uploaded_file.size}"
-    if st.session_state.get('current_file_id') != file_id:
+    if st.session_state.get('current_file_id') != uploaded_file.id:
         st.session_state.pil_image_original = Image.open(io.BytesIO(uploaded_file.getvalue()))
-        st.session_state.current_file_id = file_id
+        st.session_state.current_file_id = uploaded_file.id
 else:
     st.session_state.pil_image_original = None
 
@@ -137,15 +131,11 @@ if st.session_state.pil_image_original:
     st.sidebar.radio("輝点マーキング色", list(CONTOUR_COLORS.keys()), key='contour_color', horizontal=True)
     contour_color_bgr = hex_to_bgr(CONTOUR_COLORS[st.session_state.contour_color])
 
-    # --- レイアウト定義 ---
-    main_cols = {'cropper': st, 'result': st}
+    # --- レイアウトと画像の前処理 ---
+    pil_image_to_process = None
     if st.session_state.use_cropper:
-        cropper_col, result_col = st.columns([2, 3])
-        main_cols = {'cropper': cropper_col, 'result': result_col}
-
-    # --- トリミング処理 ---
-    with main_cols['cropper']:
-        if st.session_state.use_cropper:
+        col1, col2 = st.columns([2, 3])
+        with col1:
             st.subheader("解析エリアの選択")
             img_original_for_cropper = st.session_state.pil_image_original.copy()
             display_width = 400
@@ -160,11 +150,13 @@ if st.session_state.pil_image_original:
             left, top = int(box['left'] * scaling_factor), int(box['top'] * scaling_factor)
             right, bottom = int((box['left'] + box['width']) * scaling_factor), int((box['top'] + box['height']) * scaling_factor)
             pil_image_to_process = st.session_state.pil_image_original.crop((left, top, right, bottom))
-        else:
-            pil_image_to_process = st.session_state.pil_image_original
+        result_container = col2
+    else:
+        pil_image_to_process = st.session_state.pil_image_original
+        result_container = st.container()
 
     # --- 画像処理と結果表示 ---
-    with main_cols['result']:
+    with result_container:
         st.subheader("輝点検出とマーキング")
         img_np = np.array(pil_image_to_process.convert("RGB"))
         img_to_analyze = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
@@ -207,9 +199,12 @@ if st.session_state.pil_image_original:
                 cv2.drawContours(output_image, [c], -1, contour_color_bgr, 2)
         st.image(cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB), use_container_width=True)
         st.markdown(f"""<div style="text-align: center; background-image: linear-gradient(45deg, #007bff, #E83E8C); padding: 10px; border-radius: 10px; color: white; font-size: 20px; font-weight: bold; margin-top: 10px;">検出輝点: {count}個</div>""", unsafe_allow_html=True)
-        st.markdown("---")
-        st.subheader("元の画像 " + ("(前処理後)" if st.session_state.use_image_enhancement else "(トリミング後)"))
-        st.image(img_to_analyze_rgb if st.session_state.use_image_enhancement else img_np, use_container_width=True)
+        
+        # トリミングOFFの場合は、下に元画像を表示しない
+        if st.session_state.use_cropper:
+            st.markdown("---")
+            st.subheader("元の画像 " + ("(前処理後)" if st.session_state.use_image_enhancement else "(トリミング後)"))
+            st.image(img_to_analyze_rgb if st.session_state.use_image_enhancement else img_np, use_container_width=True)
 
 else:
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
