@@ -11,16 +11,39 @@ st.set_page_config(page_title="GG輝点解析ツール", layout="wide", initial_
 # --- カスタムCSS ---
 st.markdown("""
 <style>
+    /* 基本調整 */
     .main .block-container { padding-top: 1rem !important; }
     h1 { margin-top: 0px !important; padding-top: 0px !important; }
+    
+    /* ファイルアップローダー */
     section[data-testid="stFileUploaderDropzone"] {
         border: 3px dotted white !important;
         border-radius: 0.5rem !important;
         background-color: #495057 !important;
     }
+    
     /* ★★★ 修正点: サイドバーを折りたたむボタンを非表示にする ★★★ */
-    button[kind="header"] {
+    button[title="Collapse sidebar"] {
         display: none !important;
+    }
+
+    /* ★★★ 修正点: 色選択ボタンのスタイル ★★★ */
+    .stButton>button {
+        width: 100%;
+        border-radius: 5px;
+        padding: 8px;
+        color: white !important;
+        border: 2px solid #555;
+    }
+    .btn-red button { background-color: #FF4B4B; }
+    .btn-yellow button { background-color: #FFD700; }
+    .btn-green button { background-color: #28a745; }
+    .btn-blue button { background-color: #007bff; }
+
+    /* 選択されているボタンのスタイル */
+    .selected button {
+        border-color: #FF4B4B !important;
+        box-shadow: 0 0 10px rgba(255, 75, 75, 0.9);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -31,6 +54,7 @@ HUE_PRESETS = {
     "緑": (35, 85), "青": (100, 130),
 }
 CONTOUR_COLORS = {"青":"#007bff", "緑":"#28a745", "赤":"#dc3545", "黄":"#ffc107"}
+COLOR_CLASSES = {"赤": "btn-red", "黄": "btn-yellow", "緑": "btn-green", "青": "btn-blue"}
 
 # --- セッションステート管理 ---
 def get_default_params():
@@ -39,9 +63,9 @@ def get_default_params():
         'selected_hue_names': ["赤"], 'contour_color': "青",
         'detection_method': "色で検出（オススメ）", 'max_area': 10000, 'min_area': 1,
         'use_image_enhancement': True, 'use_cropper': False,
-        'binary_threshold_slider': 15, 'binary_threshold_number': 15,
         'saturation_slider': 90, 'saturation_number': 90,
         'brightness_slider': 90, 'brightness_number': 90,
+        'binary_threshold_slider': 15, 'binary_threshold_number': 15,
         'state_initialized': True
     }
 
@@ -100,22 +124,28 @@ if st.session_state.pil_image_original:
         st.sidebar.number_input('（値）', 0, 255, key='binary_threshold_number', on_change=sync_from_number, args=('binary_threshold',), label_visibility="collapsed")
     else:
         st.sidebar.subheader("色の範囲設定 (HSV)")
-        st.sidebar.write("**輝点の色**")
+        st.sidebar.write("**輝点の色** (クリックで複数選択可)")
         
-        # ★★★ 修正点: 色選択UIをボタンに変更 ★★★
+        # ★★★ 修正点: 色選択UIをボタンとカスタムCSSに変更 ★★★
         cols = st.sidebar.columns(2)
         color_items = list(HUE_PRESETS.keys())
         for i, color_name in enumerate(color_items):
             col = cols[i % 2]
-            if col.button(color_name, key=f"btn_{color_name}", use_container_width=True):
-                if color_name in st.session_state.selected_hue_names:
-                    st.session_state.selected_hue_names.remove(color_name)
-                else:
-                    st.session_state.selected_hue_names.append(color_name)
-        
-        # 選択中の色を明示的に表示
-        selected_str = ", ".join(st.session_state.selected_hue_names) if st.session_state.selected_hue_names else "なし"
-        st.sidebar.markdown(f"**選択中の色:** `{selected_str}`")
+            
+            is_selected = color_name in st.session_state.selected_hue_names
+            class_name = COLOR_CLASSES[color_name]
+            if is_selected:
+                class_name += " selected"
+
+            with col:
+                st.markdown(f'<div class="{class_name}">', unsafe_allow_html=True)
+                if st.button(color_name, key=f"btn_{color_name}", use_container_width=True):
+                    if is_selected:
+                        st.session_state.selected_hue_names.remove(color_name)
+                    else:
+                        st.session_state.selected_hue_names.append(color_name)
+                    st.rerun() # ボタンクリックで即時再描画
+                st.markdown('</div>', unsafe_allow_html=True)
 
         st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation_slider', on_change=sync_from_slider, args=('saturation',), help="色の鮮やかさの最小値")
         st.sidebar.number_input('（値）', 0, 255, key='saturation_number', on_change=sync_from_number, args=('saturation',), label_visibility="collapsed")
