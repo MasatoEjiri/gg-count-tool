@@ -18,24 +18,17 @@ st.markdown("""
         border-radius: 0.5rem !important;
         background-color: #495057 !important;
     }
-    /* ★★★ 修正点: 選択されたカラーボックスの枠線を赤くする ★★★ */
-    div[data-testid="stVerticalBlock"]:has(div.stCheckbox input:checked) > div[data-testid="stVerticalBlockBorderWrapper"] > div {
-        border-color: #FF4B4B !important;
-        box-shadow: 0 0 10px rgba(255, 75, 75, 0.7);
-    }
-    /* カラーボックスとチェックボックスを横に並べるための微調整 */
-    div[data-testid="stHorizontalBlock"] > div[style*="flex-direction: row;"] {
-        align-items: center;
+    /* ★★★ 修正点: サイドバーを折りたたむボタンを非表示にする ★★★ */
+    button[kind="header"] {
+        display: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # --- 定数定義 ---
 HUE_PRESETS = {
-    "赤": {"range": ((0, 10), (160, 179)), "color": "#FF4B4B"},
-    "黄": {"range": (20, 35), "color": "#FFD700"},
-    "緑": {"range": (35, 85), "color": "#28a745"},
-    "青": {"range": (100, 130), "color": "#007bff"},
+    "赤": ((0, 10), (160, 179)), "黄": (20, 35),
+    "緑": (35, 85), "青": (100, 130),
 }
 CONTOUR_COLORS = {"青":"#007bff", "緑":"#28a745", "赤":"#dc3545", "黄":"#ffc107"}
 
@@ -46,9 +39,9 @@ def get_default_params():
         'selected_hue_names': ["赤"], 'contour_color': "青",
         'detection_method': "色で検出（オススメ）", 'max_area': 10000, 'min_area': 1,
         'use_image_enhancement': True, 'use_cropper': False,
+        'binary_threshold_slider': 15, 'binary_threshold_number': 15,
         'saturation_slider': 90, 'saturation_number': 90,
         'brightness_slider': 90, 'brightness_number': 90,
-        'binary_threshold_slider': 15, 'binary_threshold_number': 15,
         'state_initialized': True
     }
 
@@ -107,19 +100,22 @@ if st.session_state.pil_image_original:
         st.sidebar.number_input('（値）', 0, 255, key='binary_threshold_number', on_change=sync_from_number, args=('binary_threshold',), label_visibility="collapsed")
     else:
         st.sidebar.subheader("色の範囲設定 (HSV)")
-        st.sidebar.write("**輝点の色** (複数選択可)")
+        st.sidebar.write("**輝点の色**")
         
-        # ★★★ 修正点: 色選択UIをより洗練されたレイアウトに変更 ★★★
+        # ★★★ 修正点: 色選択UIをボタンに変更 ★★★
         cols = st.sidebar.columns(2)
-        current_selections = []
-        for i, (color_name, props) in enumerate(HUE_PRESETS.items()):
+        color_items = list(HUE_PRESETS.keys())
+        for i, color_name in enumerate(color_items):
             col = cols[i % 2]
-            with col.container(border=True):
-                c1, c2 = st.columns([0.2, 0.8])
-                c1.markdown(f'<div style="width:20px; height:20px; background-color:{props["color"]}; border:1.5px solid #fff; border-radius: 3px;"></div>', unsafe_allow_html=True)
-                if c2.checkbox(color_name, value=(color_name in st.session_state.selected_hue_names), key=f"cb_{color_name}"):
-                    current_selections.append(color_name)
-        st.session_state.selected_hue_names = current_selections
+            if col.button(color_name, key=f"btn_{color_name}", use_container_width=True):
+                if color_name in st.session_state.selected_hue_names:
+                    st.session_state.selected_hue_names.remove(color_name)
+                else:
+                    st.session_state.selected_hue_names.append(color_name)
+        
+        # 選択中の色を明示的に表示
+        selected_str = ", ".join(st.session_state.selected_hue_names) if st.session_state.selected_hue_names else "なし"
+        st.sidebar.markdown(f"**選択中の色:** `{selected_str}`")
 
         st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation_slider', on_change=sync_from_slider, args=('saturation',), help="色の鮮やかさの最小値")
         st.sidebar.number_input('（値）', 0, 255, key='saturation_number', on_change=sync_from_number, args=('saturation',), label_visibility="collapsed")
@@ -157,9 +153,7 @@ if st.session_state.pil_image_original:
         result_container = col2
     else:
         pil_image_to_process = st.session_state.pil_image_original
-        # ★★★ 修正点: トリミングOFF時の表示エリアを中央の少し広めのカラムに限定 ★★★
         _, result_container, _ = st.columns([0.5, 3, 0.5])
-
 
     # --- 画像処理と結果表示 ---
     with result_container:
@@ -188,7 +182,7 @@ if st.session_state.pil_image_original:
             final_mask = np.zeros(img_hsv.shape[:2], dtype=np.uint8)
             if st.session_state.selected_hue_names:
                 for color_name in st.session_state.selected_hue_names:
-                    hue_data = HUE_PRESETS[color_name]["range"]
+                    hue_data = HUE_PRESETS[color_name]
                     if isinstance(hue_data[0], tuple):
                         mask1 = cv2.inRange(img_hsv, np.array([hue_data[0][0], sat, val]), np.array([hue_data[0][1], 255, 255]))
                         mask2 = cv2.inRange(img_hsv, np.array([hue_data[1][0], sat, val]), np.array([hue_data[1][1], 255, 255]))
@@ -210,10 +204,11 @@ if st.session_state.pil_image_original:
                 cv2.drawContours(output_image, [c], -1, contour_color_bgr, 2)
         st.image(cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB), use_container_width=True)
         st.markdown(f"""<div style="text-align: center; background-image: linear-gradient(45deg, #007bff, #E83E8C); padding: 10px; border-radius: 10px; color: white; font-size: 20px; font-weight: bold; margin-top: 10px;">検出輝点: {count}個</div>""", unsafe_allow_html=True)
-    
-    st.markdown("---")
-    st.subheader("元の画像 " + ("(前処理後)" if st.session_state.use_image_enhancement else "(トリミング後)"))
-    st.image(img_to_analyze_rgb if st.session_state.use_image_enhancement else img_np, use_container_width=True)
+        
+        # ★★★ 修正点: 元画像の表示を result_container の中に移動 ★★★
+        st.markdown("---")
+        st.subheader("元の画像 " + ("(前処理後)" if st.session_state.use_image_enhancement else "(トリミング後)"))
+        st.image(img_to_analyze_rgb if st.session_state.use_image_enhancement else img_np, use_container_width=True)
 
 else:
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
