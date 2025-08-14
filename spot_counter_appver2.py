@@ -27,19 +27,27 @@ st.markdown("""
         display: none;
     }
 
-    /* ▼▼▼【UI改善/CSS強化】multiselectの選択済みタグのスタイル ▼▼▼ */
-    div[data-baseweb="tag"], div[data-testid="stTag"] {
+    /* ▼▼▼【最終手段】テーマカラーを強制的に上書きする高優先度CSS ▼▼▼ */
+    div[data-testid="stTag"] {
+        /* 背景に関する全プロパティをリセット */
+        background: transparent !important;
         background-color: transparent !important;
+
+        /* 枠線を再設定 */
         border: 1px solid rgba(255, 255, 255, 0.6) !important;
-        color: white !important; /* テキスト色を強制的に白に */
-        border-radius: 0.5rem !important;
-        padding-top: 4px !important;
-        padding-bottom: 4px !important;
-    }
-    /* タグ内のテキストとバツボタンの色も白に指定 */
-    div[data-testid="stTag"] span, 
-    div[data-testid="stTag"] span[role="button"] {
+        
+        /* 影をリセット */
+        box-shadow: none !important;
+
+        /* 文字色と内部アイコンの色を強制的に白に */
         color: white !important;
+    }
+    
+    /* タグ内部の文字とバツ印のspan要素に対しても個別に指定 */
+    div[data-testid="stTag"] span,
+    div[data-testid="stTag"] span[role="button"] svg {
+        color: white !important;
+        background: transparent !important;
     }
     /* ▲▲▲ UI改善ここまで ▲▲▲ */
 
