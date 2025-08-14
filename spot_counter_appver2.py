@@ -40,7 +40,7 @@ CONTOUR_COLORS = {"青":"#007bff", "緑":"#28a745", "赤":"#dc3545", "黄":"#ffc
 
 # --- セッションステート管理 ---
 def get_default_params():
-    # ▼▼▼【バグ修正】toggleの状態を直接管理するように変更 ▼▼▼
+    # ▼▼▼ チェックボックス用のキーに変更 ▼▼▼
     return {
         'binary_threshold': 15, 'saturation': 90, 'brightness': 90,
         'contour_color': "青", 'detection_method': "色で検出（オススメ）",
@@ -49,7 +49,7 @@ def get_default_params():
         'saturation_slider': 90, 'saturation_number': 90,
         'brightness_slider': 90, 'brightness_number': 90,
         'binary_threshold_slider': 15, 'binary_threshold_number': 15,
-        'toggle_赤': True, 'toggle_黄': False, 'toggle_緑': False, 'toggle_青': False,
+        'cb_赤': True, 'cb_黄': False, 'cb_緑': False, 'cb_青': False,
         'state_initialized': True
     }
 
@@ -114,26 +114,26 @@ if st.session_state.pil_image_original:
         st.sidebar.subheader("色の範囲設定 (HSV)")
         st.sidebar.write("**輝点の色** (複数選択可)")
         
-        # ▼▼▼【レイアウト修正】2行x2列のグリッドレイアウトに変更 ▼▼▼
+        # ▼▼▼ トグルスイッチをチェックボックスに変更 ▼▼▼
         color_emoji_map = {"赤": "🔴", "黄": "🟡", "緑": "🟢", "青": "🔵"}
         color_names = list(HUE_PRESETS.keys())
         
         # 1行目
         cols1 = st.sidebar.columns(2)
         with cols1[0]:
-            st.toggle(f"{color_emoji_map['赤']} 赤", key="toggle_赤")
+            st.checkbox(f"{color_emoji_map['赤']} 赤", key="cb_赤")
         with cols1[1]:
-            st.toggle(f"{color_emoji_map['黄']} 黄", key="toggle_黄")
+            st.checkbox(f"{color_emoji_map['黄']} 黄", key="cb_黄")
 
         # 2行目
         cols2 = st.sidebar.columns(2)
         with cols2[0]:
-            st.toggle(f"{color_emoji_map['緑']} 緑", key="toggle_緑")
+            st.checkbox(f"{color_emoji_map['緑']} 緑", key="cb_緑")
         with cols2[1]:
-            st.toggle(f"{color_emoji_map['青']} 青", key="toggle_青")
+            st.checkbox(f"{color_emoji_map['青']} 青", key="cb_青")
         
-        # 選択された色のリストをtoggleの状態から生成
-        selected_hue_names = [name for name in color_names if st.session_state[f"toggle_{name}"]]
+        # 選択された色のリストをチェックボックスの状態から生成
+        selected_hue_names = [name for name in color_names if st.session_state[f"cb_{name}"]]
         # ▲▲▲ UI変更ここまで ▲▲▲
 
         st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation_slider', on_change=sync_from_slider, args=('saturation',), help="色の鮮やかさの最小値")
