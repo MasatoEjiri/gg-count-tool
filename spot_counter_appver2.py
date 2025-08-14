@@ -37,23 +37,35 @@ HUE_PRESETS = {
 }
 CONTOUR_COLORS = {"青":"#007bff", "緑":"#28a745", "赤":"#dc3545", "黄":"#ffc107"}
 
-# --- セッションステート管理 ---
-REQUIRED_KEYS = {
-    'binary_threshold': 15, 'saturation': 200, 'brightness': 60,
-    'selected_hue_names': ["赤"], 'contour_color': "青",
-    'detection_method': "色で検出", 'max_area': 10000, 'min_area': 1, 'kernel_size': 1,
-    'use_image_enhancement': False, 'use_cropper': True,
-    'saturation_slider': 200, 'saturation_number': 200,
-    'brightness_slider': 60, 'brightness_number': 60,
-    'binary_threshold_slider': 15, 'binary_threshold_number': 15
-}
-def check_and_initialize_state():
-    for key in REQUIRED_KEYS:
-        if key not in st.session_state:
-            for k, v in REQUIRED_KEYS.items():
-                st.session_state[k] = v
-            return
-check_and_initialize_state()
+# ★★★★★ 修正点: 堅牢なセッションステート管理 ★★★★★
+# 1. 正しいデフォルト値を返す関数
+def get_default_params():
+    return {
+        'binary_threshold': 15, 'saturation': 200, 'brightness': 60,
+        'selected_hue_names': ["赤"], 'contour_color': "青",
+        'detection_method': "色で検出", 'max_area': 10000, 'min_area': 1, 'kernel_size': 1,
+        'use_image_enhancement': False, 'use_cropper': True,
+        'saturation_slider': 200, 'saturation_number': 200,
+        'brightness_slider': 60, 'brightness_number': 60,
+        'binary_threshold_slider': 15, 'binary_threshold_number': 15,
+        'state_initialized': True # 正常な状態の証
+    }
+
+# 2. セッションが正常かチェックし、異常なら強制的にリセットする関数
+def ensure_state_consistency():
+    if not st.session_state.get('state_initialized'):
+        # 破損した可能性のあるキーを一度すべてクリア
+        keys_to_clear = list(get_default_params().keys())
+        for key in keys_to_clear:
+            if key in st.session_state:
+                del st.session_state[key]
+        # 正しいデフォルト値で再初期化
+        for key, value in get_default_params().items():
+            st.session_state[key] = value
+
+# アプリ実行時に必ずチェック
+ensure_state_consistency()
+
 
 # --- 関数定義 ---
 def hex_to_bgr(hex_color):
@@ -81,11 +93,9 @@ st.markdown('<h1 style="font-size: 2.5rem; margin-top: 0;">GG輝点解析ツー�
 
 # --- 画像読み込み ---
 if uploaded_file:
-    # ★★★ 修正点: ファイルIDの生成方法を正しいものに戻す ★★★
-    file_id = f"{uploaded_file.name}-{uploaded_file.size}"
-    if st.session_state.get('current_file_id') != file_id:
+    if st.session_state.get('current_file_id') != uploaded_file.id:
         st.session_state.pil_image_original = Image.open(io.BytesIO(uploaded_file.getvalue()))
-        st.session_state.current_file_id = file_id
+        st.session_state.current_file_id = uploaded_file.id
 else:
     st.session_state.pil_image_original = None
 
@@ -198,10 +208,9 @@ if st.session_state.pil_image_original:
         st.image(cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB), use_container_width=True)
         st.markdown(f"""<div style="text-align: center; background-image: linear-gradient(45deg, #007bff, #E83E8C); padding: 10px; border-radius: 10px; color: white; font-size: 20px; font-weight: bold; margin-top: 10px;">検出輝点: {count}個</div>""", unsafe_allow_html=True)
         
-        if st.session_state.use_cropper:
-            st.markdown("---")
-            st.subheader("元の画像 " + ("(前処理後)" if st.session_state.use_image_enhancement else "(トリミング後)"))
-            st.image(img_to_analyze_rgb if st.session_state.use_image_enhancement else img_np, use_container_width=True)
+        st.markdown("---")
+        st.subheader("元の画像 " + ("(前処理後)" if st.session_state.use_image_enhancement else "(トリミング後)"))
+        st.image(img_to_analyze_rgb if st.session_state.use_image_enhancement else img_np, use_container_width=True)
 
 else:
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
