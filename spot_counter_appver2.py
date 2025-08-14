@@ -18,13 +18,13 @@ st.markdown("""
         border-radius: 0.5rem !important;
         background-color: #495057 !important;
     }
-    div[data-testid="stHorizontalBlock"] > div[style*="flex-direction: row;"] {
-        align-items: center;
-    }
-    
     /* ★★★ 修正点: サイドバーを折りたたむボタンをより確実に非表示にする ★★★ */
     button[data-testid="stSidebarCollapseButton"] {
         display: none;
+    }
+    /* カラーボックスとチェックボックスを横に並べるための微調整 */
+    div[data-testid="stHorizontalBlock"] > div[style*="flex-direction: row;"] {
+        align-items: center;
     }
 </style>
 """, unsafe_allow_html=True)
