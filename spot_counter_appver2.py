@@ -37,23 +37,33 @@ HUE_PRESETS = {
 }
 CONTOUR_COLORS = {"青":"#007bff", "緑":"#28a745", "赤":"#dc3545", "黄":"#ffc107"}
 
-# --- セッションステート管理 ---
-REQUIRED_KEYS = {
-    'binary_threshold': 15, 'saturation': 200, 'brightness': 60,
-    'selected_hue_names': ["赤"], 'contour_color': "青",
-    'detection_method': "色で検出", 'max_area': 10000, 'min_area': 1, 'kernel_size': 1,
-    'use_image_enhancement': False, 'use_cropper': True,
-    'saturation_slider': 200, 'saturation_number': 200,
-    'brightness_slider': 60, 'brightness_number': 60,
-    'binary_threshold_slider': 15, 'binary_threshold_number': 15,
-    'state_initialized': True
-}
-def check_and_initialize_state():
+# ★★★★★ 修正点: 堅牢なセッションステート管理 ★★★★★
+# 1. 正しいデフォルト値を返す関数
+def get_default_params():
+    return {
+        'binary_threshold': 15, 'saturation': 200, 'brightness': 60,
+        'selected_hue_names': ["赤"], 'contour_color': "青",
+        'detection_method': "色で検出", 'max_area': 10000, 'min_area': 1, 'kernel_size': 1,
+        'use_image_enhancement': False, 'use_cropper': False, # デフォルトはOFF
+        'saturation_slider': 200, 'saturation_number': 200,
+        'brightness_slider': 60, 'brightness_number': 60,
+        'binary_threshold_slider': 15, 'binary_threshold_number': 15,
+        'state_initialized': True # 正常な状態の証
+    }
+
+# 2. セッションが正常かチェックし、異常なら強制的にリセットする関数
+def ensure_state_consistency():
     if not st.session_state.get('state_initialized'):
-        for key, value in REQUIRED_KEYS.items():
+        # 破損した可能性のあるキーを一度すべてクリア
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        # 正しいデフォルト値で再初期化
+        for key, value in get_default_params().items():
             st.session_state[key] = value
 
-check_and_initialize_state()
+# アプリ実行時に必ずチェック
+ensure_state_consistency()
+
 
 # --- 関数定義 ---
 def hex_to_bgr(hex_color):
@@ -81,7 +91,7 @@ st.markdown('<h1 style="font-size: 2.5rem; margin-top: 0;">GG輝点解析ツー�
 
 # --- 画像読み込み ---
 if uploaded_file:
-    # ★★★ 修正点: ファイルIDの生成方法を正しいものに戻す ★★★
+    # ファイル名とサイズでユニークIDを生成
     file_id = f"{uploaded_file.name}-{uploaded_file.size}"
     if st.session_state.get('current_file_id') != file_id:
         st.session_state.pil_image_original = Image.open(io.BytesIO(uploaded_file.getvalue()))
@@ -157,6 +167,8 @@ if st.session_state.pil_image_original:
     with result_container:
         if st.session_state.use_cropper:
             st.subheader("輝点検出とマーキング")
+        else: # トリミングしない場合はメインのヘッダー
+            st.subheader("輝点検出結果")
             
         img_np = np.array(pil_image_to_process.convert("RGB"))
         img_to_analyze = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
@@ -200,10 +212,9 @@ if st.session_state.pil_image_original:
         st.image(cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB), use_container_width=True)
         st.markdown(f"""<div style="text-align: center; background-image: linear-gradient(45deg, #007bff, #E83E8C); padding: 10px; border-radius: 10px; color: white; font-size: 20px; font-weight: bold; margin-top: 10px;">検出輝点: {count}個</div>""", unsafe_allow_html=True)
         
-        if st.session_state.use_cropper:
-            st.markdown("---")
-            st.subheader("元の画像 " + ("(前処理後)" if st.session_state.use_image_enhancement else "(トリミング後)"))
-            st.image(img_to_analyze_rgb if st.session_state.use_image_enhancement else img_np, use_container_width=True)
+        st.markdown("---")
+        st.subheader("元の画像 " + ("(前処理後)" if st.session_state.use_image_enhancement else ""))
+        st.image(img_to_analyze_rgb if st.session_state.use_image_enhancement else img_np, use_container_width=True)
 
 else:
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
