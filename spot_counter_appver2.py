@@ -18,19 +18,12 @@ st.markdown("""
         border-radius: 0.5rem !important;
         background-color: #495057 !important;
     }
-    .color-checkbox-container {
-        display: flex; align-items: center; padding: 5px 8px;
-        border-radius: 5px; margin-bottom: 8px; border: 1px solid #555;
-        background-color: #444;
-    }
-    .color-label { display: flex; align-items: center; }
-    .color-box { width: 18px; height: 18px; margin-right: 8px; border: 1px solid #fff; }
     div[data-testid="stHorizontalBlock"] > div[style*="flex-direction: row;"] {
         align-items: center;
     }
     
     /* ★★★ 修正点: サイドバーを折りたたむボタンをより確実に非表示にする ★★★ */
-    [data-testid="stSidebarNav"] button {
+    button[data-testid="stSidebarCollapseButton"] {
         display: none;
     }
 </style>
@@ -115,6 +108,7 @@ if st.session_state.pil_image_original:
         st.sidebar.subheader("色の範囲設定 (HSV)")
         st.sidebar.write("**輝点の色** (複数選択可)")
         
+        # ★★★ 修正点: 色選択UIを元の安定したチェックボックス形式に戻す ★★★
         cols = st.sidebar.columns(2)
         current_selections = []
         for i, (color_name, props) in enumerate(HUE_PRESETS.items()):
