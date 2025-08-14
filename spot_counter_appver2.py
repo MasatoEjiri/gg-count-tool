@@ -18,6 +18,11 @@ st.markdown("""
         border-radius: 0.5rem !important;
         background-color: #495057 !important;
     }
+    /* ★★★ 修正点: 選択されたカラーボックスの枠線を赤くする ★★★ */
+    div[data-testid="stVerticalBlock"]:has(div.stCheckbox input:checked) > div[data-testid="stVerticalBlockBorderWrapper"] > div {
+        border-color: #FF4B4B !important;
+        box-shadow: 0 0 10px rgba(255, 75, 75, 0.7);
+    }
     /* カラーボックスとチェックボックスを横に並べるための微調整 */
     div[data-testid="stHorizontalBlock"] > div[style*="flex-direction: row;"] {
         align-items: center;
@@ -111,7 +116,7 @@ if st.session_state.pil_image_original:
             col = cols[i % 2]
             with col.container(border=True):
                 c1, c2 = st.columns([0.2, 0.8])
-                c1.markdown(f'<div style="width:20px; height:20px; background-color:{props["color"]}; border:1px solid #fff;"></div>', unsafe_allow_html=True)
+                c1.markdown(f'<div style="width:20px; height:20px; background-color:{props["color"]}; border:1.5px solid #fff; border-radius: 3px;"></div>', unsafe_allow_html=True)
                 if c2.checkbox(color_name, value=(color_name in st.session_state.selected_hue_names), key=f"cb_{color_name}"):
                     current_selections.append(color_name)
         st.session_state.selected_hue_names = current_selections
@@ -152,8 +157,8 @@ if st.session_state.pil_image_original:
         result_container = col2
     else:
         pil_image_to_process = st.session_state.pil_image_original
-        # ★★★ 修正点: トリミングOFF時の表示エリアを中央の狭いカラムに限定 ★★★
-        _, result_container, _ = st.columns([1, 2, 1])
+        # ★★★ 修正点: トリミングOFF時の表示エリアを中央の少し広めのカラムに限定 ★★★
+        _, result_container, _ = st.columns([0.5, 3, 0.5])
 
 
     # --- 画像処理と結果表示 ---
