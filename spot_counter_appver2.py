@@ -18,23 +18,23 @@ st.markdown("""
         border-radius: 0.5rem !important;
         background-color: #495057 !important;
     }
-    /* ★★★ 修正点: サイドバーを折りたたむボタンをより確実に非表示にする ★★★ */
-    button[data-testid="stSidebarCollapseButton"] {
-        display: none;
-    }
-    /* カラーボックスとチェックボックスを横に並べるための微調整 */
     div[data-testid="stHorizontalBlock"] > div[style*="flex-direction: row;"] {
         align-items: center;
+    }
+    
+    /* サイドバーを折りたたむボタンを非表示にする */
+    button[data-testid="stSidebarCollapseButton"] {
+        display: none;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # --- 定数定義 ---
 HUE_PRESETS = {
-    "赤": {"range": ((0, 10), (160, 179)), "color": "#FF4B4B"},
-    "黄": {"range": (20, 35), "color": "#FFD700"},
-    "緑": {"range": (35, 85), "color": "#28a745"},
-    "青": {"range": (100, 130), "color": "#007bff"},
+    "赤": {"range": ((0, 10), (160, 179))},
+    "黄": {"range": (20, 35)},
+    "緑": {"range": (35, 85)},
+    "青": {"range": (100, 130)},
 }
 CONTOUR_COLORS = {"青":"#007bff", "緑":"#28a745", "赤":"#dc3545", "黄":"#ffc107"}
 
@@ -106,19 +106,15 @@ if st.session_state.pil_image_original:
         st.sidebar.number_input('（値）', 0, 255, key='binary_threshold_number', on_change=sync_from_number, args=('binary_threshold',), label_visibility="collapsed")
     else:
         st.sidebar.subheader("色の範囲設定 (HSV)")
-        st.sidebar.write("**輝点の色** (複数選択可)")
         
-        # ★★★ 修正点: 色選択UIを元の安定したチェックボックス形式に戻す ★★★
-        cols = st.sidebar.columns(2)
-        current_selections = []
-        for i, (color_name, props) in enumerate(HUE_PRESETS.items()):
-            col = cols[i % 2]
-            with col.container(border=True):
-                c1, c2 = st.columns([0.2, 0.8])
-                c1.markdown(f'<div style="width:20px; height:20px; background-color:{props["color"]}; border:1.5px solid #fff; border-radius: 3px;"></div>', unsafe_allow_html=True)
-                if c2.checkbox(color_name, value=(color_name in st.session_state.selected_hue_names), key=f"cb_{color_name}"):
-                    current_selections.append(color_name)
-        st.session_state.selected_hue_names = current_selections
+        # ▼▼▼【UI改善】チェックボックスをst.multiselectに変更 ▼▼▼
+        st.session_state.selected_hue_names = st.sidebar.multiselect(
+            label="輝点の色 (複数選択可)",
+            options=list(HUE_PRESETS.keys()),
+            default=st.session_state.selected_hue_names,
+            help="解析したい輝点の色をリストから選択します。"
+        )
+        # ▲▲▲ UI改善ここまで ▲▲▲
 
         st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation_slider', on_change=sync_from_slider, args=('saturation',), help="色の鮮やかさの最小値")
         st.sidebar.number_input('（値）', 0, 255, key='saturation_number', on_change=sync_from_number, args=('saturation',), label_visibility="collapsed")
@@ -211,6 +207,5 @@ if st.session_state.pil_image_original:
         st.markdown("---")
         st.subheader("元の画像 " + ("(前処理後)" if st.session_state.use_image_enhancement else "(トリミング後)"))
         st.image(img_to_analyze_rgb if st.session_state.use_image_enhancement else img_np, use_container_width=True)
-
 else:
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
