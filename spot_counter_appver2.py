@@ -21,41 +21,38 @@ st.markdown("""
     div[data-testid="stHorizontalBlock"] > div[style*="flex-direction: row;"] {
         align-items: center;
     }
-    
-    /* サイドバーを折りたたむボタンを非表示にする */
-    button[data-testid="stSidebarCollapseButton"] {
-        display: none;
+    button[data-testid="stSidebarCollapseButton"] { display: none; }
+
+    /* ▼▼▼【UI改善】サイドバーのサブヘッダーの余白を調整 ▼▼▼ */
+    .sidebar-subheader {
+        font-size: 1rem;
+        font-weight: 600;
+        margin-top: 1.2rem;
+        margin-bottom: 0.5rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # --- 定数定義 ---
 HUE_PRESETS = {
-    "赤": {"range": ((0, 10), (160, 179))},
-    "黄": {"range": (20, 35)},
-    "緑": {"range": (35, 85)},
-    "青": {"range": (100, 130)},
+    "赤": {"range": ((0, 10), (160, 179))}, "黄": {"range": (20, 35)},
+    "緑": {"range": (35, 85)}, "青": {"range": (100, 130)},
 }
 CONTOUR_COLORS = {"青":"#007bff", "緑":"#28a745", "赤":"#dc3545", "黄":"#ffc107"}
 
 # --- セッションステート管理 ---
 def get_default_params():
-    # ▼▼▼ チェックボックス用のキーに変更 ▼▼▼
     return {
-        'binary_threshold': 15, 'saturation': 90, 'brightness': 90,
-        'contour_color': "青", 'detection_method': "色で検出（オススメ）",
-        'max_area': 10000, 'min_area': 1,
+        'binary_threshold': 15, 'saturation': 90, 'brightness': 90, 'contour_color': "青",
+        'detection_method': "色で検出（オススメ）", 'max_area': 10000, 'min_area': 1,
         'use_image_enhancement': True, 'use_cropper': False,
-        'saturation_slider': 90, 'saturation_number': 90,
-        'brightness_slider': 90, 'brightness_number': 90,
-        'binary_threshold_slider': 15, 'binary_threshold_number': 15,
-        'cb_赤': True, 'cb_黄': False, 'cb_緑': False, 'cb_青': False,
-        'state_initialized': True
+        'saturation_slider': 90, 'saturation_number': 90, 'brightness_slider': 90,
+        'brightness_number': 90, 'binary_threshold_slider': 15, 'binary_threshold_number': 15,
+        'cb_赤': True, 'cb_黄': False, 'cb_緑': False, 'cb_青': False, 'state_initialized': True
     }
 
 def ensure_state_consistency():
     if not st.session_state.get('state_initialized'):
-        # アプリ初回起動時にデフォルト値を設定
         st.session_state.update(get_default_params())
 
 ensure_state_consistency()
@@ -79,20 +76,18 @@ def sync_from_number(param):
     st.session_state[f"{param}_slider"] = st.session_state[f"{param}_number"]
 
 # --- UI ---
-st.sidebar.header("解析パラメータ設定")
-uploaded_file = st.sidebar.file_uploader("画像をアップロード", type=['tif', 'tiff', 'png', 'jpg', 'jpeg'])
-
-st.markdown('<h1 style="font-size: 2.5rem; margin-top: 0;">GG輝点解析ツール</h1>', unsafe_allow_html=True)
+st.sidebar.markdown("### 解析パラメータ設定")
+uploaded_file = st.sidebar.file_uploader("画像をアップロード", type=['tif', 'tiff', 'png', 'jpg', 'jpeg'], label_visibility="collapsed")
+st.sidebar.checkbox("トリミング機能を使用する", key='use_cropper')
+st.sidebar.radio("検出方法", ("色で検出（オススメ）", "明るさで検出"), key='detection_method', horizontal=True)
+st.sidebar.markdown("---")
 
 # --- 画像読み込み ---
 if uploaded_file:
     file_id = f"{uploaded_file.name}-{uploaded_file.size}"
     if st.session_state.get('current_file_id') != file_id:
-        # 新しいファイルがアップロードされたら、全てのセッションステートをクリアして再初期化
         current_keys = list(st.session_state.keys())
-        for key in current_keys:
-            del st.session_state[key]
-        
+        for key in current_keys: del st.session_state[key]
         st.session_state.update(get_default_params())
         st.session_state.pil_image_original = Image.open(io.BytesIO(uploaded_file.getvalue()))
         st.session_state.current_file_id = file_id
@@ -101,57 +96,51 @@ else:
 
 # --- メイン処理 ---
 if st.session_state.pil_image_original:
-    # --- サイドバーUI ---
-    st.sidebar.checkbox("トリミング機能を使用する", key='use_cropper')
-    st.sidebar.radio("検出方法", ("色で検出（オススメ）", "明るさで検出"), key='detection_method', horizontal=True)
-    st.sidebar.markdown("---")
-
     if st.session_state.detection_method == "明るさで検出":
-        st.sidebar.subheader("二値化")
-        st.sidebar.slider('閾値', 0, 255, key='binary_threshold_slider', on_change=sync_from_slider, args=('binary_threshold',))
-        st.sidebar.number_input('（値）', 0, 255, key='binary_threshold_number', on_change=sync_from_number, args=('binary_threshold',), label_visibility="collapsed")
+        st.sidebar.markdown('<p class="sidebar-subheader">二値化</p>', unsafe_allow_html=True)
+        c1, c2 = st.sidebar.columns([0.75, 0.25])
+        with c1:
+            st.slider('閾値', 0, 255, key='binary_threshold_slider', on_change=sync_from_slider, args=('binary_threshold',), label_visibility="collapsed")
+        with c2:
+            st.number_input('閾値', 0, 255, key='binary_threshold_number', on_change=sync_from_number, args=('binary_threshold',), label_visibility="collapsed")
     else:
-        st.sidebar.subheader("色の範囲設定 (HSV)")
+        st.sidebar.markdown('<p class="sidebar-subheader">色の範囲設定 (HSV)</p>', unsafe_allow_html=True)
         st.sidebar.write("**輝点の色** (複数選択可)")
-        
-        # ▼▼▼ トグルスイッチをチェックボックスに変更 ▼▼▼
         color_emoji_map = {"赤": "🔴", "黄": "🟡", "緑": "🟢", "青": "🔵"}
         color_names = list(HUE_PRESETS.keys())
-        
-        # 1行目
         cols1 = st.sidebar.columns(2)
-        with cols1[0]:
-            st.checkbox(f"{color_emoji_map['赤']} 赤", key="cb_赤")
-        with cols1[1]:
-            st.checkbox(f"{color_emoji_map['黄']} 黄", key="cb_黄")
-
-        # 2行目
+        with cols1[0]: st.checkbox(f"{color_emoji_map['赤']} 赤", key="cb_赤")
+        with cols1[1]: st.checkbox(f"{color_emoji_map['黄']} 黄", key="cb_黄")
         cols2 = st.sidebar.columns(2)
-        with cols2[0]:
-            st.checkbox(f"{color_emoji_map['緑']} 緑", key="cb_緑")
-        with cols2[1]:
-            st.checkbox(f"{color_emoji_map['青']} 青", key="cb_青")
-        
-        # 選択された色のリストをチェックボックスの状態から生成
+        with cols2[0]: st.checkbox(f"{color_emoji_map['緑']} 緑", key="cb_緑")
+        with cols2[1]: st.checkbox(f"{color_emoji_map['青']} 青", key="cb_青")
         selected_hue_names = [name for name in color_names if st.session_state[f"cb_{name}"]]
-        # ▲▲▲ UI変更ここまで ▲▲▲
+        
+        # 彩度(S)と明度(V)のUIをコンパクト化
+        c1, c2 = st.sidebar.columns([0.75, 0.25])
+        with c1: st.slider("彩度(S)の下限", 0, 255, key='saturation_slider', on_change=sync_from_slider, args=('saturation',), help="色の鮮やかさの最小値")
+        with c2: st.number_input('S値', 0, 255, key='saturation_number', on_change=sync_from_number, args=('saturation',))
+        
+        c1, c2 = st.sidebar.columns([0.75, 0.25])
+        with c1: st.slider("明度(V)の下限", 0, 255, key='brightness_slider', on_change=sync_from_slider, args=('brightness',), help="色の明るさの最小値")
+        with c2: st.number_input('V値', 0, 255, key='brightness_number', on_change=sync_from_number, args=('brightness',))
 
-        st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation_slider', on_change=sync_from_slider, args=('saturation',), help="色の鮮やかさの最小値")
-        st.sidebar.number_input('（値）', 0, 255, key='saturation_number', on_change=sync_from_number, args=('saturation',), label_visibility="collapsed")
-        st.sidebar.slider("明度(V)の下限", 0, 255, key='brightness_slider', on_change=sync_from_slider, args=('brightness',), help="色の明るさの最小値")
-        st.sidebar.number_input('（値）', 0, 255, key='brightness_number', on_change=sync_from_number, args=('brightness',), label_visibility="collapsed")
-
-    st.sidebar.subheader("前処理")
+    st.sidebar.markdown('<p class="sidebar-subheader">前処理</p>', unsafe_allow_html=True)
     st.sidebar.checkbox("画質を最適化", key='use_image_enhancement', help="ガンマ補正・鮮明化・明るさの向上")
-    st.sidebar.subheader("輝点フィルタリング (面積)")
-    st.sidebar.number_input('最小面積', 1, 10000, key='min_area')
-    st.sidebar.number_input('最大面積', 1, 100000, key='max_area')
-    st.sidebar.subheader("表示設定")
+    
+    st.sidebar.markdown('<p class="sidebar-subheader">輝点フィルタリング (面積)</p>', unsafe_allow_html=True)
+    c1, c2 = st.sidebar.columns(2)
+    with c1: st.number_input('最小面積', 1, 10000, key='min_area')
+    with c2: st.number_input('最大面積', 1, 100000, key='max_area')
+    
+    st.sidebar.markdown('<p class="sidebar-subheader">表示設定</p>', unsafe_allow_html=True)
     st.sidebar.radio("輝点マーキング色", list(CONTOUR_COLORS.keys()), key='contour_color', horizontal=True)
+    
     contour_color_bgr = hex_to_bgr(CONTOUR_COLORS[st.session_state.contour_color])
 
-    # --- レイアウトと画像の前処理 ---
     pil_image_to_process = None
+    st.markdown('<h1 style="font-size: 2.5rem; margin-top: 0;">GG輝点解析ツール</h1>', unsafe_allow_html=True)
+    
     if st.session_state.use_cropper:
         col1, col2 = st.columns([2, 3])
         with col1:
@@ -174,13 +163,11 @@ if st.session_state.pil_image_original:
         pil_image_to_process = st.session_state.pil_image_original
         _, result_container, _ = st.columns([0.5, 3, 0.5])
 
-    # --- 画像処理と結果表示 ---
     with result_container:
         if st.session_state.use_cropper:
             st.subheader("輝点検出とマーキング")
         else:
             st.subheader("輝点検出結果")
-            
         img_np = np.array(pil_image_to_process.convert("RGB"))
         img_to_analyze = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
         
@@ -211,7 +198,6 @@ if st.session_state.pil_image_original:
                         final_mask = cv2.bitwise_or(final_mask, mask)
             binary_img = final_mask
 
-        # 形態学的処理は内部で固定
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (1, 1))
         opened_img = cv2.morphologyEx(binary_img, cv2.MORPH_OPEN, kernel, iterations=1)
         contours, _ = cv2.findContours(opened_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -229,3 +215,5 @@ if st.session_state.pil_image_original:
         st.image(img_to_analyze_rgb if st.session_state.use_image_enhancement else img_np, use_container_width=True)
 else:
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
+    st.markdown("---")
+    st.markdown("GG輝点解析ツール v1.0")
