@@ -8,23 +8,28 @@ from streamlit_cropper import st_cropper
 # ページ設定
 st.set_page_config(page_title="GG輝点解析ツール", layout="wide", initial_sidebar_state="expanded")
 
-# --- カスタムCSS ---
+# --- カスタムCSS (ライト/ダークモード両対応) ---
 st.markdown("""
 <style>
+    /* 基本調整 */
     .main .block-container { padding-top: 1rem !important; }
     h1 { margin-top: 0px !important; padding-top: 0px !important; }
+
+    /* ファイルアップローダー */
     section[data-testid="stFileUploaderDropzone"] {
-        border: 3px dotted white !important;
+        border: 3px dotted var(--text-color) !important;
         border-radius: 0.5rem !important;
-        background-color: #495057 !important;
+        background-color: var(--secondary-background-color) !important;
     }
+    
+    /* カラーチェックボックス */
     .color-checkbox-container {
         display: flex; align-items: center; padding: 5px 8px;
-        border-radius: 5px; margin-bottom: 8px; border: 1px solid #555;
-        background-color: #444;
+        border-radius: 5px; margin-bottom: 8px; border: 1px solid var(--border-color);
+        background-color: var(--secondary-background-color);
     }
-    .color-label { display: flex; align-items: center; }
-    .color-box { width: 18px; height: 18px; margin-right: 8px; border: 1px solid #fff; }
+    .color-label { display: flex; align-items: center; color: var(--text-color); }
+    .color-box { width: 18px; height: 18px; margin-right: 8px; border: 1px solid var(--text-color); }
 </style>
 """, unsafe_allow_html=True)
 
@@ -42,8 +47,8 @@ def get_default_params():
     return {
         'binary_threshold': 15, 'saturation': 90, 'brightness': 90,
         'selected_hue_names': ["赤"], 'contour_color': "青",
-        'detection_method': "色で検出", 'max_area': 10000, 'min_area': 1, 'kernel_size': 1,
-        'use_image_enhancement': True, 'use_cropper': False, # ★画質最適化をデフォルトONに
+        'detection_method': "色で検出（オススメ）", 'max_area': 10000, 'min_area': 1,
+        'use_image_enhancement': True, 'use_cropper': False,
         'saturation_slider': 90, 'saturation_number': 90,
         'brightness_slider': 90, 'brightness_number': 90,
         'binary_threshold_slider': 15, 'binary_threshold_number': 15,
@@ -85,6 +90,7 @@ st.markdown('<h1 style="font-size: 2.5rem; margin-top: 0;">GG輝点解析ツー�
 if uploaded_file:
     file_id = f"{uploaded_file.name}-{uploaded_file.size}"
     if st.session_state.get('current_file_id') != file_id:
+        # 新しい画像がアップされたらパラメータをリセット
         for key, value in get_default_params().items():
             st.session_state[key] = value
         st.session_state.pil_image_original = Image.open(io.BytesIO(uploaded_file.getvalue()))
@@ -96,7 +102,8 @@ else:
 if st.session_state.pil_image_original:
     # --- サイドバーUI ---
     st.sidebar.checkbox("トリミング機能を使用する", key='use_cropper')
-    st.sidebar.radio("検出方法", ("色で検出", "明るさで検出"), key='detection_method', horizontal=True)
+    # ★★★ 修正点: ラジオボタンのラベルを変更 ★★★
+    st.sidebar.radio("検出方法", ("色で検出（オススメ）", "明るさで検出"), key='detection_method', horizontal=True)
     st.sidebar.markdown("---")
 
     if st.session_state.detection_method == "明るさで検出":
@@ -123,11 +130,6 @@ if st.session_state.pil_image_original:
 
     st.sidebar.subheader("前処理")
     st.sidebar.checkbox("画質を最適化", key='use_image_enhancement', help="ガンマ補正・鮮明化・明るさの向上")
-    
-    # ★★★ 修正点: カーネルサイズのUIを削除 ★★★
-    # st.sidebar.subheader("形態学的処理")
-    # st.sidebar.select_slider('カーネルサイズ', options=[1, 3, 5, 7, 9], key='kernel_size', help="ノイズ除去/輝点分離")
-    
     st.sidebar.subheader("輝点フィルタリング (面積)")
     st.sidebar.number_input('最小面積', 1, 10000, key='min_area')
     st.sidebar.number_input('最大面積', 1, 100000, key='max_area')
@@ -196,7 +198,8 @@ if st.session_state.pil_image_original:
                         final_mask = cv2.bitwise_or(final_mask, mask)
             binary_img = final_mask
 
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (st.session_state.kernel_size, st.session_state.kernel_size))
+        # 形態学的処理は内部で固定
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (1, 1))
         opened_img = cv2.morphologyEx(binary_img, cv2.MORPH_OPEN, kernel, iterations=1)
         contours, _ = cv2.findContours(opened_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         count = 0
