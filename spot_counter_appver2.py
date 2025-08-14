@@ -76,6 +76,13 @@ def sync_from_number(param):
     st.session_state[param] = st.session_state[f"{param}_number"]
     st.session_state[f"{param}_slider"] = st.session_state[f"{param}_number"]
 
+# ▼▼▼【UI改善】色選択のフォーマット関数を定義 ▼▼▼
+def format_color_option(option_name):
+    """multiselectの選択肢に絵文字を追加する"""
+    color_emoji_map = {"赤": "🔴", "黄": "🟡", "緑": "🟢", "青": "🔵"}
+    return f"{color_emoji_map.get(option_name, '⚫')} {option_name}"
+# ▲▲▲ UI改善ここまで ▲▲▲
+
 # --- UI ---
 st.sidebar.header("解析パラメータ設定")
 uploaded_file = st.sidebar.file_uploader("画像をアップロード", type=['tif', 'tiff', 'png', 'jpg', 'jpeg'])
@@ -107,14 +114,15 @@ if st.session_state.pil_image_original:
     else:
         st.sidebar.subheader("色の範囲設定 (HSV)")
         
-        # ▼▼▼【UI改善】チェックボックスをst.multiselectに変更 ▼▼▼
-        st.session_state.selected_hue_names = st.sidebar.multiselect(
+        # ▼▼▼【UI改善 & バグ修正】st.multiselectにkeyとformat_funcを追加 ▼▼▼
+        st.sidebar.multiselect(
             label="輝点の色 (複数選択可)",
             options=list(HUE_PRESETS.keys()),
-            default=st.session_state.selected_hue_names,
-            help="解析したい輝点の色をリストから選択します。"
+            help="解析したい輝点の色をリストから選択します。",
+            key='selected_hue_names', # バグ修正：stateを正しく管理するためのキー
+            format_func=format_color_option # UI改善：選択肢に絵文字を追加
         )
-        # ▲▲▲ UI改善ここまで ▲▲▲
+        # ▲▲▲ 修正ここまで ▲▲▲
 
         st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation_slider', on_change=sync_from_slider, args=('saturation',), help="色の鮮やかさの最小値")
         st.sidebar.number_input('（値）', 0, 255, key='saturation_number', on_change=sync_from_number, args=('saturation',), label_visibility="collapsed")
