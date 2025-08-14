@@ -43,7 +43,7 @@ def get_default_params():
         'binary_threshold': 15, 'saturation': 90, 'brightness': 90,
         'selected_hue_names': ["赤"], 'contour_color': "青",
         'detection_method': "色で検出", 'max_area': 10000, 'min_area': 1, 'kernel_size': 1,
-        'use_image_enhancement': False, 'use_cropper': False,
+        'use_image_enhancement': True, 'use_cropper': False, # ★画質最適化をデフォルトONに
         'saturation_slider': 90, 'saturation_number': 90,
         'brightness_slider': 90, 'brightness_number': 90,
         'binary_threshold_slider': 15, 'binary_threshold_number': 15,
@@ -85,7 +85,7 @@ st.markdown('<h1 style="font-size: 2.5rem; margin-top: 0;">GG輝点解析ツー�
 if uploaded_file:
     file_id = f"{uploaded_file.name}-{uploaded_file.size}"
     if st.session_state.get('current_file_id') != file_id:
-        for key, value in get_default_params().items(): # 新しい画像でパラメータをリセット
+        for key, value in get_default_params().items():
             st.session_state[key] = value
         st.session_state.pil_image_original = Image.open(io.BytesIO(uploaded_file.getvalue()))
         st.session_state.current_file_id = file_id
@@ -123,8 +123,11 @@ if st.session_state.pil_image_original:
 
     st.sidebar.subheader("前処理")
     st.sidebar.checkbox("画質を最適化", key='use_image_enhancement', help="ガンマ補正・鮮明化・明るさの向上")
-    st.sidebar.subheader("形態学的処理")
-    st.sidebar.select_slider('カーネルサイズ', options=[1, 3, 5, 7, 9], key='kernel_size', help="ノイズ除去/輝点分離")
+    
+    # ★★★ 修正点: カーネルサイズのUIを削除 ★★★
+    # st.sidebar.subheader("形態学的処理")
+    # st.sidebar.select_slider('カーネルサイズ', options=[1, 3, 5, 7, 9], key='kernel_size', help="ノイズ除去/輝点分離")
+    
     st.sidebar.subheader("輝点フィルタリング (面積)")
     st.sidebar.number_input('最小面積', 1, 10000, key='min_area')
     st.sidebar.number_input('最大面積', 1, 100000, key='max_area')
@@ -158,7 +161,11 @@ if st.session_state.pil_image_original:
 
     # --- 画像処理と結果表示 ---
     with result_container:
-        st.subheader("輝点検出とマーキング")
+        if st.session_state.use_cropper:
+            st.subheader("輝点検出とマーキング")
+        else:
+            st.subheader("輝点検出結果")
+            
         img_np = np.array(pil_image_to_process.convert("RGB"))
         img_to_analyze = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
         
@@ -201,19 +208,9 @@ if st.session_state.pil_image_original:
         st.image(cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB), use_container_width=True)
         st.markdown(f"""<div style="text-align: center; background-image: linear-gradient(45deg, #007bff, #E83E8C); padding: 10px; border-radius: 10px; color: white; font-size: 20px; font-weight: bold; margin-top: 10px;">検出輝点: {count}個</div>""", unsafe_allow_html=True)
     
-    # ★★★ 修正点: 元画像の表示ロジックを修正 ★★★
     st.markdown("---")
-    subheader_title = "元の画像 "
-    if st.session_state.use_image_enhancement:
-        subheader_title += "(前処理後)"
-    elif st.session_state.use_cropper:
-        subheader_title += "(トリミング後)"
-    else:
-        subheader_title += "(全体)"
-
-    st.subheader(subheader_title)
-    image_to_show = img_to_analyze_rgb if st.session_state.use_image_enhancement else img_np
-    st.image(image_to_show, use_container_width=True)
+    st.subheader("元の画像 " + ("(前処理後)" if st.session_state.use_image_enhancement else "(トリミング後)"))
+    st.image(img_to_analyze_rgb if st.session_state.use_image_enhancement else img_np, use_container_width=True)
 
 else:
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
