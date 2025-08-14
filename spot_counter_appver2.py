@@ -40,21 +40,23 @@ CONTOUR_COLORS = {"青":"#007bff", "緑":"#28a745", "赤":"#dc3545", "黄":"#ffc
 
 # --- セッションステート管理 ---
 def get_default_params():
+    # ▼▼▼【バグ修正】toggleの状態を直接管理するように変更 ▼▼▼
     return {
         'binary_threshold': 15, 'saturation': 90, 'brightness': 90,
-        'selected_hue_names': ["赤"], 'contour_color': "青",
-        'detection_method': "色で検出（オススメ）", 'max_area': 10000, 'min_area': 1,
+        'contour_color': "青", 'detection_method': "色で検出（オススメ）",
+        'max_area': 10000, 'min_area': 1,
         'use_image_enhancement': True, 'use_cropper': False,
         'saturation_slider': 90, 'saturation_number': 90,
         'brightness_slider': 90, 'brightness_number': 90,
         'binary_threshold_slider': 15, 'binary_threshold_number': 15,
+        'toggle_赤': True, 'toggle_黄': False, 'toggle_緑': False, 'toggle_青': False,
         'state_initialized': True
     }
 
 def ensure_state_consistency():
     if not st.session_state.get('state_initialized'):
-        for key, value in get_default_params().items():
-            st.session_state[key] = value
+        # アプリ初回起動時にデフォルト値を設定
+        st.session_state.update(get_default_params())
 
 ensure_state_consistency()
 
@@ -86,10 +88,12 @@ st.markdown('<h1 style="font-size: 2.5rem; margin-top: 0;">GG輝点解析ツー�
 if uploaded_file:
     file_id = f"{uploaded_file.name}-{uploaded_file.size}"
     if st.session_state.get('current_file_id') != file_id:
-        # 新しいファイルがアップロードされたら、全てのセッションステートをデフォルトに戻す
-        for key in st.session_state.keys():
+        # 新しいファイルがアップロードされたら、全てのセッションステートをクリアして再初期化
+        current_keys = list(st.session_state.keys())
+        for key in current_keys:
             del st.session_state[key]
-        ensure_state_consistency()
+        
+        st.session_state.update(get_default_params())
         st.session_state.pil_image_original = Image.open(io.BytesIO(uploaded_file.getvalue()))
         st.session_state.current_file_id = file_id
 else:
@@ -108,29 +112,28 @@ if st.session_state.pil_image_original:
         st.sidebar.number_input('（値）', 0, 255, key='binary_threshold_number', on_change=sync_from_number, args=('binary_threshold',), label_visibility="collapsed")
     else:
         st.sidebar.subheader("色の範囲設定 (HSV)")
-        
-        # ▼▼▼【最終提案】st.toggle を使用した新しいUI ▼▼▼
         st.sidebar.write("**輝点の色** (複数選択可)")
         
-        cols = st.sidebar.columns(4)
-        current_selections = []
+        # ▼▼▼【レイアウト修正】2行x2列のグリッドレイアウトに変更 ▼▼▼
         color_emoji_map = {"赤": "🔴", "黄": "🟡", "緑": "🟢", "青": "🔵"}
+        color_names = list(HUE_PRESETS.keys())
         
-        for i, color_name in enumerate(HUE_PRESETS.keys()):
-            with cols[i]:
-                # デフォルト値がセッションステートに存在するか確認
-                default_value = color_name in st.session_state.get('selected_hue_names', ["赤"])
-                
-                is_selected = st.toggle(
-                    f"{color_emoji_map[color_name]} {color_name}", 
-                    value=default_value, 
-                    key=f"toggle_{color_name}"
-                )
-                if is_selected:
-                    current_selections.append(color_name)
+        # 1行目
+        cols1 = st.sidebar.columns(2)
+        with cols1[0]:
+            st.toggle(f"{color_emoji_map['赤']} 赤", key="toggle_赤")
+        with cols1[1]:
+            st.toggle(f"{color_emoji_map['黄']} 黄", key="toggle_黄")
+
+        # 2行目
+        cols2 = st.sidebar.columns(2)
+        with cols2[0]:
+            st.toggle(f"{color_emoji_map['緑']} 緑", key="toggle_緑")
+        with cols2[1]:
+            st.toggle(f"{color_emoji_map['青']} 青", key="toggle_青")
         
-        # 選択された色をセッションステートに保存
-        st.session_state.selected_hue_names = current_selections
+        # 選択された色のリストをtoggleの状態から生成
+        selected_hue_names = [name for name in color_names if st.session_state[f"toggle_{name}"]]
         # ▲▲▲ UI変更ここまで ▲▲▲
 
         st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation_slider', on_change=sync_from_slider, args=('saturation',), help="色の鮮やかさの最小値")
@@ -196,8 +199,8 @@ if st.session_state.pil_image_original:
             img_hsv = cv2.cvtColor(img_to_analyze_rgb, cv2.COLOR_RGB2HSV)
             sat, val = st.session_state.saturation, st.session_state.brightness
             final_mask = np.zeros(img_hsv.shape[:2], dtype=np.uint8)
-            if st.session_state.selected_hue_names:
-                for color_name in st.session_state.selected_hue_names:
+            if selected_hue_names:
+                for color_name in selected_hue_names:
                     hue_data = HUE_PRESETS[color_name]["range"]
                     if isinstance(hue_data[0], tuple):
                         mask1 = cv2.inRange(img_hsv, np.array([hue_data[0][0], sat, val]), np.array([hue_data[0][1], 255, 255]))
