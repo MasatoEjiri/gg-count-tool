@@ -27,12 +27,19 @@ st.markdown("""
         display: none;
     }
 
-    /* ▼▼▼【UI改善】multiselectの選択済みタグの背景を透明にする ▼▼▼ */
-    div[data-baseweb="tag"] {
+    /* ▼▼▼【UI改善/CSS強化】multiselectの選択済みタグのスタイル ▼▼▼ */
+    div[data-baseweb="tag"], div[data-testid="stTag"] {
         background-color: transparent !important;
-        border: 1px solid rgba(255, 255, 255, 0.6) !important; /* 視認性のための薄い境界線 */
+        border: 1px solid rgba(255, 255, 255, 0.6) !important;
+        color: white !important; /* テキスト色を強制的に白に */
+        border-radius: 0.5rem !important;
         padding-top: 4px !important;
         padding-bottom: 4px !important;
+    }
+    /* タグ内のテキストとバツボタンの色も白に指定 */
+    div[data-testid="stTag"] span, 
+    div[data-testid="stTag"] span[role="button"] {
+        color: white !important;
     }
     /* ▲▲▲ UI改善ここまで ▲▲▲ */
 
