@@ -8,28 +8,20 @@ from streamlit_cropper import st_cropper
 # ページ設定
 st.set_page_config(page_title="GG輝点解析ツール", layout="wide", initial_sidebar_state="expanded")
 
-# --- カスタムCSS (ライト/ダークモード両対応) ---
+# --- カスタムCSS ---
 st.markdown("""
 <style>
-    /* 基本調整 */
     .main .block-container { padding-top: 1rem !important; }
     h1 { margin-top: 0px !important; padding-top: 0px !important; }
-
-    /* ファイルアップローダー */
     section[data-testid="stFileUploaderDropzone"] {
-        border: 3px dotted var(--text-color) !important;
+        border: 3px dotted white !important;
         border-radius: 0.5rem !important;
-        background-color: var(--secondary-background-color) !important;
+        background-color: #495057 !important;
     }
-    
-    /* カラーチェックボックス */
-    .color-checkbox-container {
-        display: flex; align-items: center; padding: 5px 8px;
-        border-radius: 5px; margin-bottom: 8px; border: 1px solid var(--border-color);
-        background-color: var(--secondary-background-color);
+    /* カラーボックスとチェックボックスを横に並べるための微調整 */
+    div[data-testid="stHorizontalBlock"] > div[style*="flex-direction: row;"] {
+        align-items: center;
     }
-    .color-label { display: flex; align-items: center; color: var(--text-color); }
-    .color-box { width: 18px; height: 18px; margin-right: 8px; border: 1px solid var(--text-color); }
 </style>
 """, unsafe_allow_html=True)
 
@@ -90,7 +82,6 @@ st.markdown('<h1 style="font-size: 2.5rem; margin-top: 0;">GG輝点解析ツー�
 if uploaded_file:
     file_id = f"{uploaded_file.name}-{uploaded_file.size}"
     if st.session_state.get('current_file_id') != file_id:
-        # 新しい画像がアップされたらパラメータをリセット
         for key, value in get_default_params().items():
             st.session_state[key] = value
         st.session_state.pil_image_original = Image.open(io.BytesIO(uploaded_file.getvalue()))
@@ -102,7 +93,6 @@ else:
 if st.session_state.pil_image_original:
     # --- サイドバーUI ---
     st.sidebar.checkbox("トリミング機能を使用する", key='use_cropper')
-    # ★★★ 修正点: ラジオボタンのラベルを変更 ★★★
     st.sidebar.radio("検出方法", ("色で検出（オススメ）", "明るさで検出"), key='detection_method', horizontal=True)
     st.sidebar.markdown("---")
 
@@ -113,16 +103,19 @@ if st.session_state.pil_image_original:
     else:
         st.sidebar.subheader("色の範囲設定 (HSV)")
         st.sidebar.write("**輝点の色** (複数選択可)")
+        
+        # ★★★ 修正点: 色選択UIをより洗練されたレイアウトに変更 ★★★
         cols = st.sidebar.columns(2)
         current_selections = []
         for i, (color_name, props) in enumerate(HUE_PRESETS.items()):
             col = cols[i % 2]
-            with col.container():
-                c1, c2 = st.columns([0.8, 0.2])
-                c1.markdown(f'<div class="color-checkbox-container"><div class="color-label"><div class="color-box" style="background-color: {props["color"]};"></div><span>{color_name}</span></div></div>', unsafe_allow_html=True)
-                if c2.checkbox("", value=(color_name in st.session_state.selected_hue_names), key=f"cb_{color_name}", label_visibility="collapsed"):
+            with col.container(border=True):
+                c1, c2 = st.columns([0.2, 0.8])
+                c1.markdown(f'<div style="width:20px; height:20px; background-color:{props["color"]}; border:1px solid #fff;"></div>', unsafe_allow_html=True)
+                if c2.checkbox(color_name, value=(color_name in st.session_state.selected_hue_names), key=f"cb_{color_name}"):
                     current_selections.append(color_name)
         st.session_state.selected_hue_names = current_selections
+
         st.sidebar.slider("彩度(S)の下限", 0, 255, key='saturation_slider', on_change=sync_from_slider, args=('saturation',), help="色の鮮やかさの最小値")
         st.sidebar.number_input('（値）', 0, 255, key='saturation_number', on_change=sync_from_number, args=('saturation',), label_visibility="collapsed")
         st.sidebar.slider("明度(V)の下限", 0, 255, key='brightness_slider', on_change=sync_from_slider, args=('brightness',), help="色の明るさの最小値")
@@ -159,7 +152,9 @@ if st.session_state.pil_image_original:
         result_container = col2
     else:
         pil_image_to_process = st.session_state.pil_image_original
-        result_container = st.container()
+        # ★★★ 修正点: トリミングOFF時の表示エリアを中央の狭いカラムに限定 ★★★
+        _, result_container, _ = st.columns([1, 2, 1])
+
 
     # --- 画像処理と結果表示 ---
     with result_container:
