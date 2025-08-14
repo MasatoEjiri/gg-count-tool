@@ -40,12 +40,12 @@ CONTOUR_COLORS = {"青":"#007bff", "緑":"#28a745", "赤":"#dc3545", "黄":"#ffc
 # --- セッションステート管理 ---
 def get_default_params():
     return {
-        'binary_threshold': 15, 'saturation': 90, 'brightness': 90, # ★デフォルト値を変更
+        'binary_threshold': 15, 'saturation': 90, 'brightness': 90,
         'selected_hue_names': ["赤"], 'contour_color': "青",
         'detection_method': "色で検出", 'max_area': 10000, 'min_area': 1, 'kernel_size': 1,
         'use_image_enhancement': False, 'use_cropper': False,
-        'saturation_slider': 90, 'saturation_number': 90, # ★デフォルト値を変更
-        'brightness_slider': 90, 'brightness_number': 90, # ★デフォルト値を変更
+        'saturation_slider': 90, 'saturation_number': 90,
+        'brightness_slider': 90, 'brightness_number': 90,
         'binary_threshold_slider': 15, 'binary_threshold_number': 15,
         'state_initialized': True
     }
@@ -85,8 +85,7 @@ st.markdown('<h1 style="font-size: 2.5rem; margin-top: 0;">GG輝点解析ツー�
 if uploaded_file:
     file_id = f"{uploaded_file.name}-{uploaded_file.size}"
     if st.session_state.get('current_file_id') != file_id:
-        # 新しい画像がアップされたらパラメータをリセット
-        for key, value in get_default_params().items():
+        for key, value in get_default_params().items(): # 新しい画像でパラメータをリセット
             st.session_state[key] = value
         st.session_state.pil_image_original = Image.open(io.BytesIO(uploaded_file.getvalue()))
         st.session_state.current_file_id = file_id
@@ -159,11 +158,7 @@ if st.session_state.pil_image_original:
 
     # --- 画像処理と結果表示 ---
     with result_container:
-        if st.session_state.use_cropper:
-            st.subheader("輝点検出とマーキング")
-        else:
-            st.subheader("輝点検出結果")
-            
+        st.subheader("輝点検出とマーキング")
         img_np = np.array(pil_image_to_process.convert("RGB"))
         img_to_analyze = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
         
@@ -205,11 +200,20 @@ if st.session_state.pil_image_original:
                 cv2.drawContours(output_image, [c], -1, contour_color_bgr, 2)
         st.image(cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB), use_container_width=True)
         st.markdown(f"""<div style="text-align: center; background-image: linear-gradient(45deg, #007bff, #E83E8C); padding: 10px; border-radius: 10px; color: white; font-size: 20px; font-weight: bold; margin-top: 10px;">検出輝点: {count}個</div>""", unsafe_allow_html=True)
-        
-        if st.session_state.use_cropper:
-            st.markdown("---")
-            st.subheader("元の画像 " + ("(前処理後)" if st.session_state.use_image_enhancement else "(トリミング後)"))
-            st.image(img_to_analyze_rgb if st.session_state.use_image_enhancement else img_np, use_container_width=True)
+    
+    # ★★★ 修正点: 元画像の表示ロジックを修正 ★★★
+    st.markdown("---")
+    subheader_title = "元の画像 "
+    if st.session_state.use_image_enhancement:
+        subheader_title += "(前処理後)"
+    elif st.session_state.use_cropper:
+        subheader_title += "(トリミング後)"
+    else:
+        subheader_title += "(全体)"
+
+    st.subheader(subheader_title)
+    image_to_show = img_to_analyze_rgb if st.session_state.use_image_enhancement else img_np
+    st.image(image_to_show, use_container_width=True)
 
 else:
     st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
