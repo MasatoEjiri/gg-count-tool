@@ -23,7 +23,7 @@ st.markdown("""
     }
     button[data-testid="stSidebarCollapseButton"] { display: none; }
 
-    /* ▼▼▼【UI改善】サイドバーのサブヘッダーの余白を調整 ▼▼▼ */
+    /* サイドバーのサブヘッダーの余白を調整 */
     .sidebar-subheader {
         font-size: 1rem;
         font-weight: 600;
@@ -76,11 +76,11 @@ def sync_from_number(param):
     st.session_state[f"{param}_slider"] = st.session_state[f"{param}_number"]
 
 # --- UI ---
+# ▼▼▼【修正】タイトルを常に表示するよう、条件分岐の外に移動 ▼▼▼
+st.markdown('<h1 style="font-size: 2.5rem; margin-top: 0;">GG輝点解析ツール</h1>', unsafe_allow_html=True)
+
 st.sidebar.markdown("### 解析パラメータ設定")
-uploaded_file = st.sidebar.file_uploader("画像をアップロード", type=['tif', 'tiff', 'png', 'jpg', 'jpeg'], label_visibility="collapsed")
-st.sidebar.checkbox("トリミング機能を使用する", key='use_cropper')
-st.sidebar.radio("検出方法", ("色で検出（オススメ）", "明るさで検出"), key='detection_method', horizontal=True)
-st.sidebar.markdown("---")
+uploaded_file = st.sidebar.file_uploader("画像をアップロード", type=['tif', 'tiff', 'png', 'jpg', 'jpeg'])
 
 # --- 画像読み込み ---
 if uploaded_file:
@@ -95,7 +95,13 @@ else:
     st.session_state.pil_image_original = None
 
 # --- メイン処理 ---
+# ▼▼▼【修正】画像アップロード後にのみUIが表示されるように、全てのUIをこのブロック内に移動 ▼▼▼
 if st.session_state.pil_image_original:
+    # --- サイドバーUI ---
+    st.sidebar.checkbox("トリミング機能を使用する", key='use_cropper')
+    st.sidebar.radio("検出方法", ("色で検出（オススメ）", "明るさで検出"), key='detection_method', horizontal=True)
+    st.sidebar.markdown("---")
+
     if st.session_state.detection_method == "明るさで検出":
         st.sidebar.markdown('<p class="sidebar-subheader">二値化</p>', unsafe_allow_html=True)
         c1, c2 = st.sidebar.columns([0.75, 0.25])
@@ -116,7 +122,6 @@ if st.session_state.pil_image_original:
         with cols2[1]: st.checkbox(f"{color_emoji_map['青']} 青", key="cb_青")
         selected_hue_names = [name for name in color_names if st.session_state[f"cb_{name}"]]
         
-        # 彩度(S)と明度(V)のUIをコンパクト化
         c1, c2 = st.sidebar.columns([0.75, 0.25])
         with c1: st.slider("彩度(S)の下限", 0, 255, key='saturation_slider', on_change=sync_from_slider, args=('saturation',), help="色の鮮やかさの最小値")
         with c2: st.number_input('S値', 0, 255, key='saturation_number', on_change=sync_from_number, args=('saturation',))
@@ -138,9 +143,8 @@ if st.session_state.pil_image_original:
     
     contour_color_bgr = hex_to_bgr(CONTOUR_COLORS[st.session_state.contour_color])
 
+    # --- メインパネル処理 ---
     pil_image_to_process = None
-    st.markdown('<h1 style="font-size: 2.5rem; margin-top: 0;">GG輝点解析ツール</h1>', unsafe_allow_html=True)
-    
     if st.session_state.use_cropper:
         col1, col2 = st.columns([2, 3])
         with col1:
@@ -214,6 +218,5 @@ if st.session_state.pil_image_original:
         st.subheader("元の画像 " + ("(前処理後)" if st.session_state.use_image_enhancement else "(トリミング後)"))
         st.image(img_to_analyze_rgb if st.session_state.use_image_enhancement else img_np, use_container_width=True)
 else:
-    st.info("まず、サイドバーから画像ファイルをアップロードしてください。")
-    st.markdown("---")
-    st.markdown("GG輝点解析ツール v1.0")
+    # 画像がアップロードされていない場合の表示
+    st.info("まず、サイドバーから解析したい画像ファイルをアップロードしてください。")
