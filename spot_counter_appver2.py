@@ -30,6 +30,14 @@ st.markdown("""
         margin-top: 1.2rem;
         margin-bottom: 0.5rem;
     }
+
+    /* ▼▼▼【UI改善】画像表示領域の幅を制御するためのCSSクラス ▼▼▼ */
+    .image-display-container {
+        width: 100%; /* 親要素の幅に合わせて柔軟に */
+        max-width: 600px; /* 最大幅を指定して画像を小さく見せる */
+        margin-left: auto;
+        margin-right: auto;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -76,7 +84,6 @@ def sync_from_number(param):
     st.session_state[f"{param}_slider"] = st.session_state[f"{param}_number"]
 
 # --- UI ---
-# ▼▼▼【修正】タイトルを常に表示するよう、条件分岐の外に移動 ▼▼▼
 st.markdown('<h1 style="font-size: 2.5rem; margin-top: 0;">GG輝点解析ツール</h1>', unsafe_allow_html=True)
 
 st.sidebar.markdown("### 解析パラメータ設定")
@@ -95,7 +102,6 @@ else:
     st.session_state.pil_image_original = None
 
 # --- メイン処理 ---
-# ▼▼▼【修正】画像アップロード後にのみUIが表示されるように、全てのUIをこのブロック内に移動 ▼▼▼
 if st.session_state.pil_image_original:
     # --- サイドバーUI ---
     st.sidebar.checkbox("トリミング機能を使用する", key='use_cropper')
@@ -172,6 +178,7 @@ if st.session_state.pil_image_original:
             st.subheader("輝点検出とマーキング")
         else:
             st.subheader("輝点検出結果")
+        
         img_np = np.array(pil_image_to_process.convert("RGB"))
         img_to_analyze = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
         
@@ -211,12 +218,18 @@ if st.session_state.pil_image_original:
             if st.session_state.min_area <= cv2.contourArea(c) <= st.session_state.max_area:
                 count += 1
                 cv2.drawContours(output_image, [c], -1, contour_color_bgr, 2)
-        st.image(cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB), use_container_width=True)
-        st.markdown(f"""<div style="text-align: center; background-image: linear-gradient(45deg, #007bff, #E83E8C); padding: 10px; border-radius: 10px; color: white; font-size: 20px; font-weight: bold; margin-top: 10px;">検出輝点: {count}個</div>""", unsafe_allow_html=True)
+        
+        # ▼▼▼【修正】輝点検出結果を画像の上に表示 ▼▼▼
+        st.markdown(f"""<div style="text-align: center; background-image: linear-gradient(45deg, #007bff, #E83E8C); padding: 10px; border-radius: 10px; color: white; font-size: 20px; font-weight: bold; margin-bottom: 10px;">検出輝点: {count}個</div>""", unsafe_allow_html=True)
+        # ▼▼▼【修正】画像を小さく表示するため、widthを直接指定 ▼▼▼
+        st.image(cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB), width=600)
     
         st.markdown("---")
         st.subheader("元の画像 " + ("(前処理後)" if st.session_state.use_image_enhancement else "(トリミング後)"))
-        st.image(img_to_analyze_rgb if st.session_state.use_image_enhancement else img_np, use_container_width=True)
+        # ▼▼▼【修正】画像を小さく表示するため、widthを直接指定 ▼▼▼
+        st.image(img_to_analyze_rgb if st.session_state.use_image_enhancement else img_np, width=600)
 else:
     # 画像がアップロードされていない場合の表示
     st.info("まず、サイドバーから解析したい画像ファイルをアップロードしてください。")
+    st.markdown("---")
+    st.markdown("GG輝点解析ツール v1.0")
